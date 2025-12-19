@@ -312,28 +312,34 @@ async def analyze_text_gemini(text, status_msg=None, lang_code="fa"):
             f"You are a professional Fact-Check Assistant. Answer STRICTLY in **{target_lang}** language.\n\n"
             f"Analyze the following text and provide your response in {target_lang}.\n\n"
             "CRITICAL FORMATTING RULES:\n"
-            "1. Your response MUST be split into TWO parts using the separator: |||SPLIT|||\n"
+            "1. Your response MUST be split into TWO parts using: |||SPLIT|||\n"
             "2. Use ✅ emoji ONLY for TRUE/VERIFIED claims\n"
             "3. Use ❌ emoji ONLY for FALSE/INCORRECT claims\n"
             "4. Use ⚠️ emoji for PARTIALLY TRUE/MISLEADING claims\n\n"
-            "PART 1: SUMMARY (Short, mobile-friendly)\n"
-            "Format:\n"
-            "**Overall Status:** [✅/⚠️/❌]\n\n"
-            "**Comparison Table:**\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "PART 1: SUMMARY (Mobile-friendly, SHORT)\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "Format EXACTLY like this:\n\n"
+            "**وضعیت کلی:** [✅/⚠️/❌]\n\n"
+            "**جدول مقایسه:**\n"
             "━━━━━━━━━━━━━━\n"
-            "Claim 1: [Brief claim]\n"
-            "• Claimed: [Number/Fact from text]\n"
-            "• Research: [Actual finding]\n"
-            "• Status: [✅ True / ❌ False / ⚠️ Misleading]\n"
+            "**ادعا:** [Brief claim]\n"
+            "• **عدد ادعایی:** [Number from text]\n"
+            "• **نتیجه تحقیقات:** [Actual finding]\n"
+            "• **وضعیت:** [✅/❌/⚠️]\n"
             "━━━━━━━━━━━━━━\n"
-            "(Repeat for each claim)\n\n"
-            "**Conclusion:** [2-3 sentences summary]\n\n"
+            "(Repeat for each major claim - MAX 5 claims)\n\n"
+            "**نتیجه‌گیری:**\n"
+            "[2-3 sentences summarizing the overall accuracy]\n\n"
             "|||SPLIT|||\n\n"
-            "PART 2: DEEP DIVE (Detailed analysis)\n"
-            "• Full scientific explanation\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "PART 2: DETAILED ANALYSIS\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "• Full scientific explanation for EACH claim\n"
+            "• Exact references with titles and links\n"
             "• Biological/technical mechanisms\n"
-            "• Academic references with full titles and links\n"
-            "• Detailed comparison of claimed vs actual data\n\n"
+            "• Detailed comparison of claimed vs actual data\n"
+            "• Academic sources with DOI/URLs\n\n"
             f"Text to analyze:\n{text}"
         )
         
@@ -588,65 +594,107 @@ async def send_welcome(update: Update):
 # ==============================================================================
 
 async def smart_reply(msg, status_msg, response, user_id):
-    """Handles AI response sending with Chunking, Caching, and Markdown Safety"""
+    """Send AI response with formatted model name and /detail instruction"""
     if not response:
-        await status_msg.edit_text(get_msg("err_api"))
+        await status_msg.edit_text(get_msg("err_api", user_id))
         return
 
-    # 1. Determine Header
-    model_name = "Gemini"
-    if "model_name" in response.response_metadata:
-        model_name = response.response_metadata["model_name"]
-    elif "token_usage" in response.response_metadata: # DeepSeek usually relies on this
-        model_name = "DeepSeek"
+    # 1. Format Model Name
+    model_raw = response.response_metadata.get("model_name", "gemini-2.5-flash")
+    if "token_usage" in response.response_metadata:
+        model_raw = "deepseek-chat"
     
-    header = f"🧠 **Analysis by {model_name}:**"
+    model_map = {
+        "gemini-2.5-pro": "Gemini 2.5 Pro",
+        "gemini-1.5-pro": "Gemini 1.5 Pro",
+        "gemini-2.5-flash": "Gemini 2.5 Flash",
+        "gemini-2.0-flash": "Gemini 2.0 Flash",
+        "gemini-1.5-flash": "Gemini 1.5 Flash",
+        "gemini-1.5-flash-8b": "Gemini 1.5 Flash 8B",
+        "deepseek-chat": "DeepSeek Chat"
+    }
+    model_name = model_map.get(model_raw, model_raw.replace("-", " ").title())
     
-    # 2. Parse Split (Summary vs Detail)
+    # 2. Get user language for header/footer
+    lang = USER_LANG.get(user_id, "fa")
+    
+    header_templates = {
+        "fa": "🧠 **تحلیل توسط {}**",
+        "en": "🧠 **Analysis by {}**",
+        "fr": "🧠 **Analyse par {}"
+    }
+    
+    footer_templates = {
+        "fa": (
+            "\n\n━━━━━━━━━━━━━━\n"
+            "💡 **برای مشاهده تحلیل کامل:**\n"
+            "به این پیام ریپلای بزنید و `/detail` بنویسید"
+        ),
+        "en": (
+            "\n\n━━━━━━━━━━━━━━\n"
+            "💡 **For full analysis:**\n"
+            "Reply to this message with `/detail`"
+        ),
+        "fr": (
+            "\n\n━━━━━━━━━━━━━━\n"
+            "💡 **Pour l'analyse complète:**\n"
+            "Répondez avec `/detail`"
+        )
+    }
+    
+    header = header_templates.get(lang, header_templates["fa"]).format(model_name)
+    footer = footer_templates.get(lang, footer_templates["fa"])
+    
+    # 3. Parse Split (Summary vs Detail)
     full_content = response.content
-    
-    # Try different split markers just in case
     split_marker = "|||SPLIT|||"
-    if split_marker not in full_content:
-        # Fallback: Try to find a natural break if AI ignored instructions
-        if "---" in full_content:
-            split_marker = "---"
     
-    if split_marker in full_content and split_marker != "---":
-        parts = full_content.split(split_marker)
+    if split_marker in full_content:
+        parts = full_content.split(split_marker, 1)
         summary_text = parts[0].strip()
         detail_text = parts[1].strip()
-        # CACHE DETAIL
-        LAST_ANALYSIS_CACHE[user_id] = f"{header} (Deep Dive)\n\n{detail_text}"
-        logger.info(f"💾 Detail Cached for User {user_id}")
+        
+        # Cache detailed analysis
+        LAST_ANALYSIS_CACHE[user_id] = f"{header}\n\n{detail_text}"
+        logger.info(f"💾 Cached {len(detail_text)} chars for user {user_id}")
     else:
-        # Fallback if AI completely failed to split: Send everything but warn
-        logger.warning(f"⚠️ Split Token NOT found in response (Len: {len(full_content)})")
+        # No split found - send everything as summary
+        logger.warning(f"⚠️ No split marker found in response")
         summary_text = full_content
-        LAST_ANALYSIS_CACHE[user_id] = "⚠️ جزئیات بیشتری در دسترس نیست (مدل پاسخ یکپارچه داد)."
+        
+        no_detail_msgs = {
+            "fa": "⚠️ جزئیات بیشتری در دسترس نیست",
+            "en": "⚠️ No additional details available",
+            "fr": "⚠️ Aucun détail supplémentaire"
+        }
+        LAST_ANALYSIS_CACHE[user_id] = no_detail_msgs.get(lang, no_detail_msgs["fa"])
 
-    final_text = f"{header}\n\n{summary_text}"
+    # 4. Construct final message
+    final_text = f"{header}\n\n{summary_text}{footer}"
     
-    # 3. Send Summary
-    # Telegram Limit is 4096.
-    if len(final_text) > 4000:
-         # If Summary itself is huge, we must chunk it
-         chunks = [final_text[i:i+4000] for i in range(0, len(final_text), 4000)]
-         for i, chunk in enumerate(chunks):
-             try:
-                 if i == 0:
-                     await status_msg.edit_text(chunk, parse_mode='Markdown')
-                 else:
-                     await msg.reply_text(chunk, parse_mode='Markdown')
-             except Exception:
-                 if i == 0: await status_msg.edit_text(chunk, parse_mode=None)
-                 else: await msg.reply_text(chunk, parse_mode=None)
+    # 5. Send (with chunking if needed)
+    max_length = 4000
+    if len(final_text) > max_length:
+        # Chunk the message
+        chunks = [final_text[i:i+max_length] for i in range(0, len(final_text), max_length)]
+        for i, chunk in enumerate(chunks):
+            try:
+                if i == 0:
+                    await status_msg.edit_text(chunk, parse_mode='Markdown')
+                else:
+                    await msg.reply_text(chunk, parse_mode='Markdown')
+            except Exception:
+                # Fallback without Markdown
+                if i == 0:
+                    await status_msg.edit_text(chunk, parse_mode=None)
+                else:
+                    await msg.reply_text(chunk, parse_mode=None)
     else:
-        # Normal Case
+        # Normal case
         try:
-             await status_msg.edit_text(final_text, parse_mode='Markdown')
+            await status_msg.edit_text(final_text, parse_mode='Markdown')
         except Exception:
-             await status_msg.edit_text(final_text, parse_mode=None)
+            await status_msg.edit_text(final_text, parse_mode=None)
 
 # ==============================================================================
 # LOGIC: INSTAGRAM DOWNLOAD
