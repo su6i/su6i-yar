@@ -861,68 +861,6 @@ async def cmd_toggle_fc_handler(update: Update, context: ContextTypes.DEFAULT_TY
     state = get_msg("fc_on") if SETTINGS["fact_check"] else get_msg("fc_off")
     await update.message.reply_text(get_msg("action_fc").format(state=state))
 
-async def cmd_check_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logger.info("✅ Command /check triggered")
-    msg = update.message
-    # Check if reply or arguments
-    target_text = ""
-    if msg.reply_to_message and msg.reply_to_message.text:
-        target_text = msg.reply_to_message.text
-    elif context.args:
-        target_text = " ".join(context.args)
-    
-    if not target_text:
-        await msg.reply_text("⛔ Reply to a message or provide text: `/check <text>`")
-        return
-
-    status_msg = await msg.reply_text(get_msg("analyzing"))
-    # --- 3. AI ANALYSIS (Fallback) ---
-    
-    if SETTINGS["fact_check"] and len(text) >= SETTINGS["min_fc_len"]:
-        status_msg = await msg.reply_text(get_msg("analyzing"))
-        response = await analyze_text_gemini(text)
-        
-        if response:
-            header = "🧠 **Gemini Analysis:**"
-            # DeepSeek detection
-            if "model_name" in response.response_metadata or "token_usage" in response.response_metadata:
-                header = "🧠 **DeepSeek Analysis:**"
-            
-            final_text = f"{header}\n\n{response.content}"
-            
-            try:
-                # Try Markdown first (Prettiest)
-                await status_msg.edit_text(final_text, parse_mode='Markdown')
-            except Exception as e:
-                logger.warning(f"Markdown Fail ({e}), sending plain text.")
-                # Fallback to Plain Text (Reliable)
-                await status_msg.edit_text(final_text, parse_mode=None)
-        else:
-            await status_msg.delete() 
-        return
-
-async def cmd_check_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logger.info("✅ Command /check triggered")
-    msg = update.message
-    user_id = update.effective_user.id
-    lang = USER_LANG.get(user_id, "fa")
-
-    # Check if reply or arguments
-    target_text = ""
-    if msg.reply_to_message and msg.reply_to_message.text:
-        target_text = msg.reply_to_message.text
-    elif context.args:
-        target_text = " ".join(context.args)
-    
-    if not target_text:
-        await msg.reply_text("⛔ Reply to a message or provide text: `/check <text>`")
-        return
-
-    status_msg = await msg.reply_text(get_msg("analyzing"))
-    response = await analyze_text_gemini(target_text, lang)
-    
-    await smart_reply(msg, status_msg, response, user_id)
-
 async def cmd_stop_bot_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if user_id != SETTINGS["admin_id"]:
