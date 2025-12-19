@@ -20,6 +20,7 @@ from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, Messa
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.callbacks import AsyncCallbackHandler
 
 # ==============================================================================
 # CONFIGURATION & SETUP
@@ -47,6 +48,34 @@ SETTINGS = {
     "lang": "fa",
     "admin_id": int(TELEGRAM_CHAT_ID) if TELEGRAM_CHAT_ID else 0
 }
+
+# ==============================================================================
+# CALLBACK HANDLER FOR LIVE STATUS UPDATES
+# ==============================================================================
+
+class StatusUpdateCallback(AsyncCallbackHandler):
+    """Updates Telegram Status Message when AI model starts generating"""
+    def __init__(self, status_msg, get_msg_func):
+        self.status_msg = status_msg
+        self.get_msg = get_msg_func
+        self.last_model = None
+
+    async def on_llm_start(self, serialized, prompts, **kwargs):
+        """Called when LLM starts - update status with model name"""
+        model = "AI Model"
+        
+        # Try to extract model name from serialized data
+        if "name" in serialized:
+            model = serialized["name"]
+        elif "kwargs" in serialized and "model" in serialized["kwargs"]:
+            model = serialized["kwargs"]["model"]
+        
+        self.last_model = model
+        try:
+            text = f"⚙️ **Processing with {model}...**\n(Analyzing claims & sources)"
+            await self.status_msg.edit_text(text, parse_mode='Markdown')
+        except Exception:
+            pass  # Ignore flood wait or edit errors
 
 # User Preferences (In-Memory)
 USER_LANG = {}
