@@ -290,7 +290,12 @@ async def analyze_text_gemini(text, status_msg=None, lang_code="fa"):
 # 4. Localization Dictionary
 MESSAGES = {
     "fa": {
-        "welcome": "👋 **سلام {name}!**\nبه ربات هوشمند خوش آمدید.\n\n🔻 از منوی پایین استفاده کنید یا لینک بفرستید:",
+        "welcome": (
+            "👋 **سلام {name}!**\n"
+            "به ربات هوشمند خوش آمدید.\n\n"
+            "━━━━━━━━━━━━━━\n"
+            "🔻 از منوی پایین استفاده کنید یا لینک بفرستید"
+        ),
         "btn_status": "📊 وضعیت ربات",
         "btn_help": "🆘 راهنما",
         "btn_dl": "📥 مدیریت دانلود",
@@ -300,45 +305,55 @@ MESSAGES = {
         "btn_lang_en": "🇺🇸 English",
         "btn_lang_fr": "🇫🇷 Français",
         "status_fmt": (
-            "📊 **وضعیت لحظه‌ای ربات هوشمند**\n"
+            "📊 **وضعیت لحظه‌ای سیستم**\n"
             "━━━━━━━━━━━━━━\n"
-            "📥 **سیستم دانلود:**        {dl}\n"
+            "📥 **دانلودر:**          {dl}\n"
             "🧠 **هوش مصنوعی:**      {fc}\n"
             "━━━━━━━━━━━━━━\n"
-            "🔻 برای تغییر از دکمه‌های زیر استفاده کنید."
+            "🔻 برای تغییر از دکمه‌های زیر استفاده کنید"
         ),
         "help_msg": (
-            "📚 **راهنمای کامل ربات:**\n\n"
+            "📚 **راهنمای کامل ربات**\n"
+            "━━━━━━━━━━━━━━\n\n"
             "📥 **دانلودر اینستاگرام:**\n"
-            "• لینک پست یا ریلز (Reels) را بفرستید -> ویدیو با بالاترین کیفیت دانلود می‌شود.\n\n"
+            "   • لینک پست یا ریلز بفرستید\n"
+            "   • دانلود خودکار با بالاترین کیفیت\n\n"
             "🧠 **هوش مصنوعی (فکت‌چکینگ):**\n"
-            "• هر متنی (اخبار، شایعه، کپشن) بفرستید -> ربات با ۸ مدل هوشمند (گوگل + دیپ‌سیک) آن را بررسی و تایید/رد می‌کند.\n"
-            "• قابلیت جستجو در گوگل برای بررسی اخبار لحظه‌ای فعال است.\n\n"
+            "   • هر متنی (اخبار، شایعه) بفرستید\n"
+            "   • تحلیل با ۸ مدل هوشمند\n"
+            "   • جستجوی لحظه‌ای در گوگل\n\n"
             "⚙️ **دستورات:**\n"
-            "/start - شروع مجدد\n"
-            "/status - وضعیت ربات\n"
-            "/check [متن] - تحلیل متن در گروه‌ها\n"
-            "/stop - خاموش کردن ربات (ادمین)\n"
+            "   /start - شروع مجدد\n"
+            "   /status - وضعیت سیستم\n"
+            "   /check [متن] - تحلیل متن\n"
+            "   /detail - جزئیات تحلیل قبلی\n"
+            "   /stop - خاموش کردن (ادمین)\n\n"
+            "━━━━━━━━━━━━━━"
         ),
         "dl_on": "✅ فعال",
         "dl_off": "❌ غیرفعال",
         "fc_on": "✅ فعال",
         "fc_off": "❌ غیرفعال",
-        "action_dl": "📥 وضعیت دانلود تغییر کرد: {state}",
-        "action_fc": "🧠 وضعیت هوش مصنوعی تغییر کرد: {state}",
-        "lang_set": "🇮🇷 زبان روی **فارسی** تنظیم شد.",
-        "menu_closed": "❌ منو بسته شد. برای باز کردن مجدد /start بزنید.",
-        "only_admin": "⛔ فقط ادمین می‌تواند این کار را انجام دهد.",
+        "action_dl": "📥 وضعیت دانلود: {state}",
+        "action_fc": "🧠 وضعیت هوش مصنوعی: {state}",
+        "lang_set": "🇮🇷 زبان روی **فارسی** تنظیم شد",
+        "menu_closed": "❌ منو بسته شد. برای باز کردن /start بزنید",
+        "only_admin": "⛔ فقط ادمین می‌تواند این کار را انجام دهد",
         "bot_stop": "🛑 ربات در حال خاموش شدن...",
-        "analyzing": "🧠 در حال تحلیل دقیق علمی... (مدل‌های Gemini + DeepSeek w/ Search)",
-        "too_short": "⚠️ متن برای تحلیل خیلی کوتاه است.",
-        "downloading": "📥 در حال دانلود ویدیو... لطفا صبر کنید.",
+        "analyzing": "🧠 در حال تحلیل علمی... (Gemini + DeepSeek)",
+        "too_short": "⚠️ متن برای تحلیل خیلی کوتاه است",
+        "downloading": "📥 در حال دانلود... لطفاً صبر کنید",
         "uploading": "📤 در حال آپلود به تلگرام...",
-        "err_dl": "❌ خطا در دانلود. لینک بررسی شود.",
-        "err_api": "❌ خطا در ارتباط با هوش مصنوعی. لطفا بعدا تلاش کنید."
+        "err_dl": "❌ خطا در دانلود. لینک را بررسی کنید",
+        "err_api": "❌ خطا در ارتباط با هوش مصنوعی. بعداً تلاش کنید"
     },
     "en": {
-        "welcome": "👋 **Hello {name}!**\nWelcome to Smart Bot.\n\n🔻 Use the menu below or send a link:",
+        "welcome": (
+            "👋 **Hello {name}!**\n"
+            "Welcome to Smart Bot.\n\n"
+            "━━━━━━━━━━━━━━\n"
+            "🔻 Use the menu below or send a link"
+        ),
         "btn_status": "📊 Status",
         "btn_help": "🆘 Help",
         "btn_dl": "📥 Toggle Download",
@@ -350,43 +365,53 @@ MESSAGES = {
         "status_fmt": (
             "📊 **Live System Status**\n"
             "━━━━━━━━━━━━━━\n"
-            "📥 **Downloader:**        {dl}\n"
-            "🧠 **AI Fact-Check:**     {fc}\n"
+            "📥 **Downloader:**       {dl}\n"
+            "🧠 **AI Fact-Check:**    {fc}\n"
             "━━━━━━━━━━━━━━\n"
-            "🔻 Use buttons below to toggle."
+            "🔻 Use buttons below to toggle"
         ),
         "help_msg": (
-            "📚 **Full Bot Guide:**\n\n"
+            "📚 **Complete Bot Guide**\n"
+            "━━━━━━━━━━━━━━\n\n"
             "📥 **Instagram Downloader:**\n"
-            "• Send Post/Reels Link -> Download High Quality Video.\n\n"
+            "   • Send Post/Reels link\n"
+            "   • Auto-download in highest quality\n\n"
             "🧠 **AI Fact-Checker:**\n"
-            "• Send any text -> Analyzed by 8 AI Models (Google + DeepSeek).\n"
-            "• Real-time Google Search enabled for latest news.\n\n"
+            "   • Send any text (news, claims)\n"
+            "   • Analysis by 8 AI models\n"
+            "   • Real-time Google Search\n\n"
             "⚙️ **Commands:**\n"
-            "/start - Restart Menu\n"
-            "/status - Check Settings\n"
-            "/check [text] - Check text in groups\n"
-            "/stop - Shutdown Bot (Admin)\n"
+            "   /start - Restart menu\n"
+            "   /status - System status\n"
+            "   /check [text] - Analyze text\n"
+            "   /detail - Previous analysis details\n"
+            "   /stop - Shutdown (Admin)\n\n"
+            "━━━━━━━━━━━━━━"
         ),
-        "dl_on": "✅ On ",
-        "dl_off": "❌ Off",
-        "fc_on": "✅ On ",
-        "fc_off": "❌ Off",
+        "dl_on": "✅ Active",
+        "dl_off": "❌ Inactive",
+        "fc_on": "✅ Active",
+        "fc_off": "❌ Inactive",
         "action_dl": "📥 Download status: {state}",
         "action_fc": "🧠 AI status: {state}",
-        "lang_set": "🇺🇸 Language set to **English**.",
-        "menu_closed": "❌ Menu closed. Type /start to open.",
-        "only_admin": "⛔ Admin only.",
+        "lang_set": "🇺🇸 Language set to **English**",
+        "menu_closed": "❌ Menu closed. Type /start to reopen",
+        "only_admin": "⛔ Admin only",
         "bot_stop": "🛑 Bot is shutting down...",
-        "analyzing": "🧠 Analyzing text... (Smart Chain)",
-        "too_short": "⚠️ Text is too short.",
-        "downloading": "📥 Downloading video...",
+        "analyzing": "🧠 Analyzing... (Gemini + DeepSeek)",
+        "too_short": "⚠️ Text is too short to analyze",
+        "downloading": "📥 Downloading... Please wait",
         "uploading": "📤 Uploading to Telegram...",
-        "err_dl": "❌ Download failed.",
-        "err_api": "⚠️ AI API Error."
+        "err_dl": "❌ Download failed. Check the link",
+        "err_api": "❌ AI API error. Try again later"
     },
     "fr": {
-        "welcome": "👋 **Bonjour {name}!**\nBienvenue.\n\n🔻 Utilisez le menu ci-dessous :",
+        "welcome": (
+            "👋 **Bonjour {name}!**\n"
+            "Bienvenue sur Smart Bot.\n\n"
+            "━━━━━━━━━━━━━━\n"
+            "🔻 Utilisez le menu ou envoyez un lien"
+        ),
         "btn_status": "📊 État",
         "btn_help": "🆘 Aide",
         "btn_dl": "📥 Téléchargement",
@@ -398,38 +423,45 @@ MESSAGES = {
         "status_fmt": (
             "📊 **État du Système**\n"
             "━━━━━━━━━━━━━━\n"
-            "📥 **Téléchargement:**    {dl}\n"
-            "🧠 **IA Fact-Check:**     {fc}\n"
+            "📥 **Téléchargeur:**     {dl}\n"
+            "🧠 **IA Fact-Check:**    {fc}\n"
             "━━━━━━━━━━━━━━\n"
-            "🔻 Utilisez les boutons pour changer."
+            "🔻 Utilisez les boutons pour changer"
         ),
         "help_msg": (
-            "📚 **Guide Complet:**\n\n"
-            "📥 **Instagram:**\n"
-            "• Envoyez lien (Reels/Post) -> Téléchargement HD.\n\n"
-            "🧠 **Intelligence Artificielle:**\n"
-            "• Envoyez un texte -> Analyse par 8 modèles IA.\n\n"
+            "📚 **Guide Complet du Bot**\n"
+            "━━━━━━━━━━━━━━\n\n"
+            "📥 **Téléchargeur Instagram:**\n"
+            "   • Envoyez un lien Post/Reels\n"
+            "   • Téléchargement auto en HD\n\n"
+            "🧠 **Vérificateur IA:**\n"
+            "   • Envoyez un texte (news, claims)\n"
+            "   • Analyse par 8 modèles IA\n"
+            "   • Recherche Google en temps réel\n\n"
             "⚙️ **Commandes:**\n"
-            "/start - Menu\n"
-            "/status - État\n"
-            "/check [texte] - Vérifier le texte\n"
+            "   /start - Redémarrer le menu\n"
+            "   /status - État du système\n"
+            "   /check [texte] - Analyser texte\n"
+            "   /detail - Détails analyse précédente\n"
+            "   /stop - Arrêter (Admin)\n\n"
+            "━━━━━━━━━━━━━━"
         ),
-        "dl_on": "✅ Activé",
-        "dl_off": "❌ Désactivé",
-        "fc_on": "✅ Activé",
-        "fc_off": "❌ Désactivé",
+        "dl_on": "✅ Actif",
+        "dl_off": "❌ Inactif",
+        "fc_on": "✅ Actif",
+        "fc_off": "❌ Inactif",
         "action_dl": "📥 Téléchargement: {state}",
         "action_fc": "🧠 IA: {state}",
-        "lang_set": "🇫🇷 Langue définie sur **Français**.",
-        "menu_closed": "❌ Menu fermé. Tapez /start.",
-        "only_admin": "⛔ Admin seulement.",
+        "lang_set": "🇫🇷 Langue définie sur **Français**",
+        "menu_closed": "❌ Menu fermé. Tapez /start",
+        "only_admin": "⛔ Admin seulement",
         "bot_stop": "🛑 Arrêt du bot...",
-        "analyzing": "🧠 Analyse en cours...",
-        "too_short": "⚠️ Texte trop court.",
-        "downloading": "📥 Téléchargement...",
-        "uploading": "📤 Envoi...",
-        "err_dl": "❌ Échec du téléchargement.",
-        "err_api": "⚠️ Erreur API."
+        "analyzing": "🧠 Analyse... (Gemini + DeepSeek)",
+        "too_short": "⚠️ Texte trop court pour analyser",
+        "downloading": "📥 Téléchargement... Patientez",
+        "uploading": "📤 Envoi vers Telegram...",
+        "err_dl": "❌ Échec du téléchargement. Vérifiez le lien",
+        "err_api": "❌ Erreur API IA. Réessayez plus tard"
     }
 }
 
