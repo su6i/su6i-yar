@@ -63,8 +63,8 @@ Clone the repository and install dependencies:
 
 ```bash
 # Clone
-git clone https://github.com/your-username/smart-insta-dl.git
-cd smart-insta-dl
+git clone https://github.com/your-username/su6i-yar.git
+cd su6i-yar
 
 # Install Dependencies
 pip install -r requirements.txt
@@ -101,7 +101,7 @@ INSTAGRAM_PASSWORD=your_password
 Run the bot:
 
 ```bash
-python3 smart_insta_dl.py
+python3 su6i_yar.py
 ```
 
 ### 📱 In Telegram
