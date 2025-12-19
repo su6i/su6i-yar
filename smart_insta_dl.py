@@ -115,7 +115,7 @@ class StatusUpdateCallback(AsyncCallbackHandler):
         self.last_model = model_raw
         
         try:
-            text = f"⚙️ **در حال بررسی با {model_raw}**\n(تحلیل ادعاها و منابع)"
+            text = f"🧠 تحلیل ادعاها با {model_raw}"
             await self.status_msg.edit_text(text, parse_mode='Markdown')
             logger.info(f"📡 Trying model: {model_raw}")
         except Exception as e:
