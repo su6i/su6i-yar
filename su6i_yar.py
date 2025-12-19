@@ -139,9 +139,10 @@ async def cmd_check_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Check if reply or arguments
     target_text = ""
-    if msg.reply_to_message and msg.reply_to_message.text:
-        target_text = msg.reply_to_message.text
-    elif context.args:
+    if msg.reply_to_message:
+        # Check both text and caption (for media messages)
+        target_text = msg.reply_to_message.text or msg.reply_to_message.caption or ""
+    if not target_text and context.args:
         target_text = " ".join(context.args)
     
     if not target_text:
