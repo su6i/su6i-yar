@@ -99,55 +99,29 @@ class StatusUpdateCallback(AsyncCallbackHandler):
         """Called when LLM starts - update status with model name"""
         model_raw = "AI Model"
         
-        # Try to extract model name from serialized data
-        if "name" in serialized:
-            model_raw = serialized["name"]
-        elif "kwargs" in serialized and "model" in serialized["kwargs"]:
+        # Extract model name from serialized data
+        if "kwargs" in serialized and "model" in serialized["kwargs"]:
             model_raw = serialized["kwargs"]["model"]
+        elif "name" in serialized:
+            model_raw = serialized["name"]
         elif "id" in serialized:
-            # Sometimes model is in id field
+            # Sometimes model is in id field as a list
             parts = serialized["id"]
-            if isinstance(parts, list) and len(parts) > 2:
+            if isinstance(parts, list) and len(parts) > 0:
+                # Last element is usually the model name
                 model_raw = parts[-1]
         
-        # Format model name nicely
-        model_display = self._format_model_name(model_raw)
+        # Use exact model name (e.g., "gemini-2.5-flash")
+        self.last_model = model_raw
         
-        self.last_model = model_display
         try:
-            text = f"⚙️ **در حال بررسی با {model_display}**\n(تحلیل ادعاها و منابع)"
+            text = f"⚙️ **در حال بررسی با {model_raw}**\n(تحلیل ادعاها و منابع)"
             await self.status_msg.edit_text(text, parse_mode='Markdown')
-            logger.info(f"📡 Status updated: {model_display}")
+            logger.info(f"📡 Trying model: {model_raw}")
         except Exception as e:
             logger.debug(f"Status update failed: {e}")
             pass  # Ignore flood wait or edit errors
-    
-    def _format_model_name(self, raw_name):
-        """Format model name for display"""
-        # Map common model names to display names
-        model_map = {
-            "gemini-2.5-pro": "Gemini 2.5 Pro",
-            "gemini-1.5-pro": "Gemini 1.5 Pro",
-            "gemini-2.5-flash": "Gemini 2.5 Flash",
-            "gemini-2.0-flash": "Gemini 2.0 Flash",
-            "gemini-1.5-flash": "Gemini 1.5 Flash",
-            "gemini-1.5-flash-8b": "Gemini 1.5 Flash 8B",
-            "deepseek-chat": "DeepSeek Chat",
-            "ChatGoogleGenerativeAI": "Gemini",
-            "ChatOpenAI": "DeepSeek"
-        }
-        
-        # Check if exact match exists
-        if raw_name in model_map:
-            return model_map[raw_name]
-        
-        # Try to find partial match
-        for key, value in model_map.items():
-            if key in raw_name.lower():
-                return value
-        
-        # Fallback: capitalize and clean
-        return raw_name.replace("-", " ").replace("_", " ").title()
+
 # User Preferences (In-Memory)
 USER_LANG = {}
 
@@ -388,10 +362,15 @@ async def analyze_text_gemini(text, status_msg=None, lang_code="fa"):
         chain = get_smart_chain()
         logger.info("🚀 Invoking LangChain...")
         
-        # Invoke Chain (Async) - No callbacks
-        response = await chain.ainvoke([HumanMessage(content=prompt_text)])
+        # Add callback for live model name updates
+        config = {}
+        if status_msg:
+            config["callbacks"] = [StatusUpdateCallback(status_msg, get_msg)]
         
-        # Update status with actual model name AFTER getting response
+        # Invoke Chain (Async) with callbacks
+        response = await chain.ainvoke([HumanMessage(content=prompt_text)], config=config)
+        
+        # Final status update with actual model name
         if status_msg:
             model_raw = response.response_metadata.get('model_name', 'gemini-2.5-flash')
             if "token_usage" in response.response_metadata:
