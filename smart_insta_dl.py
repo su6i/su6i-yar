@@ -101,15 +101,15 @@ async def global_message_handler(update: Update, context: ContextTypes.DEFAULT_T
         return
 
     # Language Switching
-    if text == "🇮🇷 فارسی":
+    if "فارسی" in text:
         USER_LANG[user_id] = "fa"
         await msg.reply_text("✅ زبان فارسی انتخاب شد.", reply_markup=get_main_keyboard(user_id))
         return
-    if text == "🇺🇸 English":
+    if "English" in text:
         USER_LANG[user_id] = "en"
         await msg.reply_text("✅ English language selected.", reply_markup=get_main_keyboard(user_id))
         return
-    if text == "🇫🇷 Français":
+    if "Français" in text:
         USER_LANG[user_id] = "fr"
         await msg.reply_text("✅ Langue française sélectionnée.", reply_markup=get_main_keyboard(user_id))
         return
@@ -233,8 +233,8 @@ def get_smart_chain():
 # In production, use a TTL cache or database.
 LAST_ANALYSIS_CACHE = {}
 
-async def analyze_text_gemini(text, lang_code="fa"):
-    """Analyze text using Smart Chain Fallback"""
+async def analyze_text_gemini(text, status_msg=None, lang_code="fa"):
+    """Analyze text using Smart Chain Fallback with Live Status Updates"""
     if not SETTINGS["fact_check"]: return None
 
     # Map lang_code to English name for Prompt
@@ -246,25 +246,36 @@ async def analyze_text_gemini(text, lang_code="fa"):
         prompt_text = (
             "You are a professional Fact-Check Assistant. "
             f"Analyze the following text. Answer strictly in **{target_lang}** language.\n\n"
-            "IMPORTANT: You MUST generate the output in TWO parts extracted exactly as follows:\n\n"
+            "IMPORTANT: Telegram DOES NOT support Tables. Do NOT use Markdown Tables (no | pipes).\n"
+            "Use this LIST format instead:\n\n"
             "PART 1: SUMMARY\n"
-            "- Status (✅/⚠️/❌) on the first line.\n"
-            "- A Markdown Table with columns: **Claim** | **Status** | **Source (Title + Link/DOI preferred)**.\n"
-            "- Brief Conclusion (max 2 sentences).\n"
-            "(Keep Part 1 short and easy to read on mobile).\n\n"
+            "- Status: (✅ Verified / ⚠️ Misleading / ❌ False)\n\n"
+            "1️⃣ **Claim:** [Quote the claim]\n"
+            "   ✅ **Status:** [True/False]\n"
+            "   📚 **Source:** [Title + Link]\n\n"
+            "2️⃣ **Claim:** ...\n\n"
+            "- **Conclusion:** [Brief summary]\n\n"
             "|||SPLIT|||\n\n"
             "PART 2: DEEP DIVE\n"
-            "- Full scientific analysis.\n"
-            "- Detailed biological mechanisms.\n"
-            "- **Academic References:** List papers with Full Title and Links.\n\n"
+            "- Detail Scientific Analysis.\n"
+            "- Biological Mechanisms.\n"
+            "- **Academic References:** [Full Title + Link]\n"
             f"Text:\n{text}"
         )
         
         chain = get_smart_chain()
         logger.info("🚀 Invoking LangChain...")
         
+        # Callbacks for Live Updates
+        config = {}
+        if status_msg:
+             config["callbacks"] = [StatusUpdateCallback(status_msg, get_msg)]
+
         # Invoke Chain (Async)
-        response = await chain.ainvoke([HumanMessage(content=prompt_text)])
+        response = await chain.ainvoke(
+            [HumanMessage(content=prompt_text)],
+            config=config
+        )
         
         # Log metadata to see which model was used
         model_used = response.response_metadata.get('model_name', 'Unknown')
@@ -288,7 +299,14 @@ MESSAGES = {
         "btn_lang_fa": "🇮🇷 فارسی",
         "btn_lang_en": "🇺🇸 English",
         "btn_lang_fr": "🇫🇷 Français",
-        "status_fmt": "⚙️ **تنظیمات ربات:**\n```\n📥 دانلود:      {dl}\n🧠 هوش مصنوعی: {fc}\n```",
+        "status_fmt": (
+            "📊 **وضعیت لحظه‌ای ربات هوشمند**\n"
+            "━━━━━━━━━━━━━━\n"
+            "📥 **سیستم دانلود:**        {dl}\n"
+            "🧠 **هوش مصنوعی:**      {fc}\n"
+            "━━━━━━━━━━━━━━\n"
+            "🔻 برای تغییر از دکمه‌های زیر استفاده کنید."
+        ),
         "help_msg": (
             "📚 **راهنمای کامل ربات:**\n\n"
             "📥 **دانلودر اینستاگرام:**\n"
@@ -329,7 +347,14 @@ MESSAGES = {
         "btn_lang_fa": "🇮🇷 فارسی",
         "btn_lang_en": "🇺🇸 English",
         "btn_lang_fr": "🇫🇷 Français",
-        "status_fmt": "⚙️ **System Settings:**\n```\n📥 Download: {dl}\n🧠 AI Check: {fc}\n```",
+        "status_fmt": (
+            "📊 **Live System Status**\n"
+            "━━━━━━━━━━━━━━\n"
+            "📥 **Downloader:**        {dl}\n"
+            "🧠 **AI Fact-Check:**     {fc}\n"
+            "━━━━━━━━━━━━━━\n"
+            "🔻 Use buttons below to toggle."
+        ),
         "help_msg": (
             "📚 **Full Bot Guide:**\n\n"
             "📥 **Instagram Downloader:**\n"
@@ -370,7 +395,14 @@ MESSAGES = {
         "btn_lang_fa": "🇮🇷 فارسی",
         "btn_lang_en": "🇺🇸 English",
         "btn_lang_fr": "🇫🇷 Français",
-        "status_fmt": "⚙️ **Paramètres:**\n```\n📥 DL: {dl}\n🧠 IA: {fc}\n```",
+        "status_fmt": (
+            "📊 **État du Système**\n"
+            "━━━━━━━━━━━━━━\n"
+            "📥 **Téléchargement:**    {dl}\n"
+            "🧠 **IA Fact-Check:**     {fc}\n"
+            "━━━━━━━━━━━━━━\n"
+            "🔻 Utilisez les boutons pour changer."
+        ),
         "help_msg": (
             "📚 **Guide Complet:**\n\n"
             "📥 **Instagram:**\n"
@@ -401,9 +433,18 @@ MESSAGES = {
     }
 }
 
-def get_msg(key):
-    """Retrieve localized message"""
-    lang = SETTINGS.get("lang", "fa")
+def get_msg(key, user_id=None):
+    """Retrieve localized message based on User ID or Global Settings"""
+    lang = "fa"
+    if user_id and user_id in USER_LANG:
+        lang = USER_LANG[user_id]
+        # logger.info(f"DEBUG: Found User {user_id} Lang: {lang}") # Debug
+    else:
+        lang = SETTINGS.get("lang", "fa")
+    
+    # Validation
+    if lang not in MESSAGES: lang = "fa"
+    
     return MESSAGES.get(lang, MESSAGES["en"]).get(key, MESSAGES["en"].get(key, ""))
 
 # ==============================================================================
@@ -411,26 +452,28 @@ def get_msg(key):
 # ==============================================================================
 
 def get_main_keyboard(user_id):
-    """Generate the dynamic keyboard"""
+    """Generate the dynamic keyboard based on User Language"""
     kb = [
-        [KeyboardButton(get_msg("btn_status")), KeyboardButton(get_msg("btn_help"))],
-        [KeyboardButton(get_msg("btn_dl")), KeyboardButton(get_msg("btn_fc"))],
+        [KeyboardButton(get_msg("btn_status", user_id)), KeyboardButton(get_msg("btn_help", user_id))],
+        [KeyboardButton(get_msg("btn_dl", user_id)), KeyboardButton(get_msg("btn_fc", user_id))],
         [KeyboardButton("🇮🇷 فارسی"), KeyboardButton("🇺🇸 English"), KeyboardButton("🇫🇷 Français")]
     ]
     if user_id == SETTINGS["admin_id"]:
         # Append to the first row (Status, Help, Stop) to keep it 3 rows total
-        kb[0].append(KeyboardButton(get_msg("btn_stop")))
+        kb[0].append(KeyboardButton(get_msg("btn_stop", user_id)))
     return ReplyKeyboardMarkup(kb, resize_keyboard=True)
 
 async def send_welcome(update: Update):
     """Send welcome message with menu"""
     user = update.effective_user
-    text = get_msg("welcome").format(name=user.first_name)
+    text = get_msg("welcome", user.id).format(name=user.first_name)
     await update.message.reply_text(
         text, 
         parse_mode='Markdown',
         reply_markup=get_main_keyboard(user.id)
     )
+
+
 
 
 
@@ -680,76 +723,75 @@ async def global_message_handler(update: Update, context: ContextTypes.DEFAULT_T
     
     # Status
     if text.startswith("📊"):
-        dl_s = get_msg("dl_on") if SETTINGS["download"] else get_msg("dl_off")
-        fc_s = get_msg("fc_on") if SETTINGS["fact_check"] else get_msg("fc_off")
-        info = get_msg("status_fmt").format(dl=dl_s, fc=fc_s)
+        dl_s = get_msg("dl_on", user_id) if SETTINGS["download"] else get_msg("dl_off", user_id)
+        fc_s = get_msg("fc_on", user_id) if SETTINGS["fact_check"] else get_msg("fc_off", user_id)
+        info = get_msg("status_fmt", user_id).format(dl=dl_s, fc=fc_s)
         await msg.reply_text(info, parse_mode='Markdown')
         return
 
     # Language Switching
-    if text == "🇮🇷 فارسی":
+    if "فارسی" in text:
         USER_LANG[user_id] = "fa"
         await msg.reply_text("✅ زبان فارسی انتخاب شد.", reply_markup=get_main_keyboard(user_id))
         return
-    if text == "�🇸 English":
+    if "English" in text:
         USER_LANG[user_id] = "en"
         await msg.reply_text("✅ English language selected.", reply_markup=get_main_keyboard(user_id))
+        logger.info(f"🇺🇸 User {user_id} switched to English")
         return
-    if text == "🇫🇷 Français":
+    if "Français" in text:
         USER_LANG[user_id] = "fr"
         await msg.reply_text("✅ Langue française sélectionnée.", reply_markup=get_main_keyboard(user_id))
         return
         
     # Help
     if text.startswith("ℹ️") or text.startswith("🆘"):
-        await msg.reply_text("ℹ️ Use /help to see commands.") 
+        help_text = get_msg("help_msg", user_id)
+        await msg.reply_text(help_text, parse_mode='Markdown') 
         return
 
     # Toggle DL
     if text.startswith("📥"):
         SETTINGS["download"] = not SETTINGS["download"]
-        state = get_msg("dl_on") if SETTINGS["download"] else get_msg("dl_off")
-        await msg.reply_text(get_msg("action_dl").format(state=state))
+        state = get_msg("dl_on", user_id) if SETTINGS["download"] else get_msg("dl_off", user_id)
+        await msg.reply_text(get_msg("action_dl", user_id).format(state=state))
         return
 
     # Toggle FC
     if text.startswith("🧠"):
         SETTINGS["fact_check"] = not SETTINGS["fact_check"]
-        state = get_msg("fc_on") if SETTINGS["fact_check"] else get_msg("fc_off")
-        await msg.reply_text(get_msg("action_fc").format(state=state))
+        state = get_msg("fc_on", user_id) if SETTINGS["fact_check"] else get_msg("fc_off", user_id)
+        await msg.reply_text(get_msg("action_fc", user_id).format(state=state))
         return
 
     # Stop (Button)
     if text.startswith("🛑") and user_id == SETTINGS["admin_id"]:
         logger.info("🛑 Stop Button Triggered")
-        await msg.reply_text(get_msg("bot_stop"))
+        await msg.reply_text(get_msg("bot_stop", user_id), reply_markup=ReplyKeyboardRemove())
+        await asyncio.sleep(1)
         os.kill(os.getpid(), signal.SIGKILL)
         return
 
     # --- 2. INSTAGRAM LINK CHECK ---
     if "instagram.com" in text:
         if not SETTINGS["download"]:
-            await msg.reply_text("⚠️ " + get_msg("dl_off"))
+            await msg.reply_text("⚠️ " + get_msg("dl_off", user_id))
             return
             
-        status_msg = await msg.reply_text(get_msg("downloading"))
+        status_msg = await msg.reply_text(get_msg("downloading", user_id))
         
-        # Run yt-dlp logic (Using external function expected to exist)
-        # Note: download_instagram is distinct from download_instagram_video helper?
-        # In previous file view (Step 3848), lines 711 call `download_instagram(text, msg.chat_id, context.bot)`
-        # This function exists at line 490 in Step 3846. Use that.
         success = await download_instagram(text, msg.chat_id, context.bot)
         if success:
             await status_msg.delete()
         else:
-            await status_msg.edit_text(get_msg("err_dl"))
+            await status_msg.edit_text(get_msg("err_dl", user_id))
         return
 
     # --- 3. AI ANALYSIS (Fallback) ---
     
     if SETTINGS["fact_check"] and len(text) >= SETTINGS["min_fc_len"]:
-        status_msg = await msg.reply_text(get_msg("analyzing"))
-        response = await analyze_text_gemini(text, lang)
+        status_msg = await msg.reply_text(get_msg("analyzing", user_id))
+        response = await analyze_text_gemini(text, status_msg, lang)
         
         await smart_reply(msg, status_msg, response, user_id)
         return
