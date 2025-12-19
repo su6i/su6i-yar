@@ -299,7 +299,7 @@ def get_smart_chain():
 LAST_ANALYSIS_CACHE = {}
 
 async def analyze_text_gemini(text, status_msg=None, lang_code="fa"):
-    """Analyze text using Smart Chain Fallback with Live Status Updates"""
+    """Analyze text using Smart Chain Fallback"""
     if not SETTINGS["fact_check"]: return None
 
     # Map lang_code to English name for Prompt
@@ -317,28 +317,29 @@ async def analyze_text_gemini(text, status_msg=None, lang_code="fa"):
             "3. Use ❌ emoji ONLY for FALSE/INCORRECT claims\n"
             "4. Use ⚠️ emoji for PARTIALLY TRUE/MISLEADING claims\n\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "PART 1: SUMMARY (Mobile-friendly, SHORT)\n"
+            "PART 1: SUMMARY (VERY SHORT - Mobile Display)\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "IMPORTANT: Keep this section VERY SHORT (max 500 words)\n"
             "Format EXACTLY like this:\n\n"
             "**وضعیت کلی:** [✅/⚠️/❌]\n\n"
             "**جدول مقایسه:**\n"
             "━━━━━━━━━━━━━━\n"
-            "**ادعا:** [Brief claim]\n"
-            "• **عدد ادعایی:** [Number from text]\n"
-            "• **نتیجه تحقیقات:** [Actual finding]\n"
+            "**ادعا:** [Very brief claim - max 10 words]\n"
+            "• **ادعا شده:** [Number/fact]\n"
+            "• **واقعیت:** [Actual finding - max 15 words]\n"
             "• **وضعیت:** [✅/❌/⚠️]\n"
             "━━━━━━━━━━━━━━\n"
-            "(Repeat for each major claim - MAX 5 claims)\n\n"
-            "**نتیجه‌گیری:**\n"
-            "[2-3 sentences summarizing the overall accuracy]\n\n"
+            "(Repeat for MAX 3-4 MOST IMPORTANT claims only)\n\n"
+            "**نتیجه:**\n"
+            "[2-3 sentences ONLY - be concise]\n\n"
             "|||SPLIT|||\n\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "PART 2: DETAILED ANALYSIS\n"
+            "PART 2: DETAILED ANALYSIS (Complete)\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             "• Full scientific explanation for EACH claim\n"
             "• Exact references with titles and links\n"
             "• Biological/technical mechanisms\n"
-            "• Detailed comparison of claimed vs actual data\n"
+            "• Detailed comparison of ALL claimed vs actual data\n"
             "• Academic sources with DOI/URLs\n\n"
             f"Text to analyze:\n{text}"
         )
@@ -346,20 +347,34 @@ async def analyze_text_gemini(text, status_msg=None, lang_code="fa"):
         chain = get_smart_chain()
         logger.info("🚀 Invoking LangChain...")
         
-        # Callbacks for Live Updates
-        config = {}
-        if status_msg:
-             config["callbacks"] = [StatusUpdateCallback(status_msg, get_msg)]
-
-        # Invoke Chain (Async)
-        response = await chain.ainvoke(
-            [HumanMessage(content=prompt_text)],
-            config=config
-        )
+        # Invoke Chain (Async) - No callbacks
+        response = await chain.ainvoke([HumanMessage(content=prompt_text)])
         
-        # Log metadata to see which model was used
-        model_used = response.response_metadata.get('model_name', 'Unknown')
-        logger.info(f"✅ Response from {model_used}. Split Token Present: {'|||SPLIT|||' in response.content}")
+        # Update status with actual model name AFTER getting response
+        if status_msg:
+            model_raw = response.response_metadata.get('model_name', 'gemini-2.5-flash')
+            if "token_usage" in response.response_metadata:
+                model_raw = "deepseek-chat"
+            
+            model_map = {
+                "gemini-2.5-pro": "Gemini 2.5 Pro",
+                "gemini-1.5-pro": "Gemini 1.5 Pro",
+                "gemini-2.5-flash": "Gemini 2.5 Flash",
+                "gemini-2.0-flash": "Gemini 2.0 Flash",
+                "gemini-1.5-flash": "Gemini 1.5 Flash",
+                "deepseek-chat": "DeepSeek Chat"
+            }
+            model_name = model_map.get(model_raw, model_raw.replace("-", " ").title())
+            
+            try:
+                await status_msg.edit_text(
+                    f"✅ **تحلیل توسط {model_name} کامل شد**\n(در حال آماده‌سازی پاسخ...)",
+                    parse_mode='Markdown'
+                )
+            except Exception:
+                pass
+        
+        logger.info(f"✅ Response from {response.response_metadata.get('model_name', 'Unknown')}")
         return response
 
     except Exception as e:
@@ -967,20 +982,50 @@ async def cmd_detail_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await msg.reply_text("⛔ هیچ تحلیل ذخیره‌شده‌ای موجود نیست. ابتدا یک متن را تحلیل کنید.")
         return
 
-    # Chunk if message is too long (Telegram limit: 4096 chars)
-    max_length = 4000
-    if len(detail_text) > max_length:
-        chunks = [detail_text[i:i+max_length] for i in range(0, len(detail_text), max_length)]
-        for chunk in chunks:
-            try:
-                await msg.reply_text(chunk, parse_mode='Markdown')
-            except Exception:
-                await msg.reply_text(chunk, parse_mode=None)
-    else:
+    # Smart chunking: split by paragraphs, not mid-paragraph
+    max_length = 3900  # Leave some margin
+    
+    if len(detail_text) <= max_length:
+        # Fits in one message
         try:
             await msg.reply_text(detail_text, parse_mode='Markdown')
         except Exception:
             await msg.reply_text(detail_text, parse_mode=None)
+    else:
+        # Need to chunk - split by paragraphs
+        paragraphs = detail_text.split('\n\n')
+        chunks = []
+        current_chunk = ""
+        
+        for para in paragraphs:
+            # If adding this paragraph exceeds limit, save current chunk and start new one
+            if len(current_chunk) + len(para) + 2 > max_length:
+                if current_chunk:
+                    chunks.append(current_chunk.strip())
+                current_chunk = para
+            else:
+                if current_chunk:
+                    current_chunk += "\n\n" + para
+                else:
+                    current_chunk = para
+        
+        # Don't forget the last chunk
+        if current_chunk:
+            chunks.append(current_chunk.strip())
+        
+        # Send all chunks
+        for i, chunk in enumerate(chunks):
+            try:
+                if i == 0:
+                    await msg.reply_text(f"{chunk}\n\n━━━━━━━━━━━━━━\n📄 بخش {i+1} از {len(chunks)}", parse_mode='Markdown')
+                else:
+                    await msg.reply_text(f"📄 بخش {i+1} از {len(chunks)}\n━━━━━━━━━━━━━━\n\n{chunk}", parse_mode='Markdown')
+            except Exception:
+                if i == 0:
+                    await msg.reply_text(f"{chunk}\n\n━━━━━━━━━━━━━━\n📄 بخش {i+1} از {len(chunks)}", parse_mode=None)
+                else:
+                    await msg.reply_text(f"📄 بخش {i+1} از {len(chunks)}\n━━━━━━━━━━━━━━\n\n{chunk}", parse_mode=None)
+
 
 def main():
     if not TELEGRAM_TOKEN:
