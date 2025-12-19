@@ -397,16 +397,8 @@ async def analyze_text_gemini(text, status_msg=None, lang_code="fa"):
             if "token_usage" in response.response_metadata:
                 model_raw = "deepseek-chat"
             
-            model_map = {
-                "gemini-2.5-pro": "Gemini 2.5 Pro",
-                "gemini-1.5-pro": "Gemini 1.5 Pro",
-                "gemini-2.5-flash": "Gemini 2.5 Flash",
-                "gemini-2.0-flash": "Gemini 2.0 Flash",
-                "gemini-1.5-flash": "Gemini 1.5 Flash",
-                "deepseek-chat": "DeepSeek Chat"
-            }
-            # model_name = model_map.get(model_raw, model_raw.replace("-", " ").title())
-            model_name = response.response_metadata.get('model_name', 'Unknown')
+            # Use model_raw directly (exact model name like "gemini-2.5-flash")
+            model_name = model_raw
             
             try:
                 await status_msg.edit_text(
