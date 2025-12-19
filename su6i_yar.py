@@ -144,8 +144,11 @@ async def cmd_check_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await msg.reply_text("⛔ Reply to a message or provide text: `/check <text>`")
         return
 
-    status_msg = await msg.reply_text(get_msg("analyzing"))
-    response = await analyze_text_gemini(target_text, lang)
+    status_msg = await msg.reply_text(
+        get_msg("analyzing", user_id),
+        reply_to_message_id=msg.message_id
+    )
+    response = await analyze_text_gemini(target_text, status_msg, lang)
     
     await smart_reply(msg, status_msg, response, user_id)
 
@@ -253,8 +256,11 @@ async def global_message_handler(update: Update, context: ContextTypes.DEFAULT_T
     # --- 3. AI ANALYSIS (Fallback) ---
     
     if SETTINGS["fact_check"] and len(text) >= SETTINGS["min_fc_len"]:
-        status_msg = await msg.reply_text(get_msg("analyzing"))
-        response = await analyze_text_gemini(text, lang)
+        status_msg = await msg.reply_text(
+            get_msg("analyzing", user_id),
+            reply_to_message_id=msg.message_id
+        )
+        response = await analyze_text_gemini(text, status_msg, lang)
         
         await smart_reply(msg, status_msg, response, user_id)
         return
