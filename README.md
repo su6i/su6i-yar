@@ -145,23 +145,23 @@ The bot is primarily controlled via the interactive keyboard:
 
 ### Summary (Default)
 ```
-🧠 تحلیل توسط gemini-2.5-flash
+🧠 Analysis by gemini-2.5-flash
 
-وضعیت کلی: ⚠️
+Overall Status: ⚠️
 
-جدول مقایسه:
+Comparison Table:
 ━━━━━━━━━━━━━━
-▫️ ادعای متن: 17%
-▫️ مقالات: 17.1%
-▫️ نتیجه تحقیقات: تحقیقات این میزان را تأیید می‌کند
-▫️ وضعیت: ✅
+▫️ Text Claim: 17%
+▫️ Research Papers: 17.1%
+▫️ Research Findings: Research confirms this amount
+▫️ Status: ✅
 ━━━━━━━━━━━━━━
 
-نتیجه:
-[2-3 جمله خلاصه]
+Conclusion:
+[2-3 sentence summary]
 
-💡 برای مشاهده تحلیل کامل:
-به این پیام ریپلای بزنید و /detail بنویسید
+💡 For full analysis:
+Reply to this message with /detail
 ```
 
 ### Detail View (On Demand)
