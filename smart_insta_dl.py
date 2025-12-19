@@ -26,12 +26,47 @@ from langchain_core.callbacks import AsyncCallbackHandler
 # CONFIGURATION & SETUP
 # ==============================================================================
 
-# 1. Logging Setup
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    level=logging.INFO
-)
+# 1. Logging Setup with Custom Formatter
+class ColoredFormatter(logging.Formatter):
+    """Custom formatter with colors and clean output"""
+    
+    # ANSI color codes
+    COLORS = {
+        'DEBUG': '\033[36m',    # Cyan
+        'INFO': '\033[32m',     # Green
+        'WARNING': '\033[33m',  # Yellow
+        'ERROR': '\033[31m',    # Red
+        'CRITICAL': '\033[35m', # Magenta
+        'RESET': '\033[0m'      # Reset
+    }
+    
+    def format(self, record):
+        # Add color to level name
+        levelname = record.levelname
+        if levelname in self.COLORS:
+            record.levelname = f"{self.COLORS[levelname]}{levelname}{self.COLORS['RESET']}"
+        
+        # Shorten format for cleaner output
+        log_fmt = "%(levelname)s - %(name)s - %(message)s"
+        formatter = logging.Formatter(log_fmt)
+        return formatter.format(record)
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("SmartBot")
+
+# Add colored formatter to console handler
+console_handler = logging.StreamHandler()
+console_handler.setFormatter(ColoredFormatter())
+logger.handlers = [console_handler]
+logger.setLevel(logging.INFO)
+
+# Suppress verbose logs from httpx and google_genai
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("google_genai").setLevel(logging.WARNING)
+logging.getLogger("google.genai").setLevel(logging.WARNING)
+logging.getLogger("google_genai._api_client").setLevel(logging.ERROR)
+
 
 # 2. Environment Variables
 load_dotenv()
