@@ -62,21 +62,57 @@ class StatusUpdateCallback(AsyncCallbackHandler):
 
     async def on_llm_start(self, serialized, prompts, **kwargs):
         """Called when LLM starts - update status with model name"""
-        model = "AI Model"
+        model_raw = "AI Model"
         
         # Try to extract model name from serialized data
         if "name" in serialized:
-            model = serialized["name"]
+            model_raw = serialized["name"]
         elif "kwargs" in serialized and "model" in serialized["kwargs"]:
-            model = serialized["kwargs"]["model"]
+            model_raw = serialized["kwargs"]["model"]
+        elif "id" in serialized:
+            # Sometimes model is in id field
+            parts = serialized["id"]
+            if isinstance(parts, list) and len(parts) > 2:
+                model_raw = parts[-1]
         
-        self.last_model = model
+        # Format model name nicely
+        model_display = self._format_model_name(model_raw)
+        
+        self.last_model = model_display
         try:
-            text = f"⚙️ **Processing with {model}...**\n(Analyzing claims & sources)"
+            text = f"⚙️ **در حال بررسی با {model_display}...**\n(تحلیل ادعاها و منابع)"
             await self.status_msg.edit_text(text, parse_mode='Markdown')
-        except Exception:
+            logger.info(f"📡 Status updated: {model_display}")
+        except Exception as e:
+            logger.debug(f"Status update failed: {e}")
             pass  # Ignore flood wait or edit errors
-
+    
+    def _format_model_name(self, raw_name):
+        """Format model name for display"""
+        # Map common model names to display names
+        model_map = {
+            "gemini-2.5-pro": "Gemini 2.5 Pro",
+            "gemini-1.5-pro": "Gemini 1.5 Pro",
+            "gemini-2.5-flash": "Gemini 2.5 Flash",
+            "gemini-2.0-flash": "Gemini 2.0 Flash",
+            "gemini-1.5-flash": "Gemini 1.5 Flash",
+            "gemini-1.5-flash-8b": "Gemini 1.5 Flash 8B",
+            "deepseek-chat": "DeepSeek Chat",
+            "ChatGoogleGenerativeAI": "Gemini",
+            "ChatOpenAI": "DeepSeek"
+        }
+        
+        # Check if exact match exists
+        if raw_name in model_map:
+            return model_map[raw_name]
+        
+        # Try to find partial match
+        for key, value in model_map.items():
+            if key in raw_name.lower():
+                return value
+        
+        # Fallback: capitalize and clean
+        return raw_name.replace("-", " ").replace("_", " ").title()
 # User Preferences (In-Memory)
 USER_LANG = {}
 
@@ -273,23 +309,32 @@ async def analyze_text_gemini(text, status_msg=None, lang_code="fa"):
     try:
         logger.info(f"🧠 STARTING AI ANALYSIS ({target_lang}) for text: {text[:20]}...")
         prompt_text = (
-            "You are a professional Fact-Check Assistant. "
-            f"Analyze the following text. Answer strictly in **{target_lang}** language.\n\n"
-            "IMPORTANT: Telegram DOES NOT support Tables. Do NOT use Markdown Tables (no | pipes).\n"
-            "Use this LIST format instead:\n\n"
-            "PART 1: SUMMARY\n"
-            "- Status: (✅ Verified / ⚠️ Misleading / ❌ False)\n\n"
-            "1️⃣ **Claim:** [Quote the claim]\n"
-            "   ✅ **Status:** [True/False]\n"
-            "   📚 **Source:** [Title + Link]\n\n"
-            "2️⃣ **Claim:** ...\n\n"
-            "- **Conclusion:** [Brief summary]\n\n"
+            f"You are a professional Fact-Check Assistant. Answer STRICTLY in **{target_lang}** language.\n\n"
+            f"Analyze the following text and provide your response in {target_lang}.\n\n"
+            "CRITICAL FORMATTING RULES:\n"
+            "1. Your response MUST be split into TWO parts using the separator: |||SPLIT|||\n"
+            "2. Use ✅ emoji ONLY for TRUE/VERIFIED claims\n"
+            "3. Use ❌ emoji ONLY for FALSE/INCORRECT claims\n"
+            "4. Use ⚠️ emoji for PARTIALLY TRUE/MISLEADING claims\n\n"
+            "PART 1: SUMMARY (Short, mobile-friendly)\n"
+            "Format:\n"
+            "**Overall Status:** [✅/⚠️/❌]\n\n"
+            "**Comparison Table:**\n"
+            "━━━━━━━━━━━━━━\n"
+            "Claim 1: [Brief claim]\n"
+            "• Claimed: [Number/Fact from text]\n"
+            "• Research: [Actual finding]\n"
+            "• Status: [✅ True / ❌ False / ⚠️ Misleading]\n"
+            "━━━━━━━━━━━━━━\n"
+            "(Repeat for each claim)\n\n"
+            "**Conclusion:** [2-3 sentences summary]\n\n"
             "|||SPLIT|||\n\n"
-            "PART 2: DEEP DIVE\n"
-            "- Detail Scientific Analysis.\n"
-            "- Biological Mechanisms.\n"
-            "- **Academic References:** [Full Title + Link]\n"
-            f"Text:\n{text}"
+            "PART 2: DEEP DIVE (Detailed analysis)\n"
+            "• Full scientific explanation\n"
+            "• Biological/technical mechanisms\n"
+            "• Academic references with full titles and links\n"
+            "• Detailed comparison of claimed vs actual data\n\n"
+            f"Text to analyze:\n{text}"
         )
         
         chain = get_smart_chain()

@@ -1,1 +1,7 @@
-google-generativeai
+python-telegram-bot
+python-dotenv
+yt-dlp
+ffmpeg-python
+langchain
+langchain-google-genai
+langchain-openai
