@@ -1,7 +1,12 @@
-python-telegram-bot
-python-dotenv
-yt-dlp
-ffmpeg-python
-langchain
-langchain-google-genai
-langchain-openai
+# Core
+python-telegram-bot>=20.0
+python-dotenv>=1.0.0
+
+# Video Download
+yt-dlp>=2024.0.0
+ffmpeg-python>=0.2.0
+
+# AI / LangChain
+langchain>=0.3.0
+langchain-google-genai>=2.0.0
+langchain-openai>=0.2.0
