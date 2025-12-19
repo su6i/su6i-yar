@@ -1033,7 +1033,7 @@ def main():
         return
 
     print("🚀 Starting SmartBot Core...")
-    app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+    app = ApplicationBuilder().token(TELEGRAM_TOKEN).concurrent_updates(True).build()
 
     # Commands
     app.add_handler(CommandHandler("start", cmd_start_handler))
