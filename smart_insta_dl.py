@@ -80,7 +80,7 @@ class StatusUpdateCallback(AsyncCallbackHandler):
         
         self.last_model = model_display
         try:
-            text = f"⚙️ **در حال بررسی با {model_display}...**\n(تحلیل ادعاها و منابع)"
+            text = f"⚙️ **در حال بررسی با {model_display}**\n(تحلیل ادعاها و منابع)"
             await self.status_msg.edit_text(text, parse_mode='Markdown')
             logger.info(f"📡 Status updated: {model_display}")
         except Exception as e:
@@ -372,7 +372,7 @@ MESSAGES = {
     "fa": {
         "welcome": (
             "👋 **سلام {name}!**\n"
-            "به ربات هوشمند خوش آمدید.\n\n"
+            "به **Su6i Yar**، دستیار هوشمند خوش آمدید.\n\n"
             "━━━━━━━━━━━━━━\n"
             "🔻 از منوی پایین استفاده کنید یا لینک بفرستید"
         ),
@@ -430,7 +430,7 @@ MESSAGES = {
     "en": {
         "welcome": (
             "👋 **Hello {name}!**\n"
-            "Welcome to Smart Bot.\n\n"
+            "Welcome to **Su6i Yar**, your AI assistant.\n\n"
             "━━━━━━━━━━━━━━\n"
             "🔻 Use the menu below or send a link"
         ),
@@ -488,7 +488,7 @@ MESSAGES = {
     "fr": {
         "welcome": (
             "👋 **Bonjour {name}!**\n"
-            "Bienvenue sur Smart Bot.\n\n"
+            "Bienvenue sur **Su6i Yar**, votre assistant IA.\n\n"
             "━━━━━━━━━━━━━━\n"
             "🔻 Utilisez le menu ou envoyez un lien"
         ),
@@ -967,7 +967,20 @@ async def cmd_detail_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await msg.reply_text("⛔ هیچ تحلیل ذخیره‌شده‌ای موجود نیست. ابتدا یک متن را تحلیل کنید.")
         return
 
-    await msg.reply_text(f"🔬 **Deep Dive Analysis:**\n\n{detail_text}", parse_mode='Markdown')
+    # Chunk if message is too long (Telegram limit: 4096 chars)
+    max_length = 4000
+    if len(detail_text) > max_length:
+        chunks = [detail_text[i:i+max_length] for i in range(0, len(detail_text), max_length)]
+        for chunk in chunks:
+            try:
+                await msg.reply_text(chunk, parse_mode='Markdown')
+            except Exception:
+                await msg.reply_text(chunk, parse_mode=None)
+    else:
+        try:
+            await msg.reply_text(detail_text, parse_mode='Markdown')
+        except Exception:
+            await msg.reply_text(detail_text, parse_mode=None)
 
 def main():
     if not TELEGRAM_TOKEN:
