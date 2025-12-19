@@ -317,6 +317,32 @@ async def analyze_text_gemini(text, status_msg=None, lang_code="fa"):
 
     try:
         logger.info(f"🧠 STARTING AI ANALYSIS ({target_lang}) for text: {text[:20]}...")
+        # Language-specific labels for comparison table
+        if lang_code == "fa":
+            overall_status_label = "**وضعیت کلی:**"
+            comparison_table_label = "**جدول مقایسه:**"
+            text_claim_label = "▫️ **ادعای متن:**"
+            research_label = "▫️ **مقالات:**"
+            conclusion_label = "▫️ **نتیجه تحقیقات:**"
+            status_label = "▫️ **وضعیت:**"
+            result_label = "**نتیجه:**"
+        elif lang_code == "en":
+            overall_status_label = "**Overall Status:**"
+            comparison_table_label = "**Comparison Table:**"
+            text_claim_label = "▫️ **Text Claim:**"
+            research_label = "▫️ **Research Papers:**"
+            conclusion_label = "▫️ **Research Findings:**"
+            status_label = "▫️ **Status:**"
+            result_label = "**Conclusion:**"
+        else:  # French
+            overall_status_label = "**Statut Global:**"
+            comparison_table_label = "**Tableau de Comparaison:**"
+            text_claim_label = "▫️ **Affirmation du Texte:**"
+            research_label = "▫️ **Articles:**"
+            conclusion_label = "▫️ **Résultats de Recherche:**"
+            status_label = "▫️ **Statut:**"
+            result_label = "**Conclusion:**"
+        
         prompt_text = (
             f"You are a professional Fact-Check Assistant. Answer STRICTLY in **{target_lang}** language.\n\n"
             f"Analyze the following text and provide your response in {target_lang}.\n\n"
@@ -331,17 +357,17 @@ async def analyze_text_gemini(text, status_msg=None, lang_code="fa"):
             "PART 1: SUMMARY (VERY SHORT - Mobile Display)\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             "IMPORTANT: Keep this section VERY SHORT (max 500 words)\n"
-            "Format EXACTLY like this:\n\n"
-            "**وضعیت کلی:** [✅/⚠️/❌]\n\n"
-            "**جدول مقایسه:**\n"
+            f"Format EXACTLY like this:\n\n"
+            f"{overall_status_label} [✅/⚠️/❌]\n\n"
+            f"{comparison_table_label}\n"
             "━━━━━━━━━━━━━━\n"
-            "▫️ **ادعای متن:** [The exact number/percentage claimed in the text]\n"
-            "▫️ **مقالات:** [The exact number/percentage found in research papers]\n"
-            "▫️ **نتیجه تحقیقات:** [What research actually found - max 15 words]\n"
-            "▫️ **وضعیت:** [✅/❌/⚠️]\n"
+            f"{text_claim_label} [The exact number/percentage claimed in the text]\n"
+            f"{research_label} [The exact number/percentage found in research papers]\n"
+            f"{conclusion_label} [What research actually found - max 15 words]\n"
+            f"{status_label} [✅/❌/⚠️]\n"
             "━━━━━━━━━━━━━━\n"
             "(Repeat for MAX 3-4 MOST IMPORTANT claims only)\n\n"
-            "**نتیجه:**\n"
+            f"{result_label}\n"
             "[2-3 sentences ONLY - be concise]\n\n"
             "|||SPLIT|||\n\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
