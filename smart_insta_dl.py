@@ -350,7 +350,9 @@ async def analyze_text_gemini(text, status_msg=None, lang_code="fa"):
             "1. Your response MUST be split into TWO parts using: |||SPLIT|||\n"
             "2. Use ✅ emoji ONLY for TRUE/VERIFIED claims\n"
             "3. Use ❌ emoji ONLY for FALSE/INCORRECT claims\n"
-            "4. Use ⚠️ emoji for PARTIALLY TRUE/MISLEADING claims\n\n"
+            "4. Use ⚠️ emoji for PARTIALLY TRUE/MISLEADING claims\n"
+            "5. DO NOT use bullet points (•) or asterisks (*) - Telegram doesn't support them well\n"
+            "6. Add blank lines between paragraphs for readability\n\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             "PART 1: SUMMARY (VERY SHORT - Mobile Display)\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
@@ -360,9 +362,9 @@ async def analyze_text_gemini(text, status_msg=None, lang_code="fa"):
             "**جدول مقایسه:**\n"
             "━━━━━━━━━━━━━━\n"
             "**ادعا:** [Very brief claim - max 10 words]\n"
-            "• **ادعا شده:** [Number/fact]\n"
-            "• **واقعیت:** [Actual finding - max 15 words]\n"
-            "• **وضعیت:** [✅/❌/⚠️]\n"
+            "▫️ **در متن:** [Number/fact from text]\n"
+            "▫️ **نتیجه تحقیقات:** [Actual finding - max 15 words]\n"
+            "▫️ **وضعیت:** [✅/❌/⚠️]\n"
             "━━━━━━━━━━━━━━\n"
             "(Repeat for MAX 3-4 MOST IMPORTANT claims only)\n\n"
             "**نتیجه:**\n"
@@ -371,11 +373,15 @@ async def analyze_text_gemini(text, status_msg=None, lang_code="fa"):
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             "PART 2: DETAILED ANALYSIS (Complete)\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "• Full scientific explanation for EACH claim\n"
-            "• Exact references with titles and links\n"
-            "• Biological/technical mechanisms\n"
-            "• Detailed comparison of ALL claimed vs actual data\n"
-            "• Academic sources with DOI/URLs\n\n"
+            "CRITICAL: Add blank line between EVERY paragraph for readability!\n"
+            "DO NOT use bullet points (•) or asterisks (*)\n"
+            "Use simple numbered lists or plain paragraphs\n\n"
+            "For each claim:\n"
+            "- Full scientific explanation\n"
+            "- Exact references with titles and links\n"
+            "- Biological/technical mechanisms\n"
+            "- Detailed comparison of ALL claimed vs actual data\n"
+            "- Academic sources with DOI/URLs\n\n"
             f"Text to analyze:\n{text}"
         )
         
@@ -399,7 +405,8 @@ async def analyze_text_gemini(text, status_msg=None, lang_code="fa"):
                 "gemini-1.5-flash": "Gemini 1.5 Flash",
                 "deepseek-chat": "DeepSeek Chat"
             }
-            model_name = model_map.get(model_raw, model_raw.replace("-", " ").title())
+            # model_name = model_map.get(model_raw, model_raw.replace("-", " ").title())
+            model_name = response.response_metadata.get('model_name', 'Unknown')
             
             try:
                 await status_msg.edit_text(
@@ -409,7 +416,7 @@ async def analyze_text_gemini(text, status_msg=None, lang_code="fa"):
             except Exception:
                 pass
         
-        logger.info(f"✅ Response from {response.response_metadata.get('model_name', 'Unknown')}")
+        logger.info(f"✅ Response from {model_name}")
         return response
 
     except Exception as e:
