@@ -79,10 +79,14 @@ DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
 SETTINGS = {
     "download": True,
     "fact_check": True,
-    "min_fc_len": 50,
+    "min_fc_len": 200,
     "lang": "fa",
     "admin_id": int(TELEGRAM_CHAT_ID) if TELEGRAM_CHAT_ID else 0
 }
+
+# Rate Limiting (per user)
+RATE_LIMIT = {}  # user_id -> last_request_time
+RATE_LIMIT_SECONDS = 5  # Minimum seconds between AI requests per user
 
 # ==============================================================================
 # CALLBACK HANDLER FOR LIVE STATUS UPDATES
@@ -256,6 +260,11 @@ async def global_message_handler(update: Update, context: ContextTypes.DEFAULT_T
     # --- 3. AI ANALYSIS (Fallback) ---
     
     if SETTINGS["fact_check"] and len(text) >= SETTINGS["min_fc_len"]:
+        # Rate limit check
+        if not check_rate_limit(user_id):
+            await msg.reply_text("⏳ لطفاً چند ثانیه صبر کنید...")
+            return
+        
         status_msg = await msg.reply_text(
             get_msg("analyzing", user_id),
             reply_to_message_id=msg.message_id
@@ -312,6 +321,17 @@ def get_smart_chain():
 # Global Cache for Details (Simple Dict: user_id -> detail_text)
 # In production, use a TTL cache or database.
 LAST_ANALYSIS_CACHE = {}
+
+import time
+
+def check_rate_limit(user_id):
+    """Check if user can make AI request. Returns True if allowed."""
+    now = time.time()
+    last_request = RATE_LIMIT.get(user_id, 0)
+    if now - last_request < RATE_LIMIT_SECONDS:
+        return False
+    RATE_LIMIT[user_id] = now
+    return True
 
 async def analyze_text_gemini(text, status_msg=None, lang_code="fa"):
     """Analyze text using Smart Chain Fallback"""
@@ -1050,7 +1070,11 @@ def main():
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), global_message_handler))
 
     print("✅ Bot is Polling...")
-    app.run_polling()
+    app.run_polling(
+        allowed_updates=["message", "callback_query"],  # Only listen to needed updates
+        drop_pending_updates=True,  # Ignore old messages on restart
+        close_loop=False  # Allow graceful shutdown
+    )
 
 if __name__ == "__main__":
     main()
