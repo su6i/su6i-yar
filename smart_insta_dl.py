@@ -335,9 +335,9 @@ async def analyze_text_gemini(text, status_msg=None, lang_code="fa"):
             "**وضعیت کلی:** [✅/⚠️/❌]\n\n"
             "**جدول مقایسه:**\n"
             "━━━━━━━━━━━━━━\n"
-            "**ادعا:** [Brief summary of the claim - max 8 words, NO numbers]\n"
             "▫️ **ادعای متن:** [The exact number/percentage claimed in the text]\n"
             "▫️ **مقالات:** [The exact number/percentage found in research papers]\n"
+            "▫️ **نتیجه تحقیقات:** [What research actually found - max 15 words]\n"
             "▫️ **وضعیت:** [✅/❌/⚠️]\n"
             "━━━━━━━━━━━━━━\n"
             "(Repeat for MAX 3-4 MOST IMPORTANT claims only)\n\n"
@@ -972,7 +972,10 @@ async def global_message_handler(update: Update, context: ContextTypes.DEFAULT_T
     # --- 3. AI ANALYSIS (Fallback) ---
     
     if SETTINGS["fact_check"] and len(text) >= SETTINGS["min_fc_len"]:
-        status_msg = await msg.reply_text(get_msg("analyzing", user_id))
+        status_msg = await msg.reply_text(
+            get_msg("analyzing", user_id),
+            reply_to_message_id=msg.message_id
+        )
         response = await analyze_text_gemini(text, status_msg, lang)
         
         await smart_reply(msg, status_msg, response, user_id)
