@@ -12,6 +12,7 @@ warnings.filterwarnings("ignore", category=UserWarning, module="langchain_core._
 from pathlib import Path
 from dotenv import load_dotenv
 import io
+import urllib.parse
 import edge_tts
 
 # Telegram Imports
@@ -328,6 +329,99 @@ def check_rate_limit(user_id):
         return False
     RATE_LIMIT[user_id] = now
     return True
+
+async def cmd_translate_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Generate related image, translate text, and provide voice response.
+    Usage: /translate [lang] [text] (or reply to text)
+    """
+    logger.info("🎨 Command /translate triggered")
+    msg = update.message
+    user_id = update.effective_user.id
+    user_lang = USER_LANG.get(user_id, "fa")
+    
+    # 1. Access & Quota Check
+    allowed, reason = check_access(user_id, msg.chat_id)
+    if not allowed:
+        await msg.reply_text(get_msg("access_denied", user_id))
+        return
+    has_quota, remaining = check_daily_limit(user_id)
+    if not has_quota:
+        limit = get_user_limit(user_id)
+        await msg.reply_text(get_msg("limit_reached", user_id).format(remaining=0, limit=limit))
+        return
+
+    # 2. Extract Text and Language
+    target_lang = user_lang
+    target_text = ""
+
+    if len(context.args) > 0:
+        first_arg = context.args[0].lower()
+        if first_arg in LANG_ALIASES:
+            target_lang = LANG_ALIASES[first_arg]
+            target_text = " ".join(context.args[1:])
+        else:
+            target_text = " ".join(context.args)
+
+    if not target_text and msg.reply_to_message:
+        target_text = msg.reply_to_message.text or msg.reply_to_message.caption
+    
+    if not target_text:
+        await msg.reply_text("⚠️ متن مورد نظر برای ترجمه را بنویسید یا روی یک پیام ریپلای کنید.")
+        return
+
+    # 3. Status Message
+    original_msg_id = msg.reply_to_message.message_id if msg.reply_to_message else msg.message_id
+    status_msg = await msg.reply_text(
+        "🎨 در حال تولید تصویر و ترجمه...",
+        reply_to_message_id=original_msg_id
+    )
+
+    try:
+        # 4. Translation
+        translated_text = await translate_text(target_text, target_lang)
+        
+        # 5. Image Generation Prompt (AI optimized)
+        chain = get_smart_chain()
+        img_prompt_req = f"Generate a short, descriptive English visual prompt (single sentence, no style words) representing the meaning of this text: '{target_text}'"
+        img_prompt_resp = await chain.ainvoke([HumanMessage(content=img_prompt_req)])
+        img_prompt = img_prompt_resp.content.strip().replace('"', '').replace("'", "")
+        
+        # Construct Pollinations URL
+        encoded_prompt = urllib.parse.quote(img_prompt)
+        image_url = f"https://pollinations.ai/p/{encoded_prompt}?width=1024&height=1024&seed={int(asyncio.get_event_loop().time())}&nologo=true"
+        
+        # 6. Send Image with Caption
+        lang_name = LANG_NAMES.get(target_lang, target_lang)
+        caption = f"📝 **ترجمه ({lang_name}):**\n\n{translated_text}"
+        
+        # Use send_photo with URL
+        photo_msg = await context.bot.send_photo(
+            chat_id=msg.chat_id,
+            photo=image_url,
+            caption=caption[:1024], # Max caption length
+            parse_mode='Markdown',
+            reply_to_message_id=original_msg_id
+        )
+        
+        # 7. Generate Voice (TTS)
+        await status_msg.edit_text(get_msg("voice_generating", user_id))
+        audio_buffer = await text_to_speech(translated_text, target_lang)
+        
+        await context.bot.send_voice(
+            chat_id=msg.chat_id,
+            voice=audio_buffer,
+            caption=get_msg("voice_caption_lang", user_id).format(lang=lang_name),
+            reply_to_message_id=photo_msg.message_id
+        )
+        
+        # Cleanup status & increment quota
+        await status_msg.delete()
+        increment_daily_usage(user_id)
+        
+    except Exception as e:
+        logger.error(f"Translate/Image Error: {e}")
+        await status_msg.edit_text("❌ متأسفانه خطایی در تولید ترجمه یا تصویر رخ داد.")
 
 async def analyze_text_gemini(text, status_msg=None, lang_code="fa"):
     """Analyze text using Smart Chain Fallback"""
@@ -1510,6 +1604,8 @@ def main():
     app.add_handler(CommandHandler("check", cmd_check_handler))
     app.add_handler(CommandHandler("detail", cmd_detail_handler))
     app.add_handler(CommandHandler("voice", cmd_voice_handler))  # TTS Voice
+    app.add_handler(CommandHandler("translate", cmd_translate_handler))
+    app.add_handler(CommandHandler("t", cmd_translate_handler))
     app.add_handler(CommandHandler("stop", cmd_stop_bot_handler))
 
     # All Messages (Text)
