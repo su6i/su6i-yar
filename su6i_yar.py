@@ -13,6 +13,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 import io
 import urllib.parse
+import urllib.request
 import edge_tts
 
 # Telegram Imports
@@ -281,19 +282,22 @@ def get_smart_chain(grounding=True):
     
     defaults = {"google_api_key": GEMINI_API_KEY, "temperature": 0.3}
 
-    # 1. Gemini 1.5 Pro (Primary)
+    # 1. Gemini 2.5 Pro (Primary)
     model_kwargs = {"tools": [{"google_search_retrieval": {}}]} if grounding else {}
     primary = ChatGoogleGenerativeAI(
-        model="gemini-1.5-pro", 
+        model="gemini-2.5-pro", 
         **defaults,
         model_kwargs=model_kwargs
     )
     
-    # Define Fallbacks in Order (Correct names to avoid latency)
+    # Define Fallbacks in Order
     fallback_models = [
-        "gemini-2.0-flash-exp",   # 2
-        "gemini-1.5-flash",      # 3
-        "gemini-1.0-pro"         # 4
+        "gemini-1.5-pro",        # 2
+        "gemini-2.5-flash",      # 3
+        "gemini-2.0-flash",      # 4
+        "gemini-2.5-flash-lite", # 5
+        "gemini-1.5-flash",      # 6
+        "gemini-1.5-flash-8b"    # 7
     ]
     
     # Create Google Runnables
@@ -375,7 +379,6 @@ async def cmd_translate_handler(update: Update, context: ContextTypes.DEFAULT_TY
 
     try:
         # 4. Combined Translation and Image Prompt (One AI Call)
-        logger.info("🤖 Step 1: Requesting AI translation and prompt...")
         lang_name = LANG_NAMES.get(target_lang, target_lang)
         chain = get_smart_chain(grounding=False)
         combined_prompt = (
@@ -387,7 +390,6 @@ async def cmd_translate_handler(update: Update, context: ContextTypes.DEFAULT_TY
         
         response = await chain.ainvoke([HumanMessage(content=combined_prompt)])
         content = response.content.strip()
-        logger.info(f"🤖 AI Response received: {content[:100]}...")
         
         # Parse response
         if "|" in content and "TRANSLATION:" in content and "PROMPT:" in content:
@@ -395,33 +397,49 @@ async def cmd_translate_handler(update: Update, context: ContextTypes.DEFAULT_TY
             translated_text = parts[0].replace("TRANSLATION:", "").strip()
             img_prompt = parts[1].replace("PROMPT:", "").strip().replace('"', '').replace("'", "")
         else:
-            logger.warning("⚠️ AI response format mismatch, using fallback...")
+            # Fallback if AI doesn't follow format strictly
             translated_text = await translate_text(target_text, target_lang)
             img_prompt = target_text[:100]
 
-        # 5. Construct Pollinations URL
-        encoded_prompt = urllib.parse.quote(img_prompt)
-        image_url = f"https://pollinations.ai/p/{encoded_prompt}?width=1024&height=1024&seed={int(asyncio.get_event_loop().time())}&nologo=true"
-        logger.info(f"🖼️ Step 2: Image URL generated: {image_url}")
-        
-        # 6. Send Image with Caption (Increased Timeout)
-        logger.info("📤 Step 3: Sending photo to Telegram...")
-        caption = f"📝 **ترجمه ({lang_name}):**\n\n{translated_text}"
-        
-        photo_msg = await context.bot.send_photo(
-            chat_id=msg.chat_id,
-            photo=image_url,
-            caption=caption[:1024],
-            parse_mode='Markdown',
-            reply_to_message_id=original_msg_id,
-            read_timeout=30,  # 30s is enough for Telegram to fetch URL
-            write_timeout=30,
-            connect_timeout=30
-        )
-        logger.info("📤 Photo sent successfully.")
-        
+        # 6. Download Image locally (more reliable than Telegram URL fetch)
+        logger.info(f"🖼️ Step 3: Downloading image from {image_url}...")
+        try:
+            def download_img():
+                req = urllib.request.Request(image_url, headers={'User-Agent': 'Mozilla/5.0'})
+                with urllib.request.urlopen(req, timeout=45) as response:
+                    return response.read()
+            
+            image_data = await asyncio.to_thread(download_img)
+            logger.info(f"🖼️ Downloaded {len(image_data)} bytes.")
+            
+            photo_buffer = io.BytesIO(image_data)
+            photo_buffer.name = "translated_image.jpg"
+            
+            logger.info("📤 Step 4: Uploading photo to Telegram...")
+            caption = f"📝 **ترجمه ({lang_name}):**\n\n{translated_text}"
+            
+            photo_msg = await context.bot.send_photo(
+                chat_id=msg.chat_id,
+                photo=photo_buffer,
+                caption=caption[:1024],
+                parse_mode='Markdown',
+                reply_to_message_id=original_msg_id,
+                read_timeout=60,
+                write_timeout=60
+            )
+            logger.info("📤 Photo uploaded successfully.")
+        except Exception as dl_e:
+            logger.error(f"❌ Failed to download/send image: {dl_e}")
+            # Fallback: Send only text if image fails
+            caption = f"📝 **ترجمه ({lang_name}):**\n\n{translated_text}"
+            photo_msg = await msg.reply_text(
+                caption,
+                parse_mode='Markdown',
+                reply_to_message_id=original_msg_id
+            )
+
         # 7. Generate Voice (TTS)
-        logger.info("🔊 Step 4: Generating voice response...")
+        logger.info("🔊 Step 5: Generating voice response...")
         await status_msg.edit_text(get_msg("voice_generating", user_id))
         audio_buffer = await text_to_speech(translated_text, target_lang)
         
@@ -429,7 +447,9 @@ async def cmd_translate_handler(update: Update, context: ContextTypes.DEFAULT_TY
             chat_id=msg.chat_id,
             voice=audio_buffer,
             caption=get_msg("voice_caption_lang", user_id).format(lang=lang_name),
-            reply_to_message_id=photo_msg.message_id
+            reply_to_message_id=photo_msg.message_id,
+            read_timeout=60,
+            write_timeout=60
         )
         logger.info("🔊 Voice sent successfully.")
         
