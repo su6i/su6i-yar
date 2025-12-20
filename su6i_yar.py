@@ -401,9 +401,10 @@ async def cmd_translate_handler(update: Update, context: ContextTypes.DEFAULT_TY
             translated_text = parts[0].replace("TRANSLATION:", "").strip()
             img_prompt = parts[1].replace("PROMPT:", "").strip().replace('"', '').replace("'", "")
         else:
-            # Fallback if AI doesn't follow format strictly
+            logger.warning("⚠️ AI response format mismatch, using individual fallbacks...")
+            # If combined fails, do them separately (slower but correct)
             translated_text = await translate_text(target_text, target_lang)
-            img_prompt = target_text[:100]
+            img_prompt = await generate_visual_prompt(target_text)
 
         # 5. Construct Pollinations URL
         encoded_prompt = urllib.parse.quote(img_prompt)
@@ -1504,6 +1505,17 @@ async def translate_text(text: str, target_lang: str) -> str:
     except Exception as e:
         logger.error(f"Translation error: {e}")
         return text  # Return original if translation fails
+
+async def generate_visual_prompt(text: str) -> str:
+    """Generate a short English visual prompt for an image representing the text"""
+    try:
+        chain = get_smart_chain(grounding=False)
+        prompt = f"Generate a short, descriptive English visual prompt (single sentence, no style words) representing the core meaning of this text: '{text}'"
+        response = await chain.ainvoke([HumanMessage(content=prompt)])
+        return response.content.strip().replace('"', '').replace("'", "")
+    except Exception as e:
+        logger.error(f"Visual prompt generation error: {e}")
+        return "abstract conceptual representation"  # Safe default
 
 
 async def cmd_voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
