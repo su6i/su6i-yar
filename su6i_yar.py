@@ -921,7 +921,7 @@ async def smart_reply(msg, status_msg, response, user_id):
 # LOGIC: INSTAGRAM DOWNLOAD
 # ==============================================================================
 
-async def download_instagram(url, chat_id, bot):
+async def download_instagram(url, chat_id, bot, reply_to_message_id=None):
     """Download and send video using yt-dlp"""
     try:
         # 1. Filename setup
@@ -958,7 +958,9 @@ async def download_instagram(url, chat_id, bot):
                 await bot.send_video(
                     chat_id=chat_id,
                     video=video_file,
-                    caption="🤖 Downloaded by SmartBot",
+                    caption="📥 Downloaded by **Su6i Yar** | @su6i_yar_bot",
+                    parse_mode='Markdown',
+                    reply_to_message_id=reply_to_message_id,
                     supports_streaming=True
                 )
             # Cleanup
@@ -1113,7 +1115,7 @@ async def global_message_handler(update: Update, context: ContextTypes.DEFAULT_T
             
         status_msg = await msg.reply_text(get_msg("downloading", user_id))
         
-        success = await download_instagram(text, msg.chat_id, context.bot)
+        success = await download_instagram(text, msg.chat_id, context.bot, msg.message_id)
         if success:
             await status_msg.delete()
         else:
