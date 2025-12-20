@@ -221,6 +221,7 @@ class StatusUpdateCallback(AsyncCallbackHandler):
 
 # User Preferences (In-Memory)
 USER_LANG = {}
+LEARN_CACHE = {}  # UUID -> (text, lang) for /learn buttons
 
 # ... (Localization Dictionary MESSAGES is unchanged, skipping for brevity) ...
 
@@ -424,14 +425,15 @@ async def cmd_learn_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             sentence = var.get("sentence", "")
             img_prompt = var.get("prompt", target_text)
             
-            # Download Image
+            # 1. Download Image
             encoded_prompt = urllib.parse.quote(img_prompt)
             image_url = f"https://pollinations.ai/p/{encoded_prompt}?width=1024&height=1024&seed={int(asyncio.get_event_loop().time()) + i}&nologo=true"
             
             try:
+                logger.info(f"🖼️ Variation {i+1}: Fetching image...")
                 def download_img():
                     req = urllib.request.Request(image_url, headers={'User-Agent': 'Mozilla/5.0'})
-                    with urllib.request.urlopen(req, timeout=45) as r: return r.read()
+                    with urllib.request.urlopen(req, timeout=30) as r: return r.read()
                 
                 image_data = await asyncio.to_thread(download_img)
                 photo_buffer = io.BytesIO(image_data)
@@ -444,42 +446,46 @@ async def cmd_learn_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f"━━━━━━━━━━━━━━\n🎓 **آموزش ({i+1}/3)**"
                 )
                 
-                # Prepare Combined TTS: Word ... Sentence
-                tts_text = f"{word}. {sentence}"
-                audio_buffer = await text_to_speech(tts_text, target_lang)
+                # 2. Prepare TTS Data for Button
+                import uuid
+                audio_id = str(uuid.uuid4())[:8]
+                LEARN_CACHE[audio_id] = (f"{word}. {sentence}", target_lang)
                 
-                # Send Photo
+                # Create Inline Button
+                from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+                keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔊 پخش تلفظ (کلمه + جمله)", callback_data=f"learn_tts:{audio_id}")]
+                ])
+                
+                # 3. Send Photo with Button
                 photo_msg = await context.bot.send_photo(
                     chat_id=msg.chat_id,
                     photo=photo_buffer,
                     caption=caption,
                     parse_mode='Markdown',
+                    reply_markup=keyboard,
                     reply_to_message_id=last_msg_id,
-                    read_timeout=120,
-                    write_timeout=120
+                    read_timeout=150,
+                    write_timeout=150,
+                    connect_timeout=150
                 )
                 last_msg_id = photo_msg.message_id
-                
-                # Send Combined Voice
-                voice_msg = await context.bot.send_voice(
-                    chat_id=msg.chat_id,
-                    voice=audio_buffer,
-                    caption=f"🔊 کلمه و جمله نمونه",
-                    reply_to_message_id=photo_msg.message_id,
-                    read_timeout=120,
-                    write_timeout=120
-                )
-                last_msg_id = voice_msg.message_id
+                logger.info(f"✅ Variation {i+1} sent.")
 
             except Exception as item_e:
                 logger.error(f"❌ Error sending item {i+1}: {item_e}")
+                # Fallback: Send text with button if photo fails
+                import uuid
+                audio_id = str(uuid.uuid4())[:8]
+                LEARN_CACHE[audio_id] = (f"{word}. {sentence}", target_lang)
+                keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("🔊 تلفظ", callback_data=f"learn_tts:{audio_id}")]])
+                
                 fb_msg = await context.bot.send_message(
                     chat_id=msg.chat_id,
                     text=f"💡 **{word}**\n`{sentence}`",
                     parse_mode='Markdown',
-                    reply_to_message_id=last_msg_id,
-                    read_timeout=120,
-                    write_timeout=120
+                    reply_markup=keyboard,
+                    reply_to_message_id=last_msg_id
                 )
                 last_msg_id = fb_msg.message_id
 
@@ -488,7 +494,36 @@ async def cmd_learn_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     except Exception as e:
         logger.error(f"Learn Error: {e}")
-        await status_msg.edit_text(f"❌ خطایی در فرآیند آموزش رخ داد.")
+        if 'status_msg' in locals():
+            await status_msg.edit_text(f"❌ خطایی در فرآیند آموزش رخ داد.")
+
+async def callback_learn_audio_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle the 'Listen' button click in /learn slides."""
+    query = update.callback_query
+    await query.answer() # Ack the click
+    
+    try:
+        data = query.data.split(":")
+        if len(data) < 2: return
+        audio_id = data[1]
+        
+        if audio_id not in LEARN_CACHE:
+            await query.message.reply_text("❌ متأسفانه این فایل صوتی موقت منقضی شده است.")
+            return
+            
+        tts_text, lang = LEARN_CACHE[audio_id]
+        
+        # Generate and Send Voice
+        audio_buffer = await text_to_speech(tts_text, lang)
+        await context.bot.send_voice(
+            chat_id=query.message.chat_id,
+            voice=audio_buffer,
+            caption="🔊 تلفظ کلمه و جمله نمونه",
+            reply_to_message_id=query.message.message_id
+        )
+    except Exception as e:
+        logger.error(f"Callback Audio Error: {e}")
+        await query.message.reply_text("❌ خطا در ارسال فایل صوتی.")
 
 async def analyze_text_gemini(text, status_msg=None, lang_code="fa"):
     """Analyze text using Smart Chain Fallback"""
@@ -1689,6 +1724,10 @@ def main():
     app.add_handler(CommandHandler("edu", cmd_learn_handler))
     app.add_handler(CommandHandler("education", cmd_learn_handler))
     app.add_handler(CommandHandler("stop", cmd_stop_bot_handler))
+    
+    # Callbacks
+    from telegram.ext import CallbackQueryHandler
+    app.add_handler(CallbackQueryHandler(callback_learn_audio_handler, pattern="^learn_tts:"))
 
     # All Messages (Text)
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), global_message_handler))
