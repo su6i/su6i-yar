@@ -80,7 +80,7 @@ DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
 # 3. Global Settings
 SETTINGS = {
     "download": True,
-    "fact_check": True,
+    "fact_check": False,
     "min_fc_len": 200,
     "lang": "fa",
     "admin_id": int(TELEGRAM_CHAT_ID) if TELEGRAM_CHAT_ID else 0
