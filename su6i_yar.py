@@ -281,6 +281,32 @@ def increment_daily_usage(user_id: int) -> int:
     user_limit = get_user_limit(user_id)
     return user_limit - USER_DAILY_USAGE[user_id]["count"]
 
+def get_status_text(user_id: int) -> str:
+    """Generate localized status message for a user."""
+    dl_s = get_msg("dl_on", user_id) if SETTINGS["download"] else get_msg("dl_off", user_id)
+    fc_s = get_msg("fc_on", user_id) if SETTINGS["fact_check"] else get_msg("fc_off", user_id)
+    info = get_msg("status_fmt", user_id).format(dl=dl_s, fc=fc_s)
+    
+    # Add user quota info
+    has_quota, remaining = check_daily_limit(user_id)
+    limit = get_user_limit(user_id)
+    
+    # Localized User Type
+    if user_id == SETTINGS["admin_id"]:
+        user_type = get_msg("user_type_admin", user_id)
+    elif user_id in ALLOWED_USERS:
+        user_type = get_msg("user_type_member", user_id)
+    else:
+        user_type = get_msg("user_type_free", user_id)
+        
+    quota_info = (
+        f"\n━━━━━━━━━━━━━━\n"
+        f"👤 **{get_msg('status_label_user', user_id)}:** `{user_id}`\n"
+        f"🏷️ **{get_msg('status_label_type', user_id)}:** {user_type}\n"
+        f"📊 **{get_msg('status_label_quota', user_id)}:** {remaining}/{limit}"
+    )
+    return info + quota_info
+
 
 # ==============================================================================
 # CALLBACK HANDLER FOR LIVE STATUS UPDATES
@@ -313,7 +339,8 @@ class StatusUpdateCallback(AsyncCallbackHandler):
         self.last_model = model_raw
         
         try:
-            text = f"🧠 تحلیل ادعاها با {model_raw}"
+            user_id = getattr(self.status_msg, 'chat_id', 0)
+            text = get_msg("analyzing_model", user_id).format(model=model_raw)
             await self.status_msg.edit_text(text, parse_mode='Markdown')
             logger.info(f"📡 Trying model: {model_raw}")
         except Exception as e:
@@ -774,7 +801,7 @@ async def analyze_text_gemini(text, status_msg=None, lang_code="fa"):
             
             try:
                 await status_msg.edit_text(
-                    f"✅ **تحلیل توسط {model_name} کامل شد**\n(در حال آماده‌سازی پاسخ...)",
+                    get_msg("analysis_complete", user_id).format(model=model_name),
                     parse_mode='Markdown'
                 )
             except Exception:
@@ -870,7 +897,19 @@ MESSAGES = {
         "learn_error": "❌ خطایی در فرآیند آموزش رخ داد.",
         "learn_fallback_meaning": "ترجمه مستقیم",
         "learn_fallback_translation": "ترجمه جمله نمونه",
-        "learn_btn_listen": "🎧 شنیدن"
+        "learn_btn_listen": "🎧 شنیدن",
+        "status_label_user": "کاربر",
+        "status_label_type": "نوع",
+        "status_label_quota": "سهمیه امروز",
+        "user_type_admin": "👑 ادمین",
+        "user_type_member": "✅ عضو",
+        "user_type_free": "🆓 رایگان",
+        "status_private_sent": "✅ وضعیت شما به صورت خصوصی ارسال شد.",
+        "status_private_error": "⛔ ابتدا یک بار به @su6i\\_yar\\_bot پیام خصوصی بدهید.",
+        "analyzing_model": "🧠 در حال تحلیل ادعاها با {model}...",
+        "analysis_complete": "✅ تحلیل توسط {model} تمام شد\n(در حال نهایی کردن...)",
+        "analysis_header": "🧠 **تحلیل توسط {model}**",
+        "analysis_footer_note": "\n\n━━━━━━━━━━━━━━\n💡 **برای مشاهده تحلیل کامل:**\nبه این پیام ریپلای بزنید و `/detail` بنویسید"
     },
     "en": {
         "welcome": (
@@ -949,7 +988,19 @@ MESSAGES = {
         "learn_error": "❌ An error occurred during the educational process.",
         "learn_fallback_meaning": "Direct translation",
         "learn_fallback_translation": "Example sentence translation",
-        "learn_btn_listen": "🎧 Listen"
+        "learn_btn_listen": "🎧 Listen",
+        "status_label_user": "User",
+        "status_label_type": "Type",
+        "status_label_quota": "Daily Quota",
+        "user_type_admin": "👑 Admin",
+        "user_type_member": "✅ Member",
+        "user_type_free": "🆓 Free",
+        "status_private_sent": "✅ Your status was sent privately.",
+        "status_private_error": "⛔ Please send a private message to @su6i\\_yar\\_bot first.",
+        "analyzing_model": "🧠 Analyzing claims with {model}...",
+        "analysis_complete": "✅ Analysis by {model} completed\n(Finalizing response...)",
+        "analysis_header": "🧠 **Analysis by {model}**",
+        "analysis_footer_note": "\n\n━━━━━━━━━━━━━━\n💡 **For full analysis details:**\nReply to this message with `/detail`"
     },
     "fr": {
         "welcome": (
@@ -1028,7 +1079,19 @@ MESSAGES = {
         "learn_error": "❌ Une erreur est survenue pendant le processus éducatif.",
         "learn_fallback_meaning": "Traduction directe",
         "learn_fallback_translation": "Traduction de la phrase d'exemple",
-        "learn_btn_listen": "🎧 Écouter"
+        "learn_btn_listen": "🎧 Écouter",
+        "status_label_user": "Utilisateur",
+        "status_label_type": "Type",
+        "status_label_quota": "Quota Journalier",
+        "user_type_admin": "👑 Admin",
+        "user_type_member": "✅ Membre",
+        "user_type_free": "🆓 Gratuit",
+        "status_private_sent": "✅ Votre état a été envoyé en privé.",
+        "status_private_error": "⛔ Veuillez d'abord envoyer un message privé à @su6i\\_yar\\_bot.",
+        "analyzing_model": "🧠 Analyse des affirmations avec {model}...",
+        "analysis_complete": "✅ Analyse par {model} terminée\n(Finalisation de la réponse...)",
+        "analysis_header": "🧠 **Analyse par {model}**",
+        "analysis_footer_note": "\n\n━━━━━━━━━━━━━━\n💡 **Pour les détails de l'analyse:**\nRépondez à ce message avec `/detail`"
     },
     "ko": {
         "welcome": (
@@ -1108,7 +1171,19 @@ MESSAGES = {
         "learn_error": "❌ 교육 과정 중 오류가 발생했습니다.",
         "learn_fallback_meaning": "직역",
         "learn_fallback_translation": "예문 번역",
-        "learn_btn_listen": "🎧 듣기"
+        "learn_btn_listen": "🎧 듣기",
+        "status_label_user": "사용자",
+        "status_label_type": "유형",
+        "status_label_quota": "일일 사용량",
+        "user_type_admin": "👑 관리자",
+        "user_type_member": "✅ 멤버",
+        "user_type_free": "🆓 무료",
+        "status_private_sent": "✅ 상태가 비공개로 전송되었습니다.",
+        "status_private_error": "⛔ 먼저 @su6i\\_yar\\_bot으로 개인 메시지를 보내주세요.",
+        "analyzing_model": "🧠 {model}(으)로 분석 중...",
+        "analysis_complete": "✅ {model} 분석 완료\n(응답 준비 중...)",
+        "analysis_header": "🧠 **{model}의 분석**",
+        "analysis_footer_note": "\n\n━━━━━━━━━━━━━━\n💡 **전체 분석 상세 정보:**\n이 메시지에 `/detail`로 답장하세요"
     }
 }
 
@@ -1186,35 +1261,9 @@ async def smart_reply(msg, status_msg, response, user_id):
     }
     model_name = model_map.get(model_raw, model_raw.replace("-", " ").title())
     
-    # 2. Get user language for header/footer
-    lang = USER_LANG.get(user_id, "fa")
-    
-    header_templates = {
-        "fa": "🧠 **تحلیل توسط {}**",
-        "en": "🧠 **Analysis by {}**",
-        "fr": "🧠 **Analyse par {}"
-    }
-    
-    footer_templates = {
-        "fa": (
-            "\n\n━━━━━━━━━━━━━━\n"
-            "💡 **برای مشاهده تحلیل کامل:**\n"
-            "به این پیام ریپلای بزنید و `/detail` بنویسید"
-        ),
-        "en": (
-            "\n\n━━━━━━━━━━━━━━\n"
-            "💡 **For full analysis:**\n"
-            "Reply to this message with `/detail`"
-        ),
-        "fr": (
-            "\n\n━━━━━━━━━━━━━━\n"
-            "💡 **Pour l'analyse complète:**\n"
-            "Répondez avec `/detail`"
-        )
-    }
-    
-    header = header_templates.get(lang, header_templates["fa"]).format(model_name)
-    footer = footer_templates.get(lang, footer_templates["fa"])
+    # 2. Get Headers and Footers from Dictionary
+    header = get_msg("analysis_header", user_id).format(model=model_name)
+    footer = get_msg("analysis_footer_note", user_id)
     
     # 3. Parse Split (Summary vs Detail)
     full_content = response.content
@@ -1393,18 +1442,8 @@ async def cmd_status_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
     info = get_msg("status_fmt", user_id).format(dl=dl_s, fc=fc_s)
     
     # Add user quota info
-    has_quota, remaining = check_daily_limit(user_id)
-    limit = get_user_limit(user_id)
-    user_type = "👑 ادمین" if user_id == SETTINGS["admin_id"] else ("✅ عضو" if user_id in ALLOWED_USERS else "🆓 رایگان")
-    
-    quota_info = (
-        f"\n━━━━━━━━━━━━━━\n"
-        f"👤 **کاربر:** `{user_id}`\n"
-        f"🏷️ **نوع:** {user_type}\n"
-        f"📊 **سهمیه امروز:** {remaining}/{limit}"
-    )
-    
-    await msg.reply_text(info + quota_info, parse_mode='Markdown')
+    full_status = get_status_text(user_id)
+    await msg.reply_text(full_status, parse_mode='Markdown')
 
 async def cmd_toggle_dl_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info("📥 Command /toggle_dl triggered")
@@ -1446,23 +1485,9 @@ async def global_message_handler(update: Update, context: ContextTypes.DEFAULT_T
     
     # Status
     if text.startswith("📊"):
-        dl_s = get_msg("dl_on", user_id) if SETTINGS["download"] else get_msg("dl_off", user_id)
-        fc_s = get_msg("fc_on", user_id) if SETTINGS["fact_check"] else get_msg("fc_off", user_id)
-        info = get_msg("status_fmt", user_id).format(dl=dl_s, fc=fc_s)
+        full_status = get_status_text(user_id)
         
-        # Add user quota info
-        has_quota, remaining = check_daily_limit(user_id)
-        limit = get_user_limit(user_id)
-        user_type = "👑 ادمین" if user_id == SETTINGS["admin_id"] else ("✅ عضو" if user_id in ALLOWED_USERS else "🆓 رایگان")
-        
-        quota_info = (
-            f"\n━━━━━━━━━━━━━━\n"
-            f"👤 **کاربر:** `{user_id}`\n"
-            f"🏷️ **نوع:** {user_type}\n"
-            f"📊 **سهمیه امروز:** {remaining}/{limit}"
-        )
-        
-        full_status = info + quota_info
+        # In groups, send privately
         
         # In groups, send privately
         if msg.chat_id < 0:  # Negative ID = group
@@ -1472,12 +1497,12 @@ async def global_message_handler(update: Update, context: ContextTypes.DEFAULT_T
                     text=full_status,
                     parse_mode='Markdown'
                 )
-                notify = await msg.reply_text("✅ وضعیت شما به صورت خصوصی ارسال شد.")
+                notify = await msg.reply_text(get_msg("status_private_sent", user_id))
                 await asyncio.sleep(5)
                 await notify.delete()
             except Exception:
                 # User hasn't started private chat with bot
-                notify = await msg.reply_text("⛔ ابتدا یک بار به @su6i\\_yar\\_bot پیام خصوصی بدهید.")
+                notify = await msg.reply_text(get_msg("status_private_error", user_id))
                 await asyncio.sleep(5)
                 await notify.delete()
         else:
