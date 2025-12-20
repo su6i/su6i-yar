@@ -197,6 +197,26 @@ async def global_message_handler(update: Update, context: ContextTypes.DEFAULT_T
         USER_LANG[user_id] = "fr"
         await msg.reply_text("✅ Langue française sélectionnée.", reply_markup=get_main_keyboard(user_id))
         return
+    if "한국어" in text:
+        USER_LANG[user_id] = "ko"
+        await msg.reply_text("✅ 한국어가 선택되었습니다.", reply_markup=get_main_keyboard(user_id))
+        return
+    
+    # Voice Button
+    if text.startswith("🔊"):
+        detail_text = LAST_ANALYSIS_CACHE.get(user_id)
+        if not detail_text:
+            await msg.reply_text("⛔ هیچ تحلیل ذخیره‌شده‌ای موجود نیست.")
+            return
+        status_msg = await msg.reply_text("🔊 در حال ساخت فایل صوتی...")
+        try:
+            audio_buffer = await text_to_speech(detail_text, lang)
+            await msg.reply_voice(voice=audio_buffer, caption="🔊 نسخه صوتی تحلیل")
+            await status_msg.delete()
+        except Exception as e:
+            logger.error(f"TTS Error: {e}")
+            await status_msg.edit_text("❌ خطا در ساخت فایل صوتی")
+        return
         
     # Help
     if text.startswith("ℹ️"):
@@ -639,6 +659,66 @@ MESSAGES = {
         "uploading": "📤 Envoi vers Telegram...",
         "err_dl": "❌ Échec du téléchargement. Vérifiez le lien",
         "err_api": "❌ Erreur API IA. Réessayez plus tard"
+    },
+    "ko": {
+        "welcome": (
+            "👋 **안녕하세요 {name}!**\n"
+            "**Su6i Yar**, AI 비서에 오신 것을 환영합니다.\n\n"
+            "━━━━━━━━━━━━━━\n"
+            "🔻 아래 메뉴를 사용하거나 링크를 보내세요"
+        ),
+        "btn_status": "📊 상태",
+        "btn_help": "🆘 도움말",
+        "btn_dl": "📥 다운로드",
+        "btn_fc": "🧠 AI",
+        "btn_stop": "🛑 중지",
+        "btn_lang_fa": "🇮🇷 فارسی",
+        "btn_lang_en": "🇺🇸 English",
+        "btn_lang_fr": "🇫🇷 Français",
+        "btn_lang_ko": "🇰🇷 한국어",
+        "status_fmt": (
+            "📊 **시스템 상태**\n"
+            "━━━━━━━━━━━━━━\n"
+            "📥 **다운로더:**     {dl}\n"
+            "🧠 **AI 팩트체크:**  {fc}\n"
+            "━━━━━━━━━━━━━━\n"
+            "🔻 버튼을 눌러 변경하세요"
+        ),
+        "help_msg": (
+            "📚 **봇 가이드**\n"
+            "━━━━━━━━━━━━━━\n\n"
+            "📥 **인스타그램 다운로더:**\n"
+            "   • 포스트/릴스 링크 전송\n"
+            "   • 최고 화질 자동 다운로드\n\n"
+            "🧠 **AI 팩트체커:**\n"
+            "   • 텍스트 전송 (뉴스, 주장)\n"
+            "   • 8개 AI 모델로 분석\n"
+            "   • 실시간 구글 검색\n\n"
+            "⚙️ **명령어:**\n"
+            "   /start - 메뉴 재시작\n"
+            "   /status - 시스템 상태\n"
+            "   /check [텍스트] - 텍스트 분석\n"
+            "   /detail - 이전 분석 상세\n"
+            "   /voice - 음성 응답\n"
+            "   /stop - 중지 (관리자)\n\n"
+            "━━━━━━━━━━━━━━"
+        ),
+        "dl_on": "✅ 활성화",
+        "dl_off": "❌ 비활성화",
+        "fc_on": "✅ 활성화",
+        "fc_off": "❌ 비활성화",
+        "action_dl": "📥 다운로드 상태: {state}",
+        "action_fc": "🧠 AI 상태: {state}",
+        "lang_set": "🇰🇷 **한국어**로 설정되었습니다",
+        "menu_closed": "❌ 메뉴가 닫혔습니다. /start를 입력하세요",
+        "only_admin": "⛔ 관리자 전용",
+        "bot_stop": "🛑 봇을 중지합니다...",
+        "analyzing": "🧠 분석 중...",
+        "too_short": "⚠️ 분석하기에 텍스트가 너무 짧습니다",
+        "downloading": "📥 다운로드 중... 잠시만 기다려주세요",
+        "uploading": "📤 텔레그램에 업로드 중...",
+        "err_dl": "❌ 다운로드 실패. 링크를 확인하세요",
+        "err_api": "❌ AI API 오류. 나중에 다시 시도하세요"
     }
 }
 
@@ -663,9 +743,9 @@ def get_msg(key, user_id=None):
 def get_main_keyboard(user_id):
     """Generate the dynamic keyboard based on User Language"""
     kb = [
-        [KeyboardButton(get_msg("btn_status", user_id)), KeyboardButton(get_msg("btn_help", user_id))],
+        [KeyboardButton(get_msg("btn_status", user_id)), KeyboardButton(get_msg("btn_help", user_id)), KeyboardButton("🔊 Voice")],
         [KeyboardButton(get_msg("btn_dl", user_id)), KeyboardButton(get_msg("btn_fc", user_id))],
-        [KeyboardButton("🇮🇷 فارسی"), KeyboardButton("🇺🇸 English"), KeyboardButton("🇫🇷 Français")]
+        [KeyboardButton("🇮🇷 فارسی"), KeyboardButton("🇺🇸 English"), KeyboardButton("🇫🇷 Français"), KeyboardButton("🇰🇷 한국어")]
     ]
     if user_id == SETTINGS["admin_id"]:
         # Append to the first row (Status, Help, Stop) to keep it 3 rows total
@@ -1054,7 +1134,8 @@ async def cmd_detail_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
 TTS_VOICES = {
     "fa": "fa-IR-FaridNeural",   # Persian - Male
     "en": "en-US-GuyNeural",     # English - Male
-    "fr": "fr-FR-HenriNeural"    # French - Male
+    "fr": "fr-FR-HenriNeural",   # French - Male
+    "ko": "ko-KR-InJoonNeural"   # Korean - Male
 }
 
 async def text_to_speech(text: str, lang: str = "fa") -> io.BytesIO:
