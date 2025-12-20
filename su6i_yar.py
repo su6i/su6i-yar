@@ -1185,13 +1185,52 @@ async def text_to_speech(text: str, lang: str = "fa") -> io.BytesIO:
     audio_buffer.seek(0)
     return audio_buffer
 
+# Language code mapping for /voice command
+LANG_ALIASES = {
+    "fa": "fa", "farsi": "fa", "persian": "fa", "فارسی": "fa",
+    "en": "en", "english": "en", "انگلیسی": "en",
+    "fr": "fr", "french": "fr", "français": "fr", "فرانسوی": "fr",
+    "ko": "ko", "korean": "ko", "한국어": "ko", "کره‌ای": "ko"
+}
+
+LANG_NAMES = {
+    "fa": "Persian (Farsi)", "en": "English", "fr": "French", "ko": "Korean"
+}
+
+async def translate_text(text: str, target_lang: str) -> str:
+    """Translate text to target language using Gemini"""
+    lang_name = LANG_NAMES.get(target_lang, "English")
+    
+    try:
+        chain = get_smart_chain()
+        prompt = f"Translate the following text to {lang_name}. Only output the translation, no explanations:\n\n{text}"
+        response = await chain.ainvoke([HumanMessage(content=prompt)])
+        return response.content.strip()
+    except Exception as e:
+        logger.error(f"Translation error: {e}")
+        return text  # Return original if translation fails
+
 
 async def cmd_voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Send voice version of replied message or last analysis"""
+    """
+    Send voice version of replied message or last analysis.
+    Usage: /voice [language]
+    Examples: /voice, /voice en, /voice english, /voice فارسی
+    """
     logger.info("🔊 Command /voice triggered")
     msg = update.message
     user_id = update.effective_user.id
-    lang = USER_LANG.get(user_id, "fa")
+    user_lang = USER_LANG.get(user_id, "fa")
+    
+    # Check for language argument
+    target_lang = user_lang  # Default to user's app language
+    if context.args:
+        lang_arg = context.args[0].lower()
+        if lang_arg in LANG_ALIASES:
+            target_lang = LANG_ALIASES[lang_arg]
+        else:
+            await msg.reply_text(f"⛔ زبان نامعتبر. زبان‌های پشتیبانی: fa, en, fr, ko")
+            return
     
     # Priority 1: Check if replied to a message
     target_text = ""
@@ -1206,16 +1245,25 @@ async def cmd_voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await msg.reply_text("⛔ به یک پیام ریپلای بزنید یا ابتدا یک متن را تحلیل کنید.")
         return
     
-    # Send "generating" message
-    status_msg = await msg.reply_text("🔊 در حال ساخت فایل صوتی...")
+    # Check if translation is needed (if target_lang differs from detected language)
+    need_translation = context.args and len(context.args) > 0
+    
+    if need_translation:
+        status_msg = await msg.reply_text(f"🌐 در حال ترجمه به {LANG_NAMES.get(target_lang, target_lang)}...")
+        target_text = await translate_text(target_text, target_lang)
+        await status_msg.edit_text("🔊 در حال ساخت فایل صوتی...")
+    else:
+        status_msg = await msg.reply_text("🔊 در حال ساخت فایل صوتی...")
     
     try:
-        audio_buffer = await text_to_speech(target_text, lang)
+        audio_buffer = await text_to_speech(target_text, target_lang)
         # Reply to the original message (not the /voice command)
         reply_to_id = msg.reply_to_message.message_id if msg.reply_to_message else msg.message_id
+        
+        caption = f"🔊 نسخه صوتی ({LANG_NAMES.get(target_lang, target_lang)})" if need_translation else "🔊 نسخه صوتی"
         await msg.reply_voice(
             voice=audio_buffer,
-            caption="🔊 نسخه صوتی",
+            caption=caption,
             reply_to_message_id=reply_to_id
         )
         await status_msg.delete()
