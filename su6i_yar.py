@@ -267,162 +267,6 @@ async def cmd_check_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         limit = get_user_limit(user_id)
         await msg.reply_text(f"📊 {remaining}/{limit} درخواست باقی‌مانده امروز")
 
-async def global_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """MASTER HANDLER: Processes ALL text messages"""
-    msg = update.message
-    if not msg or not msg.text: return
-    text = msg.text.strip()
-    user = update.effective_user
-    user_id = user.id
-    
-    # Ensure User Lang
-    if user_id not in USER_LANG:
-        USER_LANG[user_id] = "fa"
-    lang = USER_LANG[user_id]
-
-    logger.info(f"📨 Message received: '{text}' from {user.id} ({lang})")
-
-    # --- 1. MENU COMMANDS (Check by Emoji/Start) --- 
-    
-    # Status
-    if text.startswith("📊"):
-        dl_s = get_msg("dl_on") if SETTINGS["download"] else get_msg("dl_off")
-        fc_s = get_msg("fc_on") if SETTINGS["fact_check"] else get_msg("fc_off")
-        info = get_msg("status_fmt").format(dl=dl_s, fc=fc_s)
-        
-        # Add user quota info
-        has_quota, remaining = check_daily_limit(user_id)
-        limit = get_user_limit(user_id)
-        user_type = "👑 ادمین" if user_id == SETTINGS["admin_id"] else ("✅ عضو" if user_id in ALLOWED_USERS else "🆓 رایگان")
-        
-        quota_info = (
-            f"\n━━━━━━━━━━━━━━\n"
-            f"👤 **کاربر:** `{user_id}`\n"
-            f"🏷️ **نوع:** {user_type}\n"
-            f"📊 **سهمیه امروز:** {remaining}/{limit}"
-        )
-        
-        await msg.reply_text(info + quota_info, parse_mode='Markdown')
-        return
-
-    # Language Switching
-    if "فارسی" in text:
-        USER_LANG[user_id] = "fa"
-        await msg.reply_text("✅ زبان فارسی انتخاب شد.", reply_markup=get_main_keyboard(user_id))
-        return
-    if "English" in text:
-        USER_LANG[user_id] = "en"
-        await msg.reply_text("✅ English language selected.", reply_markup=get_main_keyboard(user_id))
-        return
-    if "Français" in text:
-        USER_LANG[user_id] = "fr"
-        await msg.reply_text("✅ Langue française sélectionnée.", reply_markup=get_main_keyboard(user_id))
-        return
-    if "한국어" in text:
-        USER_LANG[user_id] = "ko"
-        await msg.reply_text("✅ 한국어가 선택되었습니다.", reply_markup=get_main_keyboard(user_id))
-        return
-    
-    # Voice Button
-    if text.startswith("🔊"):
-        detail_text = LAST_ANALYSIS_CACHE.get(user_id)
-        if not detail_text:
-            await msg.reply_text("⛔ هیچ تحلیل ذخیره‌شده‌ای موجود نیست.")
-            return
-        status_msg = await msg.reply_text("🔊 در حال ساخت فایل صوتی...")
-        try:
-            audio_buffer = await text_to_speech(detail_text, lang)
-            await msg.reply_voice(voice=audio_buffer, caption="🔊 نسخه صوتی تحلیل")
-            await status_msg.delete()
-        except Exception as e:
-            logger.error(f"TTS Error: {e}")
-            await status_msg.edit_text("❌ خطا در ساخت فایل صوتی")
-        return
-        
-    # Help
-    if text.startswith("ℹ️"):
-        # Note: get_help_msg should be updated to accept user_id/lang if needed, but for now assuming it uses global logic or we update it later.
-        # Assuming get_help_msg(user_id) exists from previous context? I didn't verify get_help_msg signature. 
-        # Let's check get_help_msg call in previous code.. it was `get_help_msg(user_id)`?
-        # Actually in Step 3835: `get_help_msg` usage wasn't shown.
-        # Wait, I should not assume `get_help_msg` takes user_id if I haven't seen it. 
-        # But `get_help_msg` was called in `cmd_start_handler`?
-        # I'll stick to safest: check existing usage in file.
-        # Existing global_message_handler (line 535) didn't show help handler.
-        # Ah, looking at `get_main_keyboard`...
-        # I'll just skip the Help `if` block since normally `/help` handles it?
-        # No, the menu button "Help" sends "ℹ️ Help" text.
-        await msg.reply_text("ℹ️ Use /help to see commands.") 
-        return
-
-    # Toggle DL
-    if text.startswith("📥"):
-        SETTINGS["download"] = not SETTINGS["download"]
-        state = get_msg("dl_on") if SETTINGS["download"] else get_msg("dl_off")
-        await msg.reply_text(get_msg("action_dl").format(state=state))
-        return
-
-    # Toggle FC
-    if text.startswith("🧠"):
-        SETTINGS["fact_check"] = not SETTINGS["fact_check"]
-        state = get_msg("fc_on") if SETTINGS["fact_check"] else get_msg("fc_off")
-        await msg.reply_text(get_msg("action_fc").format(state=state))
-        return
-
-    # Stop (Button)
-    if text.startswith("🛑") and user_id == SETTINGS["admin_id"]:
-        logger.info("🛑 Stop Button Triggered")
-        await msg.reply_text(get_msg("bot_stop"))
-        os.kill(os.getpid(), signal.SIGKILL)
-        return
-
-    # --- 2. INSTAGRAM LINK CHECK ---
-    if "instagram.com" in text:
-        if not SETTINGS["download"]:
-            await msg.reply_text("⚠️ " + get_msg("dl_off"))
-            return
-            
-        status_msg = await msg.reply_text(get_msg("downloading"))
-        
-        # Run yt-dlp logic
-        loop = asyncio.get_event_loop()
-        file_path = await loop.run_in_executor(None, download_instagram_video, text)
-        
-        if file_path:
-            try:
-                await status_msg.edit_text(get_msg("uploading", user_id))
-                await msg.reply_video(
-                    video=open(file_path, 'rb'), 
-                    caption="📥 **Su6i Yar** | @su6i\\_yar\\_bot",
-                    reply_to_message_id=msg.message_id,
-                    parse_mode='Markdown'
-                )
-                os.remove(file_path) # Cleanup
-                await status_msg.delete() 
-            except Exception as e:
-                logger.error(f"Upload failed: {e}")
-                await status_msg.edit_text("❌ Error uploading video.")
-        else:
-            await status_msg.edit_text(get_msg("err_dl", user_id))
-        return
-
-    # --- 3. AI ANALYSIS (Fallback) ---
-    
-    if SETTINGS["fact_check"] and len(text) >= SETTINGS["min_fc_len"]:
-        # Rate limit check
-        if not check_rate_limit(user_id):
-            await msg.reply_text("⏳ لطفاً چند ثانیه صبر کنید...")
-            return
-        
-        status_msg = await msg.reply_text(
-            get_msg("analyzing", user_id),
-            reply_to_message_id=msg.message_id
-        )
-        response = await analyze_text_gemini(text, status_msg, lang)
-        
-        await smart_reply(msg, status_msg, response, user_id)
-        return
-
 # ==============================================================================
 # LOGIC: SMART CHAIN FACTORY (LANGCHAIN)
 # ==============================================================================
@@ -1174,7 +1018,20 @@ async def global_message_handler(update: Update, context: ContextTypes.DEFAULT_T
         dl_s = get_msg("dl_on", user_id) if SETTINGS["download"] else get_msg("dl_off", user_id)
         fc_s = get_msg("fc_on", user_id) if SETTINGS["fact_check"] else get_msg("fc_off", user_id)
         info = get_msg("status_fmt", user_id).format(dl=dl_s, fc=fc_s)
-        await msg.reply_text(info, parse_mode='Markdown')
+        
+        # Add user quota info
+        has_quota, remaining = check_daily_limit(user_id)
+        limit = get_user_limit(user_id)
+        user_type = "👑 ادمین" if user_id == SETTINGS["admin_id"] else ("✅ عضو" if user_id in ALLOWED_USERS else "🆓 رایگان")
+        
+        quota_info = (
+            f"\n━━━━━━━━━━━━━━\n"
+            f"👤 **کاربر:** `{user_id}`\n"
+            f"🏷️ **نوع:** {user_type}\n"
+            f"📊 **سهمیه امروز:** {remaining}/{limit}"
+        )
+        
+        await msg.reply_text(info + quota_info, parse_mode='Markdown')
         return
 
     # Language Switching
