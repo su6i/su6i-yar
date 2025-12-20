@@ -184,7 +184,7 @@ async def detect_language(text: str) -> str:
     # Use AI for EN vs FR or others
     try:
         # Use a very short, fast prompt
-        chain = await get_smart_chain(grounding=False)
+        chain = get_smart_chain(grounding=False)
         response = await chain.ainvoke(f"Return only the 2-letter ISO code for this text's language: {text[:100]}")
         code = response.content.strip().lower()[:2]
         return LANG_ALIASES.get(code, code) if code in LANG_ALIASES else code
@@ -409,7 +409,7 @@ async def cmd_learn_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Check Daily Limit
     if not check_daily_limit(user_id):
-        await msg.reply_text("❌ سهمیه روزانه شما تمام شده است.")
+        await msg.reply_text(get_msg("learn_quota_exceeded", user_id))
         return
 
     # Extract target text and language
@@ -432,13 +432,13 @@ async def cmd_learn_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             target_text = " ".join(context.args)
 
     if not target_text:
-        await msg.reply_text("❌ لطفاً متن یا کلمه‌ای برای یادگیری بفرستید (مثال: /learn apple یا در پاسخ به یک پیام).")
+        await msg.reply_text(get_msg("learn_no_text", user_id))
         return
 
     # 3. Status Message
     original_msg_id = msg.reply_to_message.message_id if msg.reply_to_message else msg.message_id
     status_msg = await msg.reply_text(
-        "� در حال طراحی...",
+        get_msg("learn_designing", user_id),
         reply_to_message_id=original_msg_id
     )
 
@@ -452,6 +452,7 @@ async def cmd_learn_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         educational_prompt = (
             f"You are a linguistic tutor. Analyze the word/phrase: '{target_text}'.\n"
             f"Provide 3 distinct nuances or variations in {lang_name} for a learner.\n"
+            f"Crucially, provide all explanations and translations in {explanation_lang}.\n\n"
             f"For each one, provide:\n"
             f"1. word: The term in {lang_name}.\n"
             f"2. phonetic: Pronunciation in parentheses.\n"
@@ -479,9 +480,9 @@ async def cmd_learn_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             variations = [{
                 "word": translated_text,
                 "phonetic": "",
-                "meaning": "ترجمه مستقیم",
+                "meaning": get_msg("learn_fallback_meaning", user_id),
                 "sentence": "Example sentence goes here.",
-                "translation": "ترجمه جمله نمونه",
+                "translation": get_msg("learn_fallback_translation", user_id),
                 "prompt": img_prompt
             }]
 
@@ -492,8 +493,8 @@ async def cmd_learn_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.info("🖼️ Fetching all images in parallel...")
         async def get_img_data(index, prompt):
             try:
-                # Add a staggered delay to avoid 429 Too Many Requests
-                await asyncio.sleep(index * 1.5)
+                # Increased delay to 2.5s to avoid 429 Too Many Requests
+                await asyncio.sleep(index * 2.5)
                 
                 encoded = urllib.parse.quote(prompt)
                 url = f"https://pollinations.ai/p/{encoded}?width=1024&height=1024&seed={int(asyncio.get_event_loop().time()) + index}&nologo=true"
@@ -519,6 +520,7 @@ async def cmd_learn_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             sentence = var.get("sentence", "")
             translation = var.get("translation", "")
             image_bytes = images_data[i]
+            audio_id = str(uuid.uuid4())[:8]
             
             try:
                 if image_bytes:
@@ -531,11 +533,16 @@ async def cmd_learn_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     caption = (
                         f"💡 **{word}** {phonetic}\n"
                         f"📝 {meaning}\n\n"
-                        f"📖 **جمله نمونه:**\n"
+                        f"{get_msg('learn_example_sentence', user_id)}\n"
                         f"{target_flag} `{sentence}`\n"
                         f"{user_flag} {translation}\n\n"
-                        f"━━━━━━━━━━━━━━\n🎓 **آموزش ({i+1}/3)**"
+                        f"━━━━━━━━━━━━━━\n{get_msg('learn_slide_footer', user_id).format(index=i+1)}"
                     )
+                    
+                    # Interaction
+                    keyboard = InlineKeyboardMarkup([[
+                        InlineKeyboardButton(get_msg("learn_btn_listen", user_id), callback_data=f"listen:{audio_id}")
+                    ]])
                     
                     # Send Photo
                     photo_msg = await context.bot.send_photo(
@@ -543,6 +550,7 @@ async def cmd_learn_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         photo=photo_buffer,
                         caption=caption,
                         parse_mode='Markdown',
+                        reply_markup=keyboard,
                         reply_to_message_id=last_msg_id,
                         read_timeout=150,
                         write_timeout=150
@@ -558,6 +566,9 @@ async def cmd_learn_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         caption=f"🔊 {word}",
                         read_timeout=120
                     )
+                    
+                    # Store in cache for Listen button
+                    LEARN_CACHE[audio_id] = audio_buffer
                     # We don't link audio to chain to see how it looks
                 else:
                     raise Exception("No image data available")
@@ -579,7 +590,7 @@ async def cmd_learn_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Learn Error: {e}")
         if 'status_msg' in locals():
-            await status_msg.edit_text(f"❌ خطایی در فرآیند آموزش رخ داد.")
+            await status_msg.edit_text(get_msg("learn_error", user_id))
 
 async def callback_learn_audio_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle the 'Listen' button click in /learn slides."""
@@ -816,7 +827,16 @@ MESSAGES = {
         "voice_invalid_lang": "⛔ زبان نامعتبر. زبان‌های پشتیبانی: fa, en, fr, ko",
         "access_denied": "⛔ شما دسترسی به این ربات ندارید.",
         "limit_reached": "⛔ سقف درخواست روزانه شما تمام شد ({remaining} از {limit}).",
-        "remaining_requests": "📊 درخواست‌های باقی‌مانده امروز: {remaining}"
+        "remaining_requests": "📊 درخواست‌های باقی‌مانده امروز: {remaining}",
+        "learn_designing": "🪄 در حال طراحی...",
+        "learn_quota_exceeded": "❌ سهمیه روزانه شما تمام شده است.",
+        "learn_no_text": "❌ لطفاً متن یا کلمه‌ای برای یادگیری بفرستید (مثال: /learn apple یا در پاسخ به یک پیام).",
+        "learn_example_sentence": "📖 **جمله نمونه:**",
+        "learn_slide_footer": "🎓 **آموزش ({index}/3)**",
+        "learn_error": "❌ خطایی در فرآیند آموزش رخ داد.",
+        "learn_fallback_meaning": "ترجمه مستقیم",
+        "learn_fallback_translation": "ترجمه جمله نمونه",
+        "learn_btn_listen": "🎧 شنیدن"
     },
     "en": {
         "welcome": (
@@ -886,7 +906,16 @@ MESSAGES = {
         "voice_invalid_lang": "⛔ Invalid language. Supported: fa, en, fr, ko",
         "access_denied": "⛔ You don't have access to this bot.",
         "limit_reached": "⛔ Daily limit reached ({remaining} of {limit}).",
-        "remaining_requests": "📊 Remaining requests today: {remaining}"
+        "remaining_requests": "📊 Remaining requests today: {remaining}",
+        "learn_designing": "🪄 Designing...",
+        "learn_quota_exceeded": "❌ Daily limit reached.",
+        "learn_no_text": "❌ Please provide a word or phrase (e.g., /learn apple).",
+        "learn_example_sentence": "📖 **Example Sentence:**",
+        "learn_slide_footer": "🎓 **Education ({index}/3)**",
+        "learn_error": "❌ An error occurred during the educational process.",
+        "learn_fallback_meaning": "Direct translation",
+        "learn_fallback_translation": "Example sentence translation",
+        "learn_btn_listen": "🎧 Listen"
     },
     "fr": {
         "welcome": (
@@ -956,7 +985,16 @@ MESSAGES = {
         "voice_invalid_lang": "⛔ Langue invalide. Supportées: fa, en, fr, ko",
         "access_denied": "⛔ Vous n'avez pas accès à ce bot.",
         "limit_reached": "⛔ Limite quotidienne atteinte ({remaining} sur {limit}).",
-        "remaining_requests": "📊 Requêtes restantes aujourd'hui: {remaining}"
+        "remaining_requests": "📊 Requêtes restantes aujourd'hui: {remaining}",
+        "learn_designing": "🪄 Conception...",
+        "learn_quota_exceeded": "❌ Limite quotidienne atteinte.",
+        "learn_no_text": "❌ Veuillez fournir un mot ou une phrase (ex: /learn apple).",
+        "learn_example_sentence": "📖 **Exemple de phrase:**",
+        "learn_slide_footer": "🎓 **Éducation ({index}/3)**",
+        "learn_error": "❌ Une erreur est survenue pendant le processus éducatif.",
+        "learn_fallback_meaning": "Traduction directe",
+        "learn_fallback_translation": "Traduction de la phrase d'exemple",
+        "learn_btn_listen": "🎧 Écouter"
     },
     "ko": {
         "welcome": (
@@ -1027,7 +1065,16 @@ MESSAGES = {
         "voice_invalid_lang": "⛔ 지원되는 언어: fa, en, fr, ko",
         "access_denied": "⛔ 이 봇에 접근 권한이 없습니다.",
         "limit_reached": "⛔ 일일 한도에 도달했습니다 ({remaining}/{limit}).",
-        "remaining_requests": "📊 오늘 남은 요청: {remaining}"
+        "remaining_requests": "📊 오늘 남은 요청: {remaining}",
+        "learn_designing": "🪄 디자인 중...",
+        "learn_quota_exceeded": "❌ 일일 한도에 도달했습니다.",
+        "learn_no_text": "❌ 단어나 문장을 입력해주세요 (예: /learn apple).",
+        "learn_example_sentence": "📖 **예문:**",
+        "learn_slide_footer": "🎓 **교육 ({index}/3)**",
+        "learn_error": "❌ 교육 과정 중 오류가 발생했습니다.",
+        "learn_fallback_meaning": "직역",
+        "learn_fallback_translation": "예문 번역",
+        "learn_btn_listen": "🎧 듣기"
     }
 }
 
