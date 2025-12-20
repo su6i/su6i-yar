@@ -444,33 +444,32 @@ async def cmd_learn_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f"━━━━━━━━━━━━━━\n🎓 **آموزش ({i+1}/3)**"
                 )
                 
+                # Prepare Combined TTS: Word ... Sentence
+                tts_text = f"{word}. {sentence}"
+                audio_buffer = await text_to_speech(tts_text, target_lang)
+                
+                # Send Photo
                 photo_msg = await context.bot.send_photo(
                     chat_id=msg.chat_id,
                     photo=photo_buffer,
                     caption=caption,
                     parse_mode='Markdown',
-                    reply_to_message_id=last_msg_id
+                    reply_to_message_id=last_msg_id,
+                    read_timeout=120,
+                    write_timeout=120
                 )
                 last_msg_id = photo_msg.message_id
                 
-                # Audio 1: Word
-                word_audio = await text_to_speech(word, target_lang)
-                await context.bot.send_voice(
+                # Send Combined Voice
+                voice_msg = await context.bot.send_voice(
                     chat_id=msg.chat_id,
-                    voice=word_audio,
-                    caption=f"🔊 کلمه: {word}",
-                    reply_to_message_id=photo_msg.message_id
+                    voice=audio_buffer,
+                    caption=f"🔊 کلمه و جمله نمونه",
+                    reply_to_message_id=photo_msg.message_id,
+                    read_timeout=120,
+                    write_timeout=120
                 )
-                
-                # Audio 2: Sentence
-                sent_audio = await text_to_speech(sentence, target_lang)
-                sent_msg = await context.bot.send_voice(
-                    chat_id=msg.chat_id,
-                    voice=sent_audio,
-                    caption=f"🗣️ جمله نمونه",
-                    reply_to_message_id=photo_msg.message_id
-                )
-                last_msg_id = sent_msg.message_id
+                last_msg_id = voice_msg.message_id
 
             except Exception as item_e:
                 logger.error(f"❌ Error sending item {i+1}: {item_e}")
@@ -478,7 +477,9 @@ async def cmd_learn_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     chat_id=msg.chat_id,
                     text=f"💡 **{word}**\n`{sentence}`",
                     parse_mode='Markdown',
-                    reply_to_message_id=last_msg_id
+                    reply_to_message_id=last_msg_id,
+                    read_timeout=120,
+                    write_timeout=120
                 )
                 last_msg_id = fb_msg.message_id
 
