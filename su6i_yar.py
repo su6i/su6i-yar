@@ -461,7 +461,7 @@ MESSAGES = {
             "👋 **سلام {name}!**\n"
             "به **Su6i Yar**، دستیار هوشمند خوش آمدید.\n\n"
             "━━━━━━━━━━━━━━\n"
-            "🔻 از منوی پایین استفاده کنید یا لینک بفرستید"
+            "🔻 از منوی پایین استفاده کنید یا لینک اینستاگرام جهت دانلود بفرستید"
         ),
         "btn_status": "📊 وضعیت ربات",
         "btn_help": "🆘 راهنما",
@@ -1031,7 +1031,22 @@ async def global_message_handler(update: Update, context: ContextTypes.DEFAULT_T
             f"📊 **سهمیه امروز:** {remaining}/{limit}"
         )
         
-        await msg.reply_text(info + quota_info, parse_mode='Markdown')
+        full_status = info + quota_info
+        
+        # In groups, send privately
+        if msg.chat_id < 0:  # Negative ID = group
+            try:
+                await context.bot.send_message(
+                    chat_id=user_id,
+                    text=full_status,
+                    parse_mode='Markdown'
+                )
+                await msg.reply_text("✅ وضعیت شما به صورت خصوصی ارسال شد.")
+            except Exception:
+                # User hasn't started private chat with bot
+                await msg.reply_text("⛔ ابتدا یک بار به @su6i\\_yar\\_bot پیام خصوصی بدهید.")
+        else:
+            await msg.reply_text(full_status, parse_mode='Markdown')
         return
 
     # Language Switching

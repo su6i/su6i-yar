@@ -115,14 +115,14 @@ Perfect for personal use - run the bot on your laptop/desktop:
 
 ```bash
 # 1. Activate virtual environment (recommended)
-python3 -m venv venv
+python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 
 # 2. Install dependencies
 pip install -r requirements.txt
 
 # 3. Run the bot
-python3 su6i_yar.py
+python su6i_yar.py
 ```
 
 > **Important:** The bot will only work while your computer is running. Close the terminal = bot stops.
