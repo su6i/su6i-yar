@@ -1344,23 +1344,23 @@ async def cmd_voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         translated_text = await translate_text(target_text, target_lang)
         
         # Send translated text first
-        await msg.reply_text(f"📝 **ترجمه ({LANG_NAMES.get(target_lang, target_lang)}):**\n\n{translated_text}", parse_mode='Markdown')
+        translated_msg = await msg.reply_text(f"📝 **ترجمه ({LANG_NAMES.get(target_lang, target_lang)}):**\n\n{translated_text}", parse_mode='Markdown')
         
         await status_msg.edit_text(get_msg("voice_generating", user_id))
         target_text = translated_text
+        voice_reply_to = translated_msg.message_id  # Reply voice to translated text
     else:
         status_msg = await msg.reply_text(get_msg("voice_generating", user_id))
+        voice_reply_to = msg.reply_to_message.message_id if msg.reply_to_message else msg.message_id
     
     try:
         audio_buffer = await text_to_speech(target_text, target_lang)
-        # Reply to the original message (not the /voice command)
-        reply_to_id = msg.reply_to_message.message_id if msg.reply_to_message else msg.message_id
         
         caption = get_msg("voice_caption_lang", user_id).format(lang=LANG_NAMES.get(target_lang, target_lang)) if need_translation else get_msg("voice_caption", user_id)
         await msg.reply_voice(
             voice=audio_buffer,
             caption=caption,
-            reply_to_message_id=reply_to_id
+            reply_to_message_id=voice_reply_to
         )
         await status_msg.delete()
     except Exception as e:
