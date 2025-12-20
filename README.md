@@ -109,11 +109,76 @@ INSTAGRAM_PASSWORD=your_password
 
 ## 🎮 Usage
 
-Run the bot:
+### 💻 Run on Personal Computer (Local Mode)
+
+Perfect for personal use - run the bot on your laptop/desktop:
 
 ```bash
+# 1. Activate virtual environment (recommended)
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# 2. Install dependencies
+pip install -r requirements.txt
+
+# 3. Run the bot
 python3 su6i_yar.py
 ```
+
+> **Important:** The bot will only work while your computer is running. Close the terminal = bot stops.
+
+#### 🔄 Development Mode (Auto-Restart on Changes)
+
+```bash
+./run_dev.sh
+```
+
+This will automatically restart the bot whenever you edit the code.
+
+---
+
+### 🖥️ Run on Server (24/7 Mode)
+
+For always-on availability, run on a VPS (Ubuntu/Debian):
+
+```bash
+# 1. Clone and setup
+git clone https://github.com/su6i/su6i-yar.git
+cd su6i-yar
+pip3 install -r requirements.txt
+
+# 2. Create systemd service
+sudo nano /etc/systemd/system/su6i-yar.service
+```
+
+Add this content:
+```ini
+[Unit]
+Description=Su6i Yar Telegram Bot
+After=network.target
+
+[Service]
+User=your_username
+WorkingDirectory=/path/to/su6i-yar
+ExecStart=/usr/bin/python3 su6i_yar.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Then:
+```bash
+# 3. Enable and start
+sudo systemctl enable su6i-yar
+sudo systemctl start su6i-yar
+
+# 4. Check status
+sudo systemctl status su6i-yar
+```
+
+---
 
 ### 📱 In Telegram
 
