@@ -83,12 +83,79 @@ SETTINGS = {
     "fact_check": False,
     "min_fc_len": 200,
     "lang": "fa",
-    "admin_id": int(TELEGRAM_CHAT_ID) if TELEGRAM_CHAT_ID else 0
+    "admin_id": int(TELEGRAM_CHAT_ID) if TELEGRAM_CHAT_ID else 0,
+    "public_mode": False,  # If True, anyone can use. If False, only whitelist.
+    "default_daily_limit": 10,  # Default daily AI requests for new users
 }
 
 # Rate Limiting (per user)
 RATE_LIMIT = {}  # user_id -> last_request_time
 RATE_LIMIT_SECONDS = 5  # Minimum seconds between AI requests per user
+
+# Access Control: Whitelist
+# Format: user_id -> {"daily_limit": int, "requests_today": int, "last_reset": date}
+ALLOWED_USERS = {
+    # Admin is always allowed with unlimited access
+}
+
+# Access Control: Allowed Groups (empty = all groups if public_mode is True)
+ALLOWED_GROUPS = set()  # Add group IDs here, e.g., {-1001234567890}
+
+# Daily request tracking
+from datetime import date
+USER_DAILY_USAGE = {}  # user_id -> {"count": int, "date": str}
+
+def check_access(user_id: int, chat_id: int = None) -> tuple[bool, str]:
+    """Check if user has access to use the bot. Returns (allowed, reason)."""
+    admin_id = SETTINGS["admin_id"]
+    
+    # Admin always has unlimited access
+    if user_id == admin_id:
+        return True, "admin"
+    
+    # Check if public mode
+    if SETTINGS["public_mode"]:
+        return True, "public"
+    
+    # Check if user is in whitelist
+    if user_id not in ALLOWED_USERS:
+        return False, "not_whitelisted"
+    
+    # Check group restriction (if in a group)
+    if chat_id and chat_id < 0:  # Negative ID = group
+        if ALLOWED_GROUPS and chat_id not in ALLOWED_GROUPS:
+            return False, "group_not_allowed"
+    
+    return True, "whitelisted"
+
+def check_daily_limit(user_id: int) -> tuple[bool, int]:
+    """Check if user has remaining daily requests. Returns (allowed, remaining)."""
+    admin_id = SETTINGS["admin_id"]
+    
+    # Admin has unlimited
+    if user_id == admin_id:
+        return True, 999
+    
+    # Get user's daily limit
+    user_limit = ALLOWED_USERS.get(user_id, {}).get("daily_limit", SETTINGS["default_daily_limit"])
+    
+    # Get today's usage
+    today = str(date.today())
+    if user_id not in USER_DAILY_USAGE or USER_DAILY_USAGE[user_id]["date"] != today:
+        USER_DAILY_USAGE[user_id] = {"count": 0, "date": today}
+    
+    current_count = USER_DAILY_USAGE[user_id]["count"]
+    remaining = user_limit - current_count
+    
+    return remaining > 0, remaining
+
+def increment_daily_usage(user_id: int):
+    """Increment user's daily usage count."""
+    today = str(date.today())
+    if user_id not in USER_DAILY_USAGE or USER_DAILY_USAGE[user_id]["date"] != today:
+        USER_DAILY_USAGE[user_id] = {"count": 0, "date": today}
+    USER_DAILY_USAGE[user_id]["count"] += 1
+
 
 # ==============================================================================
 # CALLBACK HANDLER FOR LIVE STATUS UPDATES
@@ -139,6 +206,19 @@ async def cmd_check_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     lang = USER_LANG.get(user_id, "fa")
 
+    # Access Control Check
+    allowed, reason = check_access(user_id, msg.chat_id)
+    if not allowed:
+        await msg.reply_text(get_msg("access_denied", user_id))
+        return
+    
+    # Daily Limit Check
+    has_quota, remaining = check_daily_limit(user_id)
+    if not has_quota:
+        limit = ALLOWED_USERS.get(user_id, {}).get("daily_limit", SETTINGS["default_daily_limit"])
+        await msg.reply_text(get_msg("limit_reached", user_id).format(remaining=0, limit=limit))
+        return
+
     # Check if reply or arguments
     target_text = ""
     if msg.reply_to_message:
@@ -156,6 +236,9 @@ async def cmd_check_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_to_message_id=msg.message_id
     )
     response = await analyze_text_gemini(target_text, status_msg, lang)
+    
+    # Increment usage after successful analysis
+    increment_daily_usage(user_id)
     
     await smart_reply(msg, status_msg, response, user_id)
 
@@ -556,7 +639,10 @@ MESSAGES = {
         "voice_caption_lang": "🔊 نسخه صوتی ({lang})",
         "voice_error": "❌ خطا در ساخت فایل صوتی",
         "voice_no_text": "⛔ به یک پیام ریپلای بزنید یا ابتدا یک متن را تحلیل کنید.",
-        "voice_invalid_lang": "⛔ زبان نامعتبر. زبان‌های پشتیبانی: fa, en, fr, ko"
+        "voice_invalid_lang": "⛔ زبان نامعتبر. زبان‌های پشتیبانی: fa, en, fr, ko",
+        "access_denied": "⛔ شما دسترسی به این ربات ندارید.",
+        "limit_reached": "⛔ سقف درخواست روزانه شما تمام شد ({remaining} از {limit}).",
+        "remaining_requests": "📊 درخواست‌های باقی‌مانده امروز: {remaining}"
     },
     "en": {
         "welcome": (
@@ -623,7 +709,10 @@ MESSAGES = {
         "voice_caption_lang": "🔊 Voice version ({lang})",
         "voice_error": "❌ Error generating audio",
         "voice_no_text": "⛔ Reply to a message or analyze text first.",
-        "voice_invalid_lang": "⛔ Invalid language. Supported: fa, en, fr, ko"
+        "voice_invalid_lang": "⛔ Invalid language. Supported: fa, en, fr, ko",
+        "access_denied": "⛔ You don't have access to this bot.",
+        "limit_reached": "⛔ Daily limit reached ({remaining} of {limit}).",
+        "remaining_requests": "📊 Remaining requests today: {remaining}"
     },
     "fr": {
         "welcome": (
@@ -690,7 +779,10 @@ MESSAGES = {
         "voice_caption_lang": "🔊 Version audio ({lang})",
         "voice_error": "❌ Erreur de génération audio",
         "voice_no_text": "⛔ Répondez à un message ou analysez d'abord.",
-        "voice_invalid_lang": "⛔ Langue invalide. Supportées: fa, en, fr, ko"
+        "voice_invalid_lang": "⛔ Langue invalide. Supportées: fa, en, fr, ko",
+        "access_denied": "⛔ Vous n'avez pas accès à ce bot.",
+        "limit_reached": "⛔ Limite quotidienne atteinte ({remaining} sur {limit}).",
+        "remaining_requests": "📊 Requêtes restantes aujourd'hui: {remaining}"
     },
     "ko": {
         "welcome": (
@@ -758,7 +850,10 @@ MESSAGES = {
         "voice_caption_lang": "🔊 음성 버전 ({lang})",
         "voice_error": "❌ 오디오 생성 오류",
         "voice_no_text": "⛔ 메시지에 답장하거나 먼저 텍스트를 분석하세요.",
-        "voice_invalid_lang": "⛔ 지원되는 언어: fa, en, fr, ko"
+        "voice_invalid_lang": "⛔ 지원되는 언어: fa, en, fr, ko",
+        "access_denied": "⛔ 이 봇에 접근 권한이 없습니다.",
+        "limit_reached": "⛔ 일일 한도에 도달했습니다 ({remaining}/{limit}).",
+        "remaining_requests": "📊 오늘 남은 요청: {remaining}"
     }
 }
 
@@ -1125,11 +1220,27 @@ async def global_message_handler(update: Update, context: ContextTypes.DEFAULT_T
     # --- 3. AI ANALYSIS (Fallback) ---
     
     if SETTINGS["fact_check"] and len(text) >= SETTINGS["min_fc_len"]:
+        # Access Control Check
+        allowed, reason = check_access(user_id, msg.chat_id)
+        if not allowed:
+            await msg.reply_text(get_msg("access_denied", user_id))
+            return
+        
+        # Daily Limit Check
+        has_quota, remaining = check_daily_limit(user_id)
+        if not has_quota:
+            limit = ALLOWED_USERS.get(user_id, {}).get("daily_limit", SETTINGS["default_daily_limit"])
+            await msg.reply_text(get_msg("limit_reached", user_id).format(remaining=0, limit=limit))
+            return
+        
         status_msg = await msg.reply_text(
             get_msg("analyzing", user_id),
             reply_to_message_id=msg.message_id
         )
         response = await analyze_text_gemini(text, status_msg, lang)
+        
+        # Increment usage after successful analysis
+        increment_daily_usage(user_id)
         
         await smart_reply(msg, status_msg, response, user_id)
         return
