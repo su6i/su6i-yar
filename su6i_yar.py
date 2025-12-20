@@ -1207,9 +1207,12 @@ async def cmd_voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     try:
         audio_buffer = await text_to_speech(target_text, lang)
+        # Reply to the original message (not the /voice command)
+        reply_to_id = msg.reply_to_message.message_id if msg.reply_to_message else msg.message_id
         await msg.reply_voice(
             voice=audio_buffer,
-            caption="🔊 نسخه صوتی"
+            caption="🔊 نسخه صوتی",
+            reply_to_message_id=reply_to_id
         )
         await status_msg.delete()
     except Exception as e:
