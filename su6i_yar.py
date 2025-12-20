@@ -289,7 +289,20 @@ async def global_message_handler(update: Update, context: ContextTypes.DEFAULT_T
         dl_s = get_msg("dl_on") if SETTINGS["download"] else get_msg("dl_off")
         fc_s = get_msg("fc_on") if SETTINGS["fact_check"] else get_msg("fc_off")
         info = get_msg("status_fmt").format(dl=dl_s, fc=fc_s)
-        await msg.reply_text(info, parse_mode='Markdown')
+        
+        # Add user quota info
+        has_quota, remaining = check_daily_limit(user_id)
+        limit = get_user_limit(user_id)
+        user_type = "👑 ادمین" if user_id == SETTINGS["admin_id"] else ("✅ عضو" if user_id in ALLOWED_USERS else "🆓 رایگان")
+        
+        quota_info = (
+            f"\n━━━━━━━━━━━━━━\n"
+            f"👤 **کاربر:** `{user_id}`\n"
+            f"🏷️ **نوع:** {user_type}\n"
+            f"📊 **سهمیه امروز:** {remaining}/{limit}"
+        )
+        
+        await msg.reply_text(info + quota_info, parse_mode='Markdown')
         return
 
     # Language Switching
