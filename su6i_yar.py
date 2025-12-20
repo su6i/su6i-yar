@@ -1335,9 +1335,9 @@ async def cmd_voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     # Check if translation is needed
-    # If target language is not Persian, we need to translate (assuming input text is usually Persian)
-    # Also translate if user explicitly specified a different language
-    need_translation = target_lang != "fa"  # Translate if target is not Persian
+    # Translate if target language differs from user's current app language
+    # (assumes text is usually in the user's app language)
+    need_translation = target_lang != user_lang
     
     if need_translation:
         original_msg_id = msg.reply_to_message.message_id if msg.reply_to_message else msg.message_id
