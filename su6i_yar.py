@@ -332,122 +332,113 @@ def check_rate_limit(user_id):
     RATE_LIMIT[user_id] = now
     return True
 
-async def cmd_translate_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    Generate related image, translate text, and provide voice response.
-    Usage: /translate [lang] [text] (or reply to text)
-    """
-    logger.info("🎨 Command /translate triggered")
-    msg = update.message
-    user_id = update.effective_user.id
-    user_lang = USER_LANG.get(user_id, "fa")
+async def cmd_learn_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Educational tutor: 3 variations with images, definitions, and sentence audio."""
+    msg = update.effective_message
+    user_id = str(update.effective_user.id)
     
-    # 1. Access & Quota Check
-    allowed, reason = check_access(user_id, msg.chat_id)
-    if not allowed:
-        await msg.reply_text(get_msg("access_denied", user_id))
-        return
-    has_quota, remaining = check_daily_limit(user_id)
-    if not has_quota:
-        limit = get_user_limit(user_id)
-        await msg.reply_text(get_msg("limit_reached", user_id).format(remaining=0, limit=limit))
+    # Check Daily Limit
+    if not check_daily_limit(user_id):
+        await msg.reply_text("❌ سهمیه روزانه شما تمام شده است.")
         return
 
-    # 2. Extract Text and Language
-    target_lang = user_lang
+    # Extract target text and language
     target_text = ""
-
-    if len(context.args) > 0:
-        first_arg = context.args[0].lower()
-        if first_arg in LANG_ALIASES:
-            target_lang = LANG_ALIASES[first_arg]
+    target_lang = get_user_lang(user_id) # Default to user choice
+    
+    if msg.reply_to_message and msg.reply_to_message.text:
+        target_text = msg.reply_to_message.text
+        if context.args:
+            target_lang = context.args[0].lower()
+    elif context.args:
+        # Check if first arg is a language code
+        if len(context.args[0]) <= 3 and context.args[0].lower() in TTS_VOICES:
+            target_lang = context.args[0].lower()
             target_text = " ".join(context.args[1:])
         else:
             target_text = " ".join(context.args)
 
-    if not target_text and msg.reply_to_message:
-        target_text = msg.reply_to_message.text or msg.reply_to_message.caption
-    
     if not target_text:
-        await msg.reply_text("⚠️ متن مورد نظر برای ترجمه را بنویسید یا روی یک پیام ریپلای کنید.")
+        await msg.reply_text("❌ لطفاً متن یا کلمه‌ای برای یادگیری بفرستید (مثال: /learn apple یا در پاسخ به یک پیام).")
         return
 
     # 3. Status Message
     original_msg_id = msg.reply_to_message.message_id if msg.reply_to_message else msg.message_id
     status_msg = await msg.reply_text(
-        "🎨 در حال تولید تصویر و ترجمه...",
+        "🧠 در حال آماده‌سازی محتوای آموزشی...",
         reply_to_message_id=original_msg_id
     )
 
     try:
-        # 4. Educational AI Call: Get 3 variations in JSON format
-        logger.info("🤖 Step 1: Requesting educational variations from AI...")
+        # 4. Educational AI Call: Get 3 variations + sentences
+        logger.info("🤖 Step 1: Requesting deep educational content from AI...")
         lang_name = LANG_NAMES.get(target_lang, target_lang)
         chain = get_smart_chain(grounding=False)
         
         educational_prompt = (
             f"You are a linguistic tutor. Analyze the word/phrase: '{target_text}'.\n"
-            f"Provide 3 distinct nuances, variations, or common collocations in {lang_name} that are useful for a learner.\n"
+            f"Provide 3 distinct nuances or variations in {lang_name} for a learner.\n"
             f"For each one, provide:\n"
             f"1. word: The term in {lang_name}.\n"
             f"2. phonetic: Pronunciation in parentheses.\n"
-            f"3. meaning: A brief Persian explanation of this specific nuance.\n"
-            f"4. prompt: A short, descriptive English visual prompt (single sentence, no style words) for an image representing this specific variation.\n\n"
-            f"REPLY ONLY WITH A JSON LIST OF 3 OBJECTS. Example: [{{ \"word\": \"...\", \"phonetic\": \"...\", \"meaning\": \"...\", \"prompt\": \"...\" }}, ...]"
+            f"3. meaning: A brief Persian explanation.\n"
+            f"4. sentence: A simple, natural example sentence in {lang_name}.\n"
+            f"5. prompt: A descriptive English visual prompt for an image representing this scenario.\n\n"
+            f"REPLY ONLY WITH A JSON LIST OF 3 OBJECTS. Example: [{{ \"word\": \"...\", \"phonetic\": \"...\", \"meaning\": \"...\", \"sentence\": \"...\", \"prompt\": \"...\" }}, ...]"
         )
         
         response = await chain.ainvoke([HumanMessage(content=educational_prompt)])
         content = response.content.strip()
         
-        # Clean JSON if AI adds triple backticks
-        if "```json" in content:
-            content = content.split("```json")[1].split("```")[0].strip()
-        elif "```" in content:
-            content = content.split("```")[1].split("```")[0].strip()
+        # Clean JSON
+        if "```json" in content: content = content.split("```json")[1].split("```")[0].strip()
+        elif "```" in content: content = content.split("```")[1].split("```")[0].strip()
             
         try:
             variations = json.loads(content)
-            if not isinstance(variations, list): variations = []
-            variations = variations[:3] # Limit to 3 for performance
-        except Exception as json_e:
-            logger.warning(f"⚠️ JSON parsing failed: {json_e}")
-            # Fallback to single item if JSON fails
+            variations = variations[:3]
+        except Exception:
+            # Basic fallback
             translated_text = await translate_text(target_text, target_lang)
             img_prompt = await generate_visual_prompt(target_text)
             variations = [{
                 "word": translated_text,
                 "phonetic": "",
                 "meaning": "ترجمه مستقیم",
+                "sentence": "Example sentence goes here.",
                 "prompt": img_prompt
             }]
 
-        # 5. Loop through variations and send
+        # 5. Loop and Send
         last_msg_id = original_msg_id
         
         for i, var in enumerate(variations):
             word = var.get("word", "")
             phonetic = var.get("phonetic", "")
             meaning = var.get("meaning", "")
+            sentence = var.get("sentence", "")
             img_prompt = var.get("prompt", target_text)
             
-            # Construct Pollinations URL
+            # Download Image
             encoded_prompt = urllib.parse.quote(img_prompt)
             image_url = f"https://pollinations.ai/p/{encoded_prompt}?width=1024&height=1024&seed={int(asyncio.get_event_loop().time()) + i}&nologo=true"
             
-            logger.info(f"🖼️ Variation {i+1}: Downloading image...")
             try:
                 def download_img():
                     req = urllib.request.Request(image_url, headers={'User-Agent': 'Mozilla/5.0'})
-                    with urllib.request.urlopen(req, timeout=45) as response:
-                        return response.read()
+                    with urllib.request.urlopen(req, timeout=45) as r: return r.read()
                 
                 image_data = await asyncio.to_thread(download_img)
                 photo_buffer = io.BytesIO(image_data)
-                photo_buffer.name = f"var_{i}.jpg"
+                photo_buffer.name = f"learn_{i}.jpg"
                 
-                caption = f"� **{word}** {phonetic}\n\n{meaning}\n\n━━━━━━━━━━━━━━\n🎓 **آموزش ({i+1}/3)**"
+                caption = (
+                    f"💡 **{word}** {phonetic}\n"
+                    f"📝 {meaning}\n\n"
+                    f"📖 **جمله نمونه:**\n`{sentence}`\n\n"
+                    f"━━━━━━━━━━━━━━\n🎓 **آموزش ({i+1}/3)**"
+                )
                 
-                # Send Photo
                 photo_msg = await context.bot.send_photo(
                     chat_id=msg.chat_id,
                     photo=photo_buffer,
@@ -455,40 +446,43 @@ async def cmd_translate_handler(update: Update, context: ContextTypes.DEFAULT_TY
                     parse_mode='Markdown',
                     reply_to_message_id=last_msg_id
                 )
-                
-                # Update last_msg_id to chain them
                 last_msg_id = photo_msg.message_id
                 
-                # Send Voice for this word
-                audio_buffer = await text_to_speech(word, target_lang)
-                voice_msg = await context.bot.send_voice(
+                # Audio 1: Word
+                word_audio = await text_to_speech(word, target_lang)
+                await context.bot.send_voice(
                     chat_id=msg.chat_id,
-                    voice=audio_buffer,
-                    caption=f"🔊 تلفظ: {word}",
+                    voice=word_audio,
+                    caption=f"🔊 کلمه: {word}",
                     reply_to_message_id=photo_msg.message_id
                 )
-                last_msg_id = voice_msg.message_id
+                
+                # Audio 2: Sentence
+                sent_audio = await text_to_speech(sentence, target_lang)
+                sent_msg = await context.bot.send_voice(
+                    chat_id=msg.chat_id,
+                    voice=sent_audio,
+                    caption=f"�️ جمله نمونه",
+                    reply_to_message_id=photo_msg.message_id
+                )
+                last_msg_id = sent_msg.message_id
 
             except Exception as item_e:
-                logger.error(f"❌ Error sending variation {i+1}: {item_e}")
-                # Send text fallback
-                fallback_msg = await context.bot.send_message(
+                logger.error(f"❌ Error sending item {i+1}: {item_e}")
+                fb_msg = await context.bot.send_message(
                     chat_id=msg.chat_id,
-                    text=f"💡 **{word}** {phonetic}\n\n{meaning}",
+                    text=f"💡 **{word}**\n`{sentence}`",
                     parse_mode='Markdown',
                     reply_to_message_id=last_msg_id
                 )
-                last_msg_id = fallback_msg.message_id
+                last_msg_id = fb_msg.message_id
 
-        # Final cleanup
         await status_msg.delete()
         increment_daily_usage(user_id)
         
     except Exception as e:
-        import traceback
-        error_detail = traceback.format_exc()
-        logger.error(f"Educational Translate Error: {e}\n{error_detail}")
-        await status_msg.edit_text(f"❌ خطایی رخ داد: {str(e)[:50]}")
+        logger.error(f"Learn Error: {e}")
+        await status_msg.edit_text(f"❌ خطایی در فرآیند آموزش رخ داد.")
 
 async def analyze_text_gemini(text, status_msg=None, lang_code="fa"):
     """Analyze text using Smart Chain Fallback"""
@@ -1682,8 +1676,12 @@ def main():
     app.add_handler(CommandHandler("check", cmd_check_handler))
     app.add_handler(CommandHandler("detail", cmd_detail_handler))
     app.add_handler(CommandHandler("voice", cmd_voice_handler))  # TTS Voice
-    app.add_handler(CommandHandler("translate", cmd_translate_handler))
-    app.add_handler(CommandHandler("t", cmd_translate_handler))
+    app.add_handler(CommandHandler("learn", cmd_learn_handler))
+    app.add_handler(CommandHandler("l", cmd_learn_handler))
+    app.add_handler(CommandHandler("t", cmd_learn_handler))
+    app.add_handler(CommandHandler("translate", cmd_learn_handler))
+    app.add_handler(CommandHandler("edu", cmd_learn_handler))
+    app.add_handler(CommandHandler("education", cmd_learn_handler))
     app.add_handler(CommandHandler("stop", cmd_stop_bot_handler))
 
     # All Messages (Text)
