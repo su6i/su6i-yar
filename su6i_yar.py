@@ -1353,27 +1353,54 @@ async def cmd_voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # Build caption with translated text (max 1024 chars for Telegram)
         caption_header = f"📝 **ترجمه ({LANG_NAMES.get(target_lang, target_lang)}):**\n\n"
-        max_text_len = 1024 - len(caption_header) - 3  # Reserve space for "..."
-        if len(translated_text) > max_text_len:
-            caption_text = translated_text[:max_text_len] + "..."
+        max_caption_len = 1024
+        overflow_note = "\n\n_... ادامه در پیام بعدی_"
+        
+        # Split by paragraphs
+        paragraphs = translated_text.split('\n\n')
+        caption_text = ""
+        overflow_text = ""
+        overflow_started = False
+        
+        for para in paragraphs:
+            if overflow_started:
+                overflow_text += ("\n\n" if overflow_text else "") + para
+            else:
+                test_caption = caption_header + caption_text + ("\n\n" if caption_text else "") + para
+                if len(test_caption) + len(overflow_note) <= max_caption_len:
+                    caption_text += ("\n\n" if caption_text else "") + para
+                else:
+                    overflow_started = True
+                    overflow_text = para
+        
+        if overflow_text:
+            caption = caption_header + caption_text + overflow_note
         else:
-            caption_text = translated_text
-        caption = caption_header + caption_text
+            caption = caption_header + caption_text
     else:
         status_msg = await msg.reply_text(get_msg("voice_generating", user_id))
         voice_reply_to = msg.reply_to_message.message_id if msg.reply_to_message else msg.message_id
         caption = get_msg("voice_caption", user_id)
+        overflow_text = ""
     
     try:
         audio_buffer = await text_to_speech(target_text, target_lang)
         
-        await msg.reply_voice(
+        voice_msg = await msg.reply_voice(
             voice=audio_buffer,
             caption=caption,
             parse_mode='Markdown',
             reply_to_message_id=voice_reply_to
         )
         await status_msg.delete()
+        
+        # Send overflow text as reply to voice message
+        if overflow_text:
+            await msg.reply_text(
+                f"📝 **ادامه ترجمه:**\n\n{overflow_text}",
+                parse_mode='Markdown',
+                reply_to_message_id=voice_msg.message_id
+            )
     except Exception as e:
         logger.error(f"TTS Error: {e}")
         await status_msg.edit_text(get_msg("voice_error", user_id))
