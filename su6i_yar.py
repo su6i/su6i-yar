@@ -265,7 +265,10 @@ async def cmd_check_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Show remaining requests (skip for admin)
     if user_id != SETTINGS["admin_id"]:
         limit = get_user_limit(user_id)
-        await msg.reply_text(f"📊 {remaining}/{limit} درخواست باقی‌مانده امروز")
+        await msg.reply_text(
+            f"📊 {remaining}/{limit} درخواست باقی‌مانده امروز",
+            reply_to_message_id=status_msg.message_id
+        )
 
 # ==============================================================================
 # LOGIC: SMART CHAIN FACTORY (LANGCHAIN)
@@ -902,17 +905,19 @@ async def smart_reply(msg, status_msg, response, user_id):
 # ==============================================================================
 
 async def download_instagram(url, chat_id, bot, reply_to_message_id=None):
-    """Download and send video using yt-dlp"""
+    """Download and send video using yt-dlp with caption extraction"""
     try:
         # 1. Filename setup
         timestamp = int(asyncio.get_event_loop().time())
         filename = Path(f"insta_{timestamp}.mp4")
+        info_file = Path(f"insta_{timestamp}.info.json")
         
-        # 2. Command
+        # 2. Command - also extract info
         cmd = [
             "yt-dlp",
             "-f", "best[ext=mp4]",
             "-o", str(filename),
+            "--write-info-json",
             url
         ]
         
@@ -932,19 +937,71 @@ async def download_instagram(url, chat_id, bot, reply_to_message_id=None):
             logger.error(f"Download Error: {stderr.decode()}")
             return False
 
-        # 5. Send to User
+        # 5. Extract caption from info.json
+        original_caption = ""
+        if info_file.exists():
+            try:
+                import json
+                with open(info_file, 'r', encoding='utf-8') as f:
+                    info = json.load(f)
+                original_caption = info.get('description', '') or info.get('title', '') or ''
+                info_file.unlink()  # Cleanup
+            except Exception as e:
+                logger.warning(f"Could not read caption: {e}")
+
+        # 6. Build caption with paragraph-based overflow
+        caption_header = "📥 **Su6i Yar** | @su6i\\_yar\\_bot\n\n"
+        max_caption_len = 1024
+        overflow_note = "\n\n_... ادامه در پیام بعدی_"
+        
+        if original_caption:
+            paragraphs = original_caption.split('\n\n')
+            caption_text = ""
+            overflow_text = ""
+            overflow_started = False
+            
+            for para in paragraphs:
+                if overflow_started:
+                    overflow_text += ("\n\n" if overflow_text else "") + para
+                else:
+                    test_caption = caption_header + caption_text + ("\n\n" if caption_text else "") + para
+                    if len(test_caption) + len(overflow_note) <= max_caption_len:
+                        caption_text += ("\n\n" if caption_text else "") + para
+                    else:
+                        overflow_started = True
+                        overflow_text = para
+            
+            if overflow_text:
+                caption = caption_header + caption_text + overflow_note
+            else:
+                caption = caption_header + caption_text
+        else:
+            caption = "📥 **Su6i Yar** | @su6i\\_yar\\_bot"
+            overflow_text = ""
+
+        # 7. Send to User
         if filename.exists():
             with open(filename, "rb") as video_file:
-                await bot.send_video(
+                video_msg = await bot.send_video(
                     chat_id=chat_id,
                     video=video_file,
-                    caption="📥 **Su6i Yar** | @su6i\\_yar\\_bot",
+                    caption=caption,
                     parse_mode='Markdown',
                     reply_to_message_id=reply_to_message_id,
                     supports_streaming=True
                 )
             # Cleanup
             filename.unlink()
+            
+            # Send overflow text as reply to video
+            if overflow_text:
+                await bot.send_message(
+                    chat_id=chat_id,
+                    text=f"📝 **ادامه کپشن:**\n\n{overflow_text}",
+                    parse_mode='Markdown',
+                    reply_to_message_id=video_msg.message_id
+                )
+            
             return True
         return False
         
@@ -1141,7 +1198,10 @@ async def global_message_handler(update: Update, context: ContextTypes.DEFAULT_T
             await msg.reply_text("⚠️ " + get_msg("dl_off", user_id))
             return
             
-        status_msg = await msg.reply_text(get_msg("downloading", user_id))
+        status_msg = await msg.reply_text(
+            get_msg("downloading", user_id),
+            reply_to_message_id=msg.message_id
+        )
         
         success = await download_instagram(text, msg.chat_id, context.bot, msg.message_id)
         if success:
@@ -1180,7 +1240,10 @@ async def global_message_handler(update: Update, context: ContextTypes.DEFAULT_T
         # Show remaining requests (skip for admin)
         if user_id != SETTINGS["admin_id"]:
             limit = get_user_limit(user_id)
-            await msg.reply_text(f"📊 {remaining}/{limit} درخواست باقی‌مانده امروز")
+            await msg.reply_text(
+                f"📊 {remaining}/{limit} درخواست باقی‌مانده امروز",
+                reply_to_message_id=status_msg.message_id
+            )
         return
 
 # ==============================================================================
@@ -1397,8 +1460,12 @@ async def cmd_voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             caption = caption_header + caption_text
     else:
-        status_msg = await msg.reply_text(get_msg("voice_generating", user_id))
-        voice_reply_to = msg.reply_to_message.message_id if msg.reply_to_message else msg.message_id
+        original_msg_id = msg.reply_to_message.message_id if msg.reply_to_message else msg.message_id
+        status_msg = await msg.reply_text(
+            get_msg("voice_generating", user_id),
+            reply_to_message_id=original_msg_id
+        )
+        voice_reply_to = original_msg_id
         caption = get_msg("voice_caption", user_id)
         overflow_text = ""
     
