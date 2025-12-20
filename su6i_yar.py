@@ -222,7 +222,7 @@ class StatusUpdateCallback(AsyncCallbackHandler):
 
 # User Preferences (In-Memory)
 USER_LANG = {}
-LEARN_CACHE = {}  # UUID -> (text, lang) for /learn buttons
+LEARN_CACHE = {}  # UUID -> (tts_text, lang) for /learn buttons (retained for backward compatibility if needed)
 
 # ... (Localization Dictionary MESSAGES is unchanged, skipping for brevity) ...
 
@@ -390,8 +390,9 @@ async def cmd_learn_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"2. phonetic: Pronunciation in parentheses.\n"
             f"3. meaning: A brief {explanation_lang} explanation.\n"
             f"4. sentence: A simple, natural example sentence in {lang_name}.\n"
-            f"5. prompt: A descriptive English visual prompt for an image representing this scenario.\n\n"
-            f"REPLY ONLY WITH A JSON LIST OF 3 OBJECTS. Example: [{{ \"word\": \"...\", \"phonetic\": \"...\", \"meaning\": \"...\", \"sentence\": \"...\", \"prompt\": \"...\" }}, ...]"
+            f"5. translation: The {explanation_lang} translation of that example sentence.\n"
+            f"6. prompt: A descriptive English visual prompt for an image representing this scenario.\n\n"
+            f"REPLY ONLY WITH A JSON LIST OF 3 OBJECTS. Example: [{{ \"word\": \"...\", \"phonetic\": \"...\", \"meaning\": \"...\", \"sentence\": \"...\", \"translation\": \"...\", \"prompt\": \"...\" }}, ...]"
         )
         
         response = await chain.ainvoke([HumanMessage(content=educational_prompt)])
@@ -413,6 +414,7 @@ async def cmd_learn_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "phonetic": "",
                 "meaning": "ترجمه مستقیم",
                 "sentence": "Example sentence goes here.",
+                "translation": "ترجمه جمله نمونه",
                 "prompt": img_prompt
             }]
 
@@ -448,12 +450,8 @@ async def cmd_learn_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             phonetic = var.get("phonetic", "")
             meaning = var.get("meaning", "")
             sentence = var.get("sentence", "")
+            translation = var.get("translation", "")
             image_bytes = images_data[i]
-            
-            # Prepare TTS Data for Button
-            audio_id = str(uuid.uuid4())[:8]
-            LEARN_CACHE[audio_id] = (f"{word}. {sentence}", target_lang)
-            keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("🔊 تلفظ", callback_data=f"learn_tts:{audio_id}")]])
             
             try:
                 if image_bytes:
@@ -463,21 +461,33 @@ async def cmd_learn_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     caption = (
                         f"💡 **{word}** {phonetic}\n"
                         f"📝 {meaning}\n\n"
-                        f"📖 **جمله نمونه:**\n`{sentence}`\n\n"
+                        f"📖 **جمله نمونه:**\n`{sentence}`\n"
+                        f"🇮🇷 **ترجمه:** {translation}\n\n"
                         f"━━━━━━━━━━━━━━\n🎓 **آموزش ({i+1}/3)**"
                     )
                     
+                    # Send Photo
                     photo_msg = await context.bot.send_photo(
                         chat_id=msg.chat_id,
                         photo=photo_buffer,
                         caption=caption,
                         parse_mode='Markdown',
-                        reply_markup=keyboard,
                         reply_to_message_id=last_msg_id,
                         read_timeout=150,
                         write_timeout=150
                     )
                     last_msg_id = photo_msg.message_id
+                    
+                    # Send Audio Sequential (NOT replied to photo as per test request)
+                    tts_text = f"{word}. {sentence}"
+                    audio_buffer = await text_to_speech(tts_text, target_lang)
+                    voice_msg = await context.bot.send_voice(
+                        chat_id=msg.chat_id,
+                        voice=audio_buffer,
+                        caption=f"🔊 تلفظ: {word}",
+                        read_timeout=120
+                    )
+                    # We don't link audio to chain to see how it looks
                 else:
                     raise Exception("No image data available")
 
@@ -1734,9 +1744,6 @@ def main():
     app.add_handler(CommandHandler("education", cmd_learn_handler))
     app.add_handler(CommandHandler("stop", cmd_stop_bot_handler))
     
-    # Callbacks
-    app.add_handler(CallbackQueryHandler(callback_learn_audio_handler, pattern="^learn_tts:"))
-
     # All Messages (Text)
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), global_message_handler))
 
