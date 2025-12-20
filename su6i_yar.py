@@ -275,19 +275,18 @@ async def cmd_check_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # LOGIC: SMART CHAIN FACTORY (LANGCHAIN)
 # ==============================================================================
 
-def get_smart_chain():
+def get_smart_chain(grounding=True):
     """Constructs the self-healing AI model chain (8-Layer Defense)"""
-    logger.info("⛓️ Building Smart AI Chain...")
+    logger.info(f"⛓️ Building Smart AI Chain (Grounding: {grounding})...")
     
     defaults = {"google_api_key": GEMINI_API_KEY, "temperature": 0.3}
 
     # 1. Gemini 2.5 Pro (Primary)
-    # Enable Google Search Grounding for real-time fact checking
+    model_kwargs = {"tools": [{"google_search_retrieval": {}}]} if grounding else {}
     primary = ChatGoogleGenerativeAI(
         model="gemini-2.5-pro", 
         **defaults,
-        # Grounding: Use built-in Google Search Retrieval
-        model_kwargs={"tools": [{"google_search_retrieval": {}}]}
+        model_kwargs=model_kwargs
     )
     
     # Define Fallbacks in Order
@@ -378,30 +377,45 @@ async def cmd_translate_handler(update: Update, context: ContextTypes.DEFAULT_TY
     )
 
     try:
-        # 4. Translation
-        translated_text = await translate_text(target_text, target_lang)
+        # 4. Combined Translation and Image Prompt (One AI Call)
+        lang_name = LANG_NAMES.get(target_lang, target_lang)
+        chain = get_smart_chain(grounding=False)
+        combined_prompt = (
+            f"You are a translator and visual expert.\n"
+            f"1. Translate this text to {lang_name}: \"{target_text}\"\n"
+            f"2. Create a short, descriptive English visual prompt (single sentence) for an image representing this text.\n"
+            f"Output format: TRANSLATION: <text> | PROMPT: <prompt>"
+        )
         
-        # 5. Image Generation Prompt (AI optimized)
-        chain = get_smart_chain()
-        img_prompt_req = f"Generate a short, descriptive English visual prompt (single sentence, no style words) representing the meaning of this text: '{target_text}'"
-        img_prompt_resp = await chain.ainvoke([HumanMessage(content=img_prompt_req)])
-        img_prompt = img_prompt_resp.content.strip().replace('"', '').replace("'", "")
+        response = await chain.ainvoke([HumanMessage(content=combined_prompt)])
+        content = response.content.strip()
         
-        # Construct Pollinations URL
+        # Parse response
+        if "|" in content and "TRANSLATION:" in content and "PROMPT:" in content:
+            parts = content.split("|", 1)
+            translated_text = parts[0].replace("TRANSLATION:", "").strip()
+            img_prompt = parts[1].replace("PROMPT:", "").strip().replace('"', '').replace("'", "")
+        else:
+            # Fallback if AI doesn't follow format strictly
+            translated_text = await translate_text(target_text, target_lang)
+            img_prompt = target_text[:100]
+
+        # 5. Construct Pollinations URL
         encoded_prompt = urllib.parse.quote(img_prompt)
         image_url = f"https://pollinations.ai/p/{encoded_prompt}?width=1024&height=1024&seed={int(asyncio.get_event_loop().time())}&nologo=true"
         
-        # 6. Send Image with Caption
-        lang_name = LANG_NAMES.get(target_lang, target_lang)
+        # 6. Send Image with Caption (Increased Timeout)
         caption = f"📝 **ترجمه ({lang_name}):**\n\n{translated_text}"
         
-        # Use send_photo with URL
         photo_msg = await context.bot.send_photo(
             chat_id=msg.chat_id,
             photo=image_url,
-            caption=caption[:1024], # Max caption length
+            caption=caption[:1024],
             parse_mode='Markdown',
-            reply_to_message_id=original_msg_id
+            reply_to_message_id=original_msg_id,
+            read_timeout=60,
+            write_timeout=60,
+            connect_timeout=60
         )
         
         # 7. Generate Voice (TTS)
@@ -412,16 +426,17 @@ async def cmd_translate_handler(update: Update, context: ContextTypes.DEFAULT_TY
             chat_id=msg.chat_id,
             voice=audio_buffer,
             caption=get_msg("voice_caption_lang", user_id).format(lang=lang_name),
-            reply_to_message_id=photo_msg.message_id
+            reply_to_message_id=photo_msg.message_id,
+            read_timeout=60,
+            write_timeout=60
         )
         
-        # Cleanup status & increment quota
         await status_msg.delete()
         increment_daily_usage(user_id)
         
     except Exception as e:
         logger.error(f"Translate/Image Error: {e}")
-        await status_msg.edit_text("❌ متأسفانه خطایی در تولید ترجمه یا تصویر رخ داد.")
+        await status_msg.edit_text("❌ متأسفانه خطایی در تولید ترجمه یا تصویر رخ داد (تایم‌اوت).")
 
 async def analyze_text_gemini(text, status_msg=None, lang_code="fa"):
     """Analyze text using Smart Chain Fallback"""
@@ -1450,7 +1465,7 @@ async def translate_text(text: str, target_lang: str) -> str:
     lang_name = LANG_NAMES.get(target_lang, "English")
     
     try:
-        chain = get_smart_chain()
+        chain = get_smart_chain(grounding=False)
         prompt = f"Translate the following text to {lang_name}. Only output the translation, no explanations:\n\n{text}"
         response = await chain.ainvoke([HumanMessage(content=prompt)])
         return response.content.strip()
