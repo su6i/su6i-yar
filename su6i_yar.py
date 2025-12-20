@@ -1012,6 +1012,26 @@ async def global_message_handler(update: Update, context: ContextTypes.DEFAULT_T
         USER_LANG[user_id] = "fr"
         await msg.reply_text("✅ Langue française sélectionnée.", reply_markup=get_main_keyboard(user_id))
         return
+    if "한국어" in text:
+        USER_LANG[user_id] = "ko"
+        await msg.reply_text("✅ 한국어가 선택되었습니다.", reply_markup=get_main_keyboard(user_id))
+        return
+    
+    # Voice Button
+    if text.startswith("🔊"):
+        detail_text = LAST_ANALYSIS_CACHE.get(user_id)
+        if not detail_text:
+            await msg.reply_text("⛔ هیچ تحلیل ذخیره‌شده‌ای موجود نیست.")
+            return
+        status_msg = await msg.reply_text("🔊 در حال ساخت فایل صوتی...")
+        try:
+            audio_buffer = await text_to_speech(detail_text, lang)
+            await msg.reply_voice(voice=audio_buffer, caption="🔊 نسخه صوتی تحلیل")
+            await status_msg.delete()
+        except Exception as e:
+            logger.error(f"TTS Error: {e}")
+            await status_msg.edit_text("❌ خطا در ساخت فایل صوتی")
+        return
         
     # Help
     if text.startswith("ℹ️") or text.startswith("🆘"):
