@@ -1334,8 +1334,10 @@ async def cmd_voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await msg.reply_text(get_msg("voice_no_text", user_id))
         return
     
-    # Check if translation is needed (if target_lang differs from user's default)
-    need_translation = target_lang != user_lang
+    # Check if translation is needed
+    # If target language is not Persian, we need to translate (assuming input text is usually Persian)
+    # Also translate if user explicitly specified a different language
+    need_translation = target_lang != "fa"  # Translate if target is not Persian
     
     if need_translation:
         status_msg = await msg.reply_text(get_msg("voice_translating", user_id).format(lang=LANG_NAMES.get(target_lang, target_lang)))
