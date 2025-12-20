@@ -11,6 +11,8 @@ warnings.filterwarnings("ignore", category=UserWarning, module="langchain_core._
 
 from pathlib import Path
 from dotenv import load_dotenv
+import io
+import edge_tts
 
 # Telegram Imports
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
@@ -1048,6 +1050,66 @@ async def cmd_detail_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
                     await msg.reply_text(f"📄 بخش {i+1} از {len(chunks)}\n━━━━━━━━━━━━━━\n\n{chunk}", parse_mode=None)
 
 
+# TTS Voice Mapping
+TTS_VOICES = {
+    "fa": "fa-IR-FaridNeural",   # Persian - Male
+    "en": "en-US-GuyNeural",     # English - Male
+    "fr": "fr-FR-HenriNeural"    # French - Male
+}
+
+async def text_to_speech(text: str, lang: str = "fa") -> io.BytesIO:
+    """Convert text to speech using edge-tts. Returns audio as BytesIO."""
+    voice = TTS_VOICES.get(lang, TTS_VOICES["fa"])
+    
+    # Clean text for TTS (remove markdown)
+    clean_text = re.sub(r'\*\*|▫️|━+|✅|❌|⚠️|🧠|📄|💡', '', text)
+    clean_text = re.sub(r'\[.*?\]', '', clean_text)  # Remove markdown links
+    clean_text = clean_text.strip()
+    
+    # Limit length for TTS (avoid very long audio)
+    if len(clean_text) > 2000:
+        clean_text = clean_text[:2000] + "..."
+    
+    communicate = edge_tts.Communicate(clean_text, voice)
+    audio_buffer = io.BytesIO()
+    
+    async for chunk in communicate.stream():
+        if chunk["type"] == "audio":
+            audio_buffer.write(chunk["data"])
+    
+    audio_buffer.seek(0)
+    return audio_buffer
+
+
+async def cmd_voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Send voice version of the last analysis"""
+    logger.info("🔊 Command /voice triggered")
+    msg = update.message
+    user_id = update.effective_user.id
+    lang = USER_LANG.get(user_id, "fa")
+    
+    # Check Cache
+    detail_text = LAST_ANALYSIS_CACHE.get(user_id)
+    
+    if not detail_text:
+        await msg.reply_text("⛔ هیچ تحلیل ذخیره‌شده‌ای موجود نیست. ابتدا یک متن را تحلیل کنید.")
+        return
+    
+    # Send "generating" message
+    status_msg = await msg.reply_text("🔊 در حال ساخت فایل صوتی...")
+    
+    try:
+        audio_buffer = await text_to_speech(detail_text, lang)
+        await msg.reply_voice(
+            voice=audio_buffer,
+            caption="🔊 نسخه صوتی تحلیل"
+        )
+        await status_msg.delete()
+    except Exception as e:
+        logger.error(f"TTS Error: {e}")
+        await status_msg.edit_text("❌ خطا در ساخت فایل صوتی")
+
+
 def main():
     if not TELEGRAM_TOKEN:
         print("❌ Error: TELEGRAM_BOT_TOKEN not found in .env")
@@ -1064,7 +1126,8 @@ def main():
     app.add_handler(CommandHandler("toggle_dl", cmd_toggle_dl_handler))
     app.add_handler(CommandHandler("toggle_fc", cmd_toggle_fc_handler))
     app.add_handler(CommandHandler("check", cmd_check_handler))
-    app.add_handler(CommandHandler("detail", cmd_detail_handler)) # NEW COMMAND
+    app.add_handler(CommandHandler("detail", cmd_detail_handler))
+    app.add_handler(CommandHandler("voice", cmd_voice_handler))  # TTS Voice
     app.add_handler(CommandHandler("stop", cmd_stop_bot_handler))
 
     # All Messages (Text)
