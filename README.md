@@ -145,9 +145,17 @@ For always-on availability, run on a VPS (Ubuntu/Debian):
 # 1. Clone and setup
 git clone https://github.com/su6i/su6i-yar.git
 cd su6i-yar
-pip3 install -r requirements.txt
 
-# 2. Create systemd service
+# 2. Create virtual environment (recommended)
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+
+# 3. Create .env file
+nano .env
+# Add your tokens (TELEGRAM_BOT_TOKEN, GEMINI_API_KEY, etc.)
+
+# 4. Create systemd service
 sudo nano /etc/systemd/system/su6i-yar.service
 ```
 
@@ -159,10 +167,11 @@ After=network.target
 
 [Service]
 User=your_username
-WorkingDirectory=/path/to/su6i-yar
-ExecStart=/usr/bin/python3 su6i_yar.py
+WorkingDirectory=/home/your_username/su6i-yar
+ExecStart=/home/your_username/su6i-yar/venv/bin/python3 su6i_yar.py
 Restart=always
 RestartSec=10
+Environment=PATH=/home/your_username/su6i-yar/venv/bin
 
 [Install]
 WantedBy=multi-user.target
