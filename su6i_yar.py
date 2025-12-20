@@ -168,6 +168,29 @@ def smart_split(text, header="", max_len=1024, overflow_prefix="... ادامه �
         
     return final_caption_html, overflow_text_raw
 
+async def detect_language(text: str) -> str:
+    """Detect language of text. Prioritizes local regex for FA/KO, then AI."""
+    if not text:
+        return "fa"
+        
+    # Heuristic for Persian/Arabic
+    if re.search(r'[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]', text):
+        return "fa"
+    
+    # Heuristic for Korean (Hangul)
+    if re.search(r'[\uAC00-\uD7AF\u1100-\u11FF]', text):
+        return "ko"
+        
+    # Use AI for EN vs FR or others
+    try:
+        # Use a very short, fast prompt
+        chain = await get_smart_chain(grounding=False)
+        response = await chain.ainvoke(f"Return only the 2-letter ISO code for this text's language: {text[:100]}")
+        code = response.content.strip().lower()[:2]
+        return LANG_ALIASES.get(code, code) if code in LANG_ALIASES else code
+    except:
+        return "en"
+
 def check_access(user_id: int, chat_id: int = None) -> tuple[bool, str]:
     """Check if user has access to use the bot. Returns (allowed, reason)."""
     admin_id = SETTINGS["admin_id"]
@@ -1643,14 +1666,12 @@ async def cmd_voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_lang = USER_LANG.get(user_id, "fa")
     
     # Check for language argument
-    target_lang = user_lang  # Default to user's app language
+    explicit_target = None
     if context.args:
         lang_arg = context.args[0].lower()
         if lang_arg in LANG_ALIASES:
-            target_lang = LANG_ALIASES[lang_arg]
-        else:
-            await msg.reply_text(get_msg("voice_invalid_lang", user_id))
-            return
+            explicit_target = LANG_ALIASES[lang_arg]
+        # If not a lang alias, we assume it's direct text input later
     
     # Priority 1: Check if replied to a message
     target_text = ""
@@ -1673,7 +1694,19 @@ async def cmd_voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await msg.reply_text(get_msg("voice_no_text", user_id))
         return
 
-    need_translation = target_lang != user_lang
+    # Decide target language and translation need
+    if explicit_target:
+        # User explicitly asked for a specific language -> Translate if needed
+        target_lang = explicit_target
+        # We assume the source text is usually in the user's interface language for translation purposes,
+        # but the translation logic itself handles any source.
+        # Actually, let's detect source to be sure if translation is needed.
+        source_lang = await detect_language(target_text)
+        need_translation = target_lang != source_lang
+    else:
+        # No language specified -> Use the text's natural language (no translation)
+        target_lang = await detect_language(target_text)
+        need_translation = False
     
     try:
         # 1. Translate if needed
@@ -1694,7 +1727,12 @@ async def cmd_voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         audio_buffer = await text_to_speech(target_text, target_lang)
         
         # 3. Build caption with smart_split
-        header = f"📝 <b>ترجمه ({LANG_NAMES.get(target_lang, target_lang)}):</b>"
+        lang_name = LANG_NAMES.get(target_lang, target_lang)
+        if need_translation:
+            header = f"📝 <b>ترجمه ({lang_name}):</b>"
+        else:
+            header = f"🔊 <b>تلفظ ({lang_name}):</b>"
+            
         caption, overflow_text = smart_split(target_text, header=header, max_len=1024)
         
         # 4. Send Voice
