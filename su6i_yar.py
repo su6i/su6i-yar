@@ -455,14 +455,18 @@ async def cmd_learn_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             try:
                 if image_bytes:
+                    target_flag = LANG_FLAGS.get(target_lang, "🌐")
+                    user_flag = LANG_FLAGS.get(user_lang, "🇮🇷")
+                    
                     photo_buffer = io.BytesIO(image_bytes)
                     photo_buffer.name = f"learn_{i}.jpg"
                     
                     caption = (
                         f"💡 **{word}** {phonetic}\n"
                         f"📝 {meaning}\n\n"
-                        f"📖 **جمله نمونه:**\n`{sentence}`\n"
-                        f"🇮🇷 **ترجمه:** {translation}\n\n"
+                        f"📖 **جمله نمونه:**\n"
+                        f"{target_flag} `{sentence}`\n"
+                        f"{user_flag} {translation}\n\n"
                         f"━━━━━━━━━━━━━━\n🎓 **آموزش ({i+1}/3)**"
                     )
                     
@@ -478,13 +482,13 @@ async def cmd_learn_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     )
                     last_msg_id = photo_msg.message_id
                     
-                    # Send Audio Sequential (NOT replied to photo as per test request)
+                    # Send Audio Sequential (No reply as requested)
                     tts_text = f"{word}. {sentence}"
                     audio_buffer = await text_to_speech(tts_text, target_lang)
                     voice_msg = await context.bot.send_voice(
                         chat_id=msg.chat_id,
                         voice=audio_buffer,
-                        caption=f"🔊 تلفظ: {word}",
+                        caption=f"🔊 {word}",
                         read_timeout=120
                     )
                     # We don't link audio to chain to see how it looks
@@ -1564,6 +1568,10 @@ LANG_ALIASES = {
 
 LANG_NAMES = {
     "fa": "فارسی", "en": "انگلیسی", "fr": "فرانسوی", "ko": "کره‌ای"
+}
+
+LANG_FLAGS = {
+    "fa": "🇮🇷", "en": "🇺🇸", "fr": "🇫🇷", "ko": "🇰🇷"
 }
 
 async def translate_text(text: str, target_lang: str) -> str:
