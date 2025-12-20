@@ -152,7 +152,7 @@ sudo nano /etc/systemd/system/su6i-yar.service
 ```
 
 Add this content:
-```ini
+```text
 [Unit]
 Description=Su6i Yar Telegram Bot
 After=network.target
