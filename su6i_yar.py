@@ -1183,27 +1183,33 @@ async def text_to_speech(text: str, lang: str = "fa") -> io.BytesIO:
 
 
 async def cmd_voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Send voice version of the last analysis"""
+    """Send voice version of replied message or last analysis"""
     logger.info("🔊 Command /voice triggered")
     msg = update.message
     user_id = update.effective_user.id
     lang = USER_LANG.get(user_id, "fa")
     
-    # Check Cache
-    detail_text = LAST_ANALYSIS_CACHE.get(user_id)
+    # Priority 1: Check if replied to a message
+    target_text = ""
+    if msg.reply_to_message:
+        target_text = msg.reply_to_message.text or msg.reply_to_message.caption or ""
     
-    if not detail_text:
-        await msg.reply_text("⛔ هیچ تحلیل ذخیره‌شده‌ای موجود نیست. ابتدا یک متن را تحلیل کنید.")
+    # Priority 2: Check cache if no reply
+    if not target_text:
+        target_text = LAST_ANALYSIS_CACHE.get(user_id, "")
+    
+    if not target_text:
+        await msg.reply_text("⛔ به یک پیام ریپلای بزنید یا ابتدا یک متن را تحلیل کنید.")
         return
     
     # Send "generating" message
     status_msg = await msg.reply_text("🔊 در حال ساخت فایل صوتی...")
     
     try:
-        audio_buffer = await text_to_speech(detail_text, lang)
+        audio_buffer = await text_to_speech(target_text, lang)
         await msg.reply_voice(
             voice=audio_buffer,
-            caption="🔊 نسخه صوتی تحلیل"
+            caption="🔊 نسخه صوتی"
         )
         await status_msg.delete()
     except Exception as e:
