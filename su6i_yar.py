@@ -85,7 +85,8 @@ SETTINGS = {
     "lang": "fa",
     "admin_id": int(TELEGRAM_CHAT_ID) if TELEGRAM_CHAT_ID else 0,
     "public_mode": False,  # If True, anyone can use. If False, only whitelist.
-    "default_daily_limit": 10,  # Default daily AI requests for new users
+    "default_daily_limit": 10,  # Default daily AI requests for whitelisted users
+    "free_trial_limit": 3,  # Free requests for non-whitelisted users
 }
 
 # Rate Limiting (per user)
@@ -105,6 +106,19 @@ ALLOWED_GROUPS = set()  # Add group IDs here, e.g., {-1001234567890}
 from datetime import date
 USER_DAILY_USAGE = {}  # user_id -> {"count": int, "date": str}
 
+def get_user_limit(user_id: int) -> int:
+    """Get user's daily request limit."""
+    admin_id = SETTINGS["admin_id"]
+    if user_id == admin_id:
+        return 999  # Unlimited for admin
+    
+    # Whitelisted users get their custom limit or default
+    if user_id in ALLOWED_USERS:
+        return ALLOWED_USERS[user_id].get("daily_limit", SETTINGS["default_daily_limit"])
+    
+    # Non-whitelisted users get free trial limit
+    return SETTINGS["free_trial_limit"]
+
 def check_access(user_id: int, chat_id: int = None) -> tuple[bool, str]:
     """Check if user has access to use the bot. Returns (allowed, reason)."""
     admin_id = SETTINGS["admin_id"]
@@ -117,27 +131,29 @@ def check_access(user_id: int, chat_id: int = None) -> tuple[bool, str]:
     if SETTINGS["public_mode"]:
         return True, "public"
     
-    # Check if user is in whitelist
-    if user_id not in ALLOWED_USERS:
-        return False, "not_whitelisted"
+    # Whitelisted users
+    if user_id in ALLOWED_USERS:
+        # Check group restriction (if in a group)
+        if chat_id and chat_id < 0:  # Negative ID = group
+            if ALLOWED_GROUPS and chat_id not in ALLOWED_GROUPS:
+                return False, "group_not_allowed"
+        return True, "whitelisted"
     
-    # Check group restriction (if in a group)
-    if chat_id and chat_id < 0:  # Negative ID = group
-        if ALLOWED_GROUPS and chat_id not in ALLOWED_GROUPS:
-            return False, "group_not_allowed"
+    # Non-whitelisted users get free trial (check if they still have quota)
+    has_quota, remaining = check_daily_limit(user_id)
+    if has_quota:
+        return True, "free_trial"
     
-    return True, "whitelisted"
+    return False, "trial_expired"
 
 def check_daily_limit(user_id: int) -> tuple[bool, int]:
     """Check if user has remaining daily requests. Returns (allowed, remaining)."""
-    admin_id = SETTINGS["admin_id"]
+    # Get user's limit
+    user_limit = get_user_limit(user_id)
     
     # Admin has unlimited
-    if user_id == admin_id:
+    if user_limit >= 999:
         return True, 999
-    
-    # Get user's daily limit
-    user_limit = ALLOWED_USERS.get(user_id, {}).get("daily_limit", SETTINGS["default_daily_limit"])
     
     # Get today's usage
     today = str(date.today())
@@ -149,12 +165,16 @@ def check_daily_limit(user_id: int) -> tuple[bool, int]:
     
     return remaining > 0, remaining
 
-def increment_daily_usage(user_id: int):
-    """Increment user's daily usage count."""
+def increment_daily_usage(user_id: int) -> int:
+    """Increment user's daily usage count. Returns remaining requests."""
     today = str(date.today())
     if user_id not in USER_DAILY_USAGE or USER_DAILY_USAGE[user_id]["date"] != today:
         USER_DAILY_USAGE[user_id] = {"count": 0, "date": today}
     USER_DAILY_USAGE[user_id]["count"] += 1
+    
+    # Return remaining
+    user_limit = get_user_limit(user_id)
+    return user_limit - USER_DAILY_USAGE[user_id]["count"]
 
 
 # ==============================================================================
@@ -215,7 +235,7 @@ async def cmd_check_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Daily Limit Check
     has_quota, remaining = check_daily_limit(user_id)
     if not has_quota:
-        limit = ALLOWED_USERS.get(user_id, {}).get("daily_limit", SETTINGS["default_daily_limit"])
+        limit = get_user_limit(user_id)
         await msg.reply_text(get_msg("limit_reached", user_id).format(remaining=0, limit=limit))
         return
 
@@ -237,10 +257,15 @@ async def cmd_check_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     response = await analyze_text_gemini(target_text, status_msg, lang)
     
-    # Increment usage after successful analysis
-    increment_daily_usage(user_id)
+    # Increment usage and get remaining
+    remaining = increment_daily_usage(user_id)
     
     await smart_reply(msg, status_msg, response, user_id)
+    
+    # Show remaining requests (skip for admin)
+    if user_id != SETTINGS["admin_id"]:
+        limit = get_user_limit(user_id)
+        await msg.reply_text(f"📊 {remaining}/{limit} درخواست باقی‌مانده امروز")
 
 async def global_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """MASTER HANDLER: Processes ALL text messages"""
@@ -1229,7 +1254,7 @@ async def global_message_handler(update: Update, context: ContextTypes.DEFAULT_T
         # Daily Limit Check
         has_quota, remaining = check_daily_limit(user_id)
         if not has_quota:
-            limit = ALLOWED_USERS.get(user_id, {}).get("daily_limit", SETTINGS["default_daily_limit"])
+            limit = get_user_limit(user_id)
             await msg.reply_text(get_msg("limit_reached", user_id).format(remaining=0, limit=limit))
             return
         
@@ -1239,10 +1264,15 @@ async def global_message_handler(update: Update, context: ContextTypes.DEFAULT_T
         )
         response = await analyze_text_gemini(text, status_msg, lang)
         
-        # Increment usage after successful analysis
-        increment_daily_usage(user_id)
+        # Increment usage and get remaining
+        remaining = increment_daily_usage(user_id)
         
         await smart_reply(msg, status_msg, response, user_id)
+        
+        # Show remaining requests (skip for admin)
+        if user_id != SETTINGS["admin_id"]:
+            limit = get_user_limit(user_id)
+            await msg.reply_text(f"📊 {remaining}/{limit} درخواست باقی‌مانده امروز")
         return
 
 # ==============================================================================
