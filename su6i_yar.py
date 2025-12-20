@@ -1266,7 +1266,7 @@ LANG_ALIASES = {
 }
 
 LANG_NAMES = {
-    "fa": "Persian (Farsi)", "en": "English", "fr": "French", "ko": "Korean"
+    "fa": "فارسی", "en": "انگلیسی", "fr": "فرانسوی", "ko": "کره‌ای"
 }
 
 async def translate_text(text: str, target_lang: str) -> str:
