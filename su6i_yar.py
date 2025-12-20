@@ -335,7 +335,8 @@ def check_rate_limit(user_id):
 async def cmd_learn_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Educational tutor: 3 variations with images, definitions, and sentence audio."""
     msg = update.effective_message
-    user_id = str(update.effective_user.id)
+    user_id = update.effective_user.id
+    user_lang = USER_LANG.get(user_id, "fa")
     
     # Check Daily Limit
     if not check_daily_limit(user_id):
@@ -344,16 +345,19 @@ async def cmd_learn_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Extract target text and language
     target_text = ""
-    target_lang = get_user_lang(user_id) # Default to user choice
+    target_lang = user_lang # Default to user's app language
     
-    if msg.reply_to_message and msg.reply_to_message.text:
-        target_text = msg.reply_to_message.text
+    if msg.reply_to_message:
+        target_text = msg.reply_to_message.text or msg.reply_to_message.caption or ""
         if context.args:
-            target_lang = context.args[0].lower()
+            lang_arg = context.args[0].lower()
+            if lang_arg in LANG_ALIASES:
+                target_lang = LANG_ALIASES[lang_arg]
     elif context.args:
-        # Check if first arg is a language code
-        if len(context.args[0]) <= 3 and context.args[0].lower() in TTS_VOICES:
-            target_lang = context.args[0].lower()
+        # Check if first arg is a language code/alias
+        lang_arg = context.args[0].lower()
+        if lang_arg in LANG_ALIASES:
+            target_lang = LANG_ALIASES[lang_arg]
             target_text = " ".join(context.args[1:])
         else:
             target_text = " ".join(context.args)
@@ -371,8 +375,9 @@ async def cmd_learn_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         # 4. Educational AI Call: Get 3 variations + sentences
-        logger.info("🤖 Step 1: Requesting deep educational content from AI...")
+        logger.info(f"🤖 Step 1: Requesting deep educational content from AI in {target_lang}...")
         lang_name = LANG_NAMES.get(target_lang, target_lang)
+        explanation_lang = "Persian" if user_lang == "fa" else ("English" if user_lang == "en" else ("French" if user_lang == "fr" else "Korean"))
         chain = get_smart_chain(grounding=False)
         
         educational_prompt = (
@@ -381,7 +386,7 @@ async def cmd_learn_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"For each one, provide:\n"
             f"1. word: The term in {lang_name}.\n"
             f"2. phonetic: Pronunciation in parentheses.\n"
-            f"3. meaning: A brief Persian explanation.\n"
+            f"3. meaning: A brief {explanation_lang} explanation.\n"
             f"4. sentence: A simple, natural example sentence in {lang_name}.\n"
             f"5. prompt: A descriptive English visual prompt for an image representing this scenario.\n\n"
             f"REPLY ONLY WITH A JSON LIST OF 3 OBJECTS. Example: [{{ \"word\": \"...\", \"phonetic\": \"...\", \"meaning\": \"...\", \"sentence\": \"...\", \"prompt\": \"...\" }}, ...]"
@@ -462,7 +467,7 @@ async def cmd_learn_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 sent_msg = await context.bot.send_voice(
                     chat_id=msg.chat_id,
                     voice=sent_audio,
-                    caption=f"�️ جمله نمونه",
+                    caption=f"🗣️ جمله نمونه",
                     reply_to_message_id=photo_msg.message_id
                 )
                 last_msg_id = sent_msg.message_id
