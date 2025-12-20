@@ -1041,10 +1041,14 @@ async def global_message_handler(update: Update, context: ContextTypes.DEFAULT_T
                     text=full_status,
                     parse_mode='Markdown'
                 )
-                await msg.reply_text("✅ وضعیت شما به صورت خصوصی ارسال شد.")
+                notify = await msg.reply_text("✅ وضعیت شما به صورت خصوصی ارسال شد.")
+                await asyncio.sleep(5)
+                await notify.delete()
             except Exception:
                 # User hasn't started private chat with bot
-                await msg.reply_text("⛔ ابتدا یک بار به @su6i\\_yar\\_bot پیام خصوصی بدهید.")
+                notify = await msg.reply_text("⛔ ابتدا یک بار به @su6i\\_yar\\_bot پیام خصوصی بدهید.")
+                await asyncio.sleep(5)
+                await notify.delete()
         else:
             await msg.reply_text(full_status, parse_mode='Markdown')
         return
