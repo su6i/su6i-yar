@@ -269,15 +269,20 @@ async def global_message_handler(update: Update, context: ContextTypes.DEFAULT_T
         
         if file_path:
             try:
-                await status_msg.edit_text(get_msg("uploading"))
-                await msg.reply_video(video=open(file_path, 'rb'), caption="🤖 @SmartInstaDL_Bot")
+                await status_msg.edit_text(get_msg("uploading", user_id))
+                await msg.reply_video(
+                    video=open(file_path, 'rb'), 
+                    caption="📥 Downloaded by **Su6i Yar** | @su6i_yar_bot",
+                    reply_to_message_id=msg.message_id,
+                    parse_mode='Markdown'
+                )
                 os.remove(file_path) # Cleanup
                 await status_msg.delete() 
             except Exception as e:
                 logger.error(f"Upload failed: {e}")
                 await status_msg.edit_text("❌ Error uploading video.")
         else:
-            await status_msg.edit_text("❌ Download failed (Private/Invalid link).")
+            await status_msg.edit_text(get_msg("err_dl", user_id))
         return
 
     # --- 3. AI ANALYSIS (Fallback) ---
