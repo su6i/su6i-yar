@@ -1339,8 +1339,13 @@ async def cmd_voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if need_translation:
         status_msg = await msg.reply_text(get_msg("voice_translating", user_id).format(lang=LANG_NAMES.get(target_lang, target_lang)))
-        target_text = await translate_text(target_text, target_lang)
+        translated_text = await translate_text(target_text, target_lang)
+        
+        # Send translated text first
+        await msg.reply_text(f"📝 **ترجمه ({LANG_NAMES.get(target_lang, target_lang)}):**\n\n{translated_text}", parse_mode='Markdown')
+        
         await status_msg.edit_text(get_msg("voice_generating", user_id))
+        target_text = translated_text
     else:
         status_msg = await msg.reply_text(get_msg("voice_generating", user_id))
     
