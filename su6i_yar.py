@@ -516,17 +516,17 @@ MESSAGES = {
             "📥 **دانلودر اینستاگرام:**\n"
             "   • لینک پست یا ریلز بفرستید\n"
             "   • دانلود خودکار با بالاترین کیفیت\n\n"
-            "🧠 **هوش مصنوعی (فکت‌چکینگ):**\n"
-            "   • هر متنی (اخبار، شایعه) بفرستید\n"
-            "   • تحلیل با ۸ مدل هوشمند\n"
-            "   • جستجوی لحظه‌ای در گوگل\n\n"
-            "⚙️ **دستورات:**\n"
-            "   /start - شروع مجدد\n"
-            "   /status - وضعیت سیستم\n"
-            "   /check [متن] - تحلیل متن\n"
-            "   /detail - جزئیات تحلیل قبلی\n"
-            "   /voice [زبان] - نسخه صوتی\n"
-            "   /stop - خاموش کردن (ادمین)\n\n"
+            "🧠 **تحلیل متن (/check):**\n"
+            "   • به یک پیام ریپلای کنید: /check\n"
+            "   • یا مستقیم بنویسید: /check متن\n"
+            "   • تحلیل با هوش مصنوعی + گوگل\n\n"
+            "🔊 **صوتی کردن (/voice):**\n"
+            "   • به پیام ریپلای کنید: /voice\n"
+            "   • یا مستقیم: /voice متن\n"
+            "   • ترجمه + صوتی: /voice en متن\n"
+            "   • زبان‌ها: fa, en, fr, ko (kr)\n\n"
+            "📄 **جزئیات تحلیل:**\n"
+            "   • /detail - دریافت تحلیل کامل\n\n"
             "━━━━━━━━━━━━━━"
         ),
         "dl_on": "✅ فعال",
@@ -583,17 +583,17 @@ MESSAGES = {
             "📥 **Instagram Downloader:**\n"
             "   • Send Post/Reels link\n"
             "   • Auto-download in highest quality\n\n"
-            "🧠 **AI Fact-Checker:**\n"
-            "   • Send any text (news, claims)\n"
-            "   • Analysis by 8 AI models\n"
-            "   • Real-time Google Search\n\n"
-            "⚙️ **Commands:**\n"
-            "   /start - Restart menu\n"
-            "   /status - System status\n"
-            "   /check [text] - Analyze text\n"
-            "   /detail - Previous analysis details\n"
-            "   /voice [lang] - Voice version\n"
-            "   /stop - Shutdown (Admin)\n\n"
+            "🧠 **Text Analysis (/check):**\n"
+            "   • Reply to a message: /check\n"
+            "   • Or directly: /check your text\n"
+            "   • AI analysis + Google search\n\n"
+            "🔊 **Voice Conversion (/voice):**\n"
+            "   • Reply to message: /voice\n"
+            "   • Or directly: /voice text\n"
+            "   • Translate + speak: /voice fa text\n"
+            "   • Languages: fa, en, fr, ko (kr)\n\n"
+            "📄 **Analysis Details:**\n"
+            "   • /detail - Get full analysis\n\n"
             "━━━━━━━━━━━━━━"
         ),
         "dl_on": "✅ Active",
@@ -650,17 +650,17 @@ MESSAGES = {
             "📥 **Téléchargeur Instagram:**\n"
             "   • Envoyez un lien Post/Reels\n"
             "   • Téléchargement auto en HD\n\n"
-            "🧠 **Vérificateur IA:**\n"
-            "   • Envoyez un texte (news, claims)\n"
-            "   • Analyse par 8 modèles IA\n"
-            "   • Recherche Google en temps réel\n\n"
-            "⚙️ **Commandes:**\n"
-            "   /start - Redémarrer le menu\n"
-            "   /status - État du système\n"
-            "   /check [texte] - Analyser texte\n"
-            "   /detail - Détails analyse précédente\n"
-            "   /voice [lang] - Version audio\n"
-            "   /stop - Arrêter (Admin)\n\n"
+            "🧠 **Analyse Texte (/check):**\n"
+            "   • Répondez à un message: /check\n"
+            "   • Ou directement: /check texte\n"
+            "   • Analyse IA + recherche Google\n\n"
+            "🔊 **Conversion Audio (/voice):**\n"
+            "   • Répondez au message: /voice\n"
+            "   • Ou directement: /voice texte\n"
+            "   • Traduire + parler: /voice fa texte\n"
+            "   • Langues: fa, en, fr, ko (kr)\n\n"
+            "📄 **Détails Analyse:**\n"
+            "   • /detail - Analyse complète\n\n"
             "━━━━━━━━━━━━━━"
         ),
         "dl_on": "✅ Actif",
@@ -718,17 +718,17 @@ MESSAGES = {
             "📥 **인스타그램 다운로더:**\n"
             "   • 포스트/릴스 링크 전송\n"
             "   • 최고 화질 자동 다운로드\n\n"
-            "🧠 **AI 팩트체커:**\n"
-            "   • 텍스트 전송 (뉴스, 주장)\n"
-            "   • 8개 AI 모델로 분석\n"
-            "   • 실시간 구글 검색\n\n"
-            "⚙️ **명령어:**\n"
-            "   /start - 메뉴 재시작\n"
-            "   /status - 시스템 상태\n"
-            "   /check [텍스트] - 텍스트 분석\n"
-            "   /detail - 이전 분석 상세\n"
-            "   /voice [언어] - 음성 버전\n"
-            "   /stop - 중지 (관리자)\n\n"
+            "🧠 **텍스트 분석 (/check):**\n"
+            "   • 메시지에 답장: /check\n"
+            "   • 또는 직접: /check 텍스트\n"
+            "   • AI 분석 + 구글 검색\n\n"
+            "🔊 **음성 변환 (/voice):**\n"
+            "   • 메시지에 답장: /voice\n"
+            "   • 또는 직접: /voice 텍스트\n"
+            "   • 번역 + 말하기: /voice fa 텍스트\n"
+            "   • 언어: fa, en, fr, ko (kr)\n\n"
+            "📄 **분석 상세:**\n"
+            "   • /detail - 전체 분석\n\n"
             "━━━━━━━━━━━━━━"
         ),
         "dl_on": "✅ 활성화",
@@ -777,14 +777,18 @@ def get_msg(key, user_id=None):
 
 def get_main_keyboard(user_id):
     """Generate the dynamic keyboard based on User Language"""
+    is_admin = user_id == SETTINGS["admin_id"]
+    
+    # Base keyboard for all users
     kb = [
         [KeyboardButton(get_msg("btn_status", user_id)), KeyboardButton(get_msg("btn_help", user_id)), KeyboardButton(get_msg("btn_voice", user_id))],
-        [KeyboardButton(get_msg("btn_dl", user_id)), KeyboardButton(get_msg("btn_fc", user_id))],
         [KeyboardButton("🇮🇷 فارسی"), KeyboardButton("🇺🇸 English"), KeyboardButton("🇫🇷 Français"), KeyboardButton("🇰🇷 한국어")]
     ]
-    if user_id == SETTINGS["admin_id"]:
-        # Append to the first row (Status, Help, Stop) to keep it 3 rows total
-        kb[0].append(KeyboardButton(get_msg("btn_stop", user_id)))
+    
+    # Admin-only: Settings row
+    if is_admin:
+        kb.insert(1, [KeyboardButton(get_msg("btn_dl", user_id)), KeyboardButton(get_msg("btn_fc", user_id)), KeyboardButton(get_msg("btn_stop", user_id))])
+    
     return ReplyKeyboardMarkup(kb, resize_keyboard=True)
 
 async def send_welcome(update: Update):
