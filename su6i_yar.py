@@ -58,6 +58,7 @@ class ColoredFormatter(logging.Formatter):
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("SmartBot")
+logger.propagate = False  # Prevent logs from double-appearing in console
 
 # Add colored formatter to console handler
 console_handler = logging.StreamHandler()
@@ -401,6 +402,10 @@ async def cmd_translate_handler(update: Update, context: ContextTypes.DEFAULT_TY
             translated_text = await translate_text(target_text, target_lang)
             img_prompt = target_text[:100]
 
+        # 5. Construct Pollinations URL
+        encoded_prompt = urllib.parse.quote(img_prompt)
+        image_url = f"https://pollinations.ai/p/{encoded_prompt}?width=1024&height=1024&seed={int(asyncio.get_event_loop().time())}&nologo=true"
+        
         # 6. Download Image locally (more reliable than Telegram URL fetch)
         logger.info(f"🖼️ Step 3: Downloading image from {image_url}...")
         try:
