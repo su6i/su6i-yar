@@ -111,6 +111,38 @@ ALLOWED_GROUPS = set()  # Add group IDs here, e.g., {-1001234567890}
 # Daily request tracking
 from datetime import date
 USER_DAILY_USAGE = {}  # user_id -> {"count": int, "date": str}
+USER_LANG = {}         # user_id -> "fa" | "en" | "fr" | "ko"
+
+PERSISTENCE_FILE = "user_data.json"
+
+def save_persistence():
+    """Save user languages and daily usage to file."""
+    try:
+        data = {
+            "user_lang": USER_LANG,
+            "user_usage": USER_DAILY_USAGE
+        }
+        with open(PERSISTENCE_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=4)
+    except Exception as e:
+        logger.error(f"Persistence Save Error: {e}")
+
+def load_persistence():
+    """Load user languages and daily usage from file."""
+    global USER_LANG, USER_DAILY_USAGE
+    if os.path.exists(PERSISTENCE_FILE):
+        try:
+            with open(PERSISTENCE_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                # Convert string keys back to int if needed (JSON keys are always strings)
+                USER_LANG = {int(k): v for k, v in data.get("user_lang", {}).items()}
+                USER_DAILY_USAGE = {int(k): v for k, v in data.get("user_usage", {}).items()}
+                logger.info(f"📁 Loaded persistence: {len(USER_LANG)} users, {len(USER_DAILY_USAGE)} usage records")
+        except Exception as e:
+            logger.error(f"Persistence Load Error: {e}")
+
+# Initial load
+load_persistence()
 
 def get_user_limit(user_id: int) -> int:
     """Get user's daily request limit."""
@@ -243,6 +275,7 @@ def increment_daily_usage(user_id: int) -> int:
     if user_id not in USER_DAILY_USAGE or USER_DAILY_USAGE[user_id]["date"] != today:
         USER_DAILY_USAGE[user_id] = {"count": 0, "date": today}
     USER_DAILY_USAGE[user_id]["count"] += 1
+    save_persistence()
     
     # Return remaining
     user_limit = get_user_limit(user_id)
@@ -452,13 +485,14 @@ async def cmd_learn_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         educational_prompt = (
             f"You are a linguistic tutor. Analyze the word/phrase: '{target_text}'.\n"
             f"Provide 3 distinct nuances or variations in {lang_name} for a learner.\n"
-            f"Crucially, provide all explanations and translations in {explanation_lang}.\n\n"
-            f"For each one, provide:\n"
+            f"STRICT LANGUAGE REQUIREMENT: You MUST provide all explanations (meaning) and all translations (translation) in the {explanation_lang} language.\n"
+            f"DO NOT use Persian if the explanation language is {explanation_lang}.\n\n"
+            f"For each object in the list, provide:\n"
             f"1. word: The term in {lang_name}.\n"
             f"2. phonetic: Pronunciation in parentheses.\n"
-            f"3. meaning: A brief {explanation_lang} explanation.\n"
+            f"3. meaning: A brief tutorial explanation STRICTLY in {explanation_lang}.\n"
             f"4. sentence: A simple, natural example sentence in {lang_name}.\n"
-            f"5. translation: The {explanation_lang} translation of that example sentence.\n"
+            f"5. translation: The translation of the example sentence STRICTLY in {explanation_lang}.\n"
             f"6. prompt: A descriptive English visual prompt for an image representing this scenario.\n\n"
             f"REPLY ONLY WITH A JSON LIST OF 3 OBJECTS. Example: [{{ \"word\": \"...\", \"phonetic\": \"...\", \"meaning\": \"...\", \"sentence\": \"...\", \"translation\": \"...\", \"prompt\": \"...\" }}, ...]"
         )
@@ -1453,19 +1487,23 @@ async def global_message_handler(update: Update, context: ContextTypes.DEFAULT_T
     # Language Switching
     if "فارسی" in text:
         USER_LANG[user_id] = "fa"
+        save_persistence()
         await msg.reply_text("✅ زبان فارسی انتخاب شد.", reply_markup=get_main_keyboard(user_id))
         return
     if "English" in text:
         USER_LANG[user_id] = "en"
+        save_persistence()
         await msg.reply_text("✅ English language selected.", reply_markup=get_main_keyboard(user_id))
         logger.info(f"🇺🇸 User {user_id} switched to English")
         return
     if "Français" in text:
         USER_LANG[user_id] = "fr"
+        save_persistence()
         await msg.reply_text("✅ Langue française sélectionnée.", reply_markup=get_main_keyboard(user_id))
         return
     if "한국어" in text:
         USER_LANG[user_id] = "ko"
+        save_persistence()
         await msg.reply_text("✅ 한국어가 선택되었습니다.", reply_markup=get_main_keyboard(user_id))
         return
     
