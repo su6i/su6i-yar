@@ -419,65 +419,67 @@ async def cmd_learn_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # 5. Loop and Send
         last_msg_id = original_msg_id
         
+        # 5. Parallel Image Downloads
+        logger.info("🖼️ Fetching all images in parallel...")
+        async def get_img_data(index, prompt):
+            try:
+                encoded = urllib.parse.quote(prompt)
+                url = f"https://pollinations.ai/p/{encoded}?width=1024&height=1024&seed={int(asyncio.get_event_loop().time()) + index}&nologo=true"
+                def dl():
+                    req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+                    with urllib.request.urlopen(req, timeout=60) as r: return r.read()
+                return await asyncio.to_thread(dl)
+            except Exception as e:
+                logger.error(f"Image download failed for index {index}: {e}")
+                return None
+
+        # Gather all image data and build variations list
+        tasks = [get_img_data(i, v.get("prompt", target_text)) for i, v in enumerate(variations)]
+        images_data = await asyncio.gather(*tasks)
+
+        # 6. Sequential Sending (maintaining reply chain)
+        last_msg_id = original_msg_id
+        
         for i, var in enumerate(variations):
             word = var.get("word", "")
             phonetic = var.get("phonetic", "")
             meaning = var.get("meaning", "")
             sentence = var.get("sentence", "")
-            img_prompt = var.get("prompt", target_text)
+            image_bytes = images_data[i]
             
-            # 1. Download Image
-            encoded_prompt = urllib.parse.quote(img_prompt)
-            image_url = f"https://pollinations.ai/p/{encoded_prompt}?width=1024&height=1024&seed={int(asyncio.get_event_loop().time()) + i}&nologo=true"
+            # Prepare TTS Data for Button
+            audio_id = str(uuid.uuid4())[:8]
+            LEARN_CACHE[audio_id] = (f"{word}. {sentence}", target_lang)
+            keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("🔊 تلفظ", callback_data=f"learn_tts:{audio_id}")]])
             
             try:
-                logger.info(f"🖼️ Variation {i+1}: Fetching image...")
-                def download_img():
-                    req = urllib.request.Request(image_url, headers={'User-Agent': 'Mozilla/5.0'})
-                    with urllib.request.urlopen(req, timeout=45) as r: return r.read()
-                
-                image_data = await asyncio.to_thread(download_img)
-                photo_buffer = io.BytesIO(image_data)
-                photo_buffer.name = f"learn_{i}.jpg"
-                
-                caption = (
-                    f"💡 **{word}** {phonetic}\n"
-                    f"📝 {meaning}\n\n"
-                    f"📖 **جمله نمونه:**\n`{sentence}`\n\n"
-                    f"━━━━━━━━━━━━━━\n🎓 **آموزش ({i+1}/3)**"
-                )
-                
-                # 2. Prepare TTS Data for Button
-                audio_id = str(uuid.uuid4())[:8]
-                LEARN_CACHE[audio_id] = (f"{word}. {sentence}", target_lang)
-                
-                # Create Inline Button
-                keyboard = InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🔊 پخش تلفظ (کلمه + جمله)", callback_data=f"learn_tts:{audio_id}")]
-                ])
-                
-                # 3. Send Photo with Button
-                photo_msg = await context.bot.send_photo(
-                    chat_id=msg.chat_id,
-                    photo=photo_buffer,
-                    caption=caption,
-                    parse_mode='Markdown',
-                    reply_markup=keyboard,
-                    reply_to_message_id=last_msg_id,
-                    read_timeout=150,
-                    write_timeout=150,
-                    connect_timeout=150
-                )
-                last_msg_id = photo_msg.message_id
-                logger.info(f"✅ Variation {i+1} sent.")
+                if image_bytes:
+                    photo_buffer = io.BytesIO(image_bytes)
+                    photo_buffer.name = f"learn_{i}.jpg"
+                    
+                    caption = (
+                        f"💡 **{word}** {phonetic}\n"
+                        f"📝 {meaning}\n\n"
+                        f"📖 **جمله نمونه:**\n`{sentence}`\n\n"
+                        f"━━━━━━━━━━━━━━\n🎓 **آموزش ({i+1}/3)**"
+                    )
+                    
+                    photo_msg = await context.bot.send_photo(
+                        chat_id=msg.chat_id,
+                        photo=photo_buffer,
+                        caption=caption,
+                        parse_mode='Markdown',
+                        reply_markup=keyboard,
+                        reply_to_message_id=last_msg_id,
+                        read_timeout=150,
+                        write_timeout=150
+                    )
+                    last_msg_id = photo_msg.message_id
+                else:
+                    raise Exception("No image data available")
 
             except Exception as item_e:
                 logger.error(f"❌ Error sending item {i+1}: {item_e}")
-                # Fallback: Send text with button if photo fails
-                audio_id = str(uuid.uuid4())[:8]
-                LEARN_CACHE[audio_id] = (f"{word}. {sentence}", target_lang)
-                keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("🔊 تلفظ", callback_data=f"learn_tts:{audio_id}")]])
-                
                 fb_msg = await context.bot.send_message(
                     chat_id=msg.chat_id,
                     text=f"💡 **{word}**\n`{sentence}`",
@@ -504,6 +506,11 @@ async def callback_learn_audio_handler(update: Update, context: ContextTypes.DEF
         data = query.data.split(":")
         if len(data) < 2: return
         audio_id = data[1]
+        
+        # Remove button immediately to indicate processing/completion
+        try:
+            await query.edit_message_reply_markup(reply_markup=None)
+        except Exception: pass
         
         if audio_id not in LEARN_CACHE:
             await query.message.reply_text("❌ متأسفانه این فایل صوتی موقت منقضی شده است.")
