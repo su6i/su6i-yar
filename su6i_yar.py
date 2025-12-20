@@ -543,7 +543,14 @@ MESSAGES = {
         "downloading": "📥 در حال دانلود... لطفاً صبر کنید",
         "uploading": "📤 در حال آپلود به تلگرام...",
         "err_dl": "❌ خطا در دانلود. لینک را بررسی کنید",
-        "err_api": "❌ خطا در ارتباط با هوش مصنوعی. بعداً تلاش کنید"
+        "err_api": "❌ خطا در ارتباط با هوش مصنوعی. بعداً تلاش کنید",
+        "voice_generating": "🔊 در حال ساخت فایل صوتی...",
+        "voice_translating": "🌐 در حال ترجمه به {lang}...",
+        "voice_caption": "🔊 نسخه صوتی",
+        "voice_caption_lang": "🔊 نسخه صوتی ({lang})",
+        "voice_error": "❌ خطا در ساخت فایل صوتی",
+        "voice_no_text": "⛔ به یک پیام ریپلای بزنید یا ابتدا یک متن را تحلیل کنید.",
+        "voice_invalid_lang": "⛔ زبان نامعتبر. زبان‌های پشتیبانی: fa, en, fr, ko"
     },
     "en": {
         "welcome": (
@@ -602,7 +609,14 @@ MESSAGES = {
         "downloading": "📥 Downloading... Please wait",
         "uploading": "📤 Uploading to Telegram...",
         "err_dl": "❌ Download failed. Check the link",
-        "err_api": "❌ AI API error. Try again later"
+        "err_api": "❌ AI API error. Try again later",
+        "voice_generating": "🔊 Generating audio...",
+        "voice_translating": "🌐 Translating to {lang}...",
+        "voice_caption": "🔊 Voice version",
+        "voice_caption_lang": "🔊 Voice version ({lang})",
+        "voice_error": "❌ Error generating audio",
+        "voice_no_text": "⛔ Reply to a message or analyze text first.",
+        "voice_invalid_lang": "⛔ Invalid language. Supported: fa, en, fr, ko"
     },
     "fr": {
         "welcome": (
@@ -661,7 +675,14 @@ MESSAGES = {
         "downloading": "📥 Téléchargement... Patientez",
         "uploading": "📤 Envoi vers Telegram...",
         "err_dl": "❌ Échec du téléchargement. Vérifiez le lien",
-        "err_api": "❌ Erreur API IA. Réessayez plus tard"
+        "err_api": "❌ Erreur API IA. Réessayez plus tard",
+        "voice_generating": "🔊 Génération audio...",
+        "voice_translating": "🌐 Traduction en {lang}...",
+        "voice_caption": "🔊 Version audio",
+        "voice_caption_lang": "🔊 Version audio ({lang})",
+        "voice_error": "❌ Erreur de génération audio",
+        "voice_no_text": "⛔ Répondez à un message ou analysez d'abord.",
+        "voice_invalid_lang": "⛔ Langue invalide. Supportées: fa, en, fr, ko"
     },
     "ko": {
         "welcome": (
@@ -722,7 +743,14 @@ MESSAGES = {
         "downloading": "📥 다운로드 중... 잠시만 기다려주세요",
         "uploading": "📤 텔레그램에 업로드 중...",
         "err_dl": "❌ 다운로드 실패. 링크를 확인하세요",
-        "err_api": "❌ AI API 오류. 나중에 다시 시도하세요"
+        "err_api": "❌ AI API 오류. 나중에 다시 시도하세요",
+        "voice_generating": "🔊 오디오 생성 중...",
+        "voice_translating": "🌐 {lang}에 번역 중...",
+        "voice_caption": "🔊 음성 버전",
+        "voice_caption_lang": "🔊 음성 버전 ({lang})",
+        "voice_error": "❌ 오디오 생성 오류",
+        "voice_no_text": "⛔ 메시지에 답장하거나 먼저 텍스트를 분석하세요.",
+        "voice_invalid_lang": "⛔ 지원되는 언어: fa, en, fr, ko"
     }
 }
 
@@ -1229,7 +1257,7 @@ async def cmd_voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if lang_arg in LANG_ALIASES:
             target_lang = LANG_ALIASES[lang_arg]
         else:
-            await msg.reply_text(f"⛔ زبان نامعتبر. زبان‌های پشتیبانی: fa, en, fr, ko")
+            await msg.reply_text(get_msg("voice_invalid_lang", user_id))
             return
     
     # Priority 1: Check if replied to a message
@@ -1242,25 +1270,25 @@ async def cmd_voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         target_text = LAST_ANALYSIS_CACHE.get(user_id, "")
     
     if not target_text:
-        await msg.reply_text("⛔ به یک پیام ریپلای بزنید یا ابتدا یک متن را تحلیل کنید.")
+        await msg.reply_text(get_msg("voice_no_text", user_id))
         return
     
     # Check if translation is needed (if target_lang differs from detected language)
     need_translation = context.args and len(context.args) > 0
     
     if need_translation:
-        status_msg = await msg.reply_text(f"🌐 در حال ترجمه به {LANG_NAMES.get(target_lang, target_lang)}...")
+        status_msg = await msg.reply_text(get_msg("voice_translating", user_id).format(lang=LANG_NAMES.get(target_lang, target_lang)))
         target_text = await translate_text(target_text, target_lang)
-        await status_msg.edit_text("🔊 در حال ساخت فایل صوتی...")
+        await status_msg.edit_text(get_msg("voice_generating", user_id))
     else:
-        status_msg = await msg.reply_text("🔊 در حال ساخت فایل صوتی...")
+        status_msg = await msg.reply_text(get_msg("voice_generating", user_id))
     
     try:
         audio_buffer = await text_to_speech(target_text, target_lang)
         # Reply to the original message (not the /voice command)
         reply_to_id = msg.reply_to_message.message_id if msg.reply_to_message else msg.message_id
         
-        caption = f"🔊 نسخه صوتی ({LANG_NAMES.get(target_lang, target_lang)})" if need_translation else "🔊 نسخه صوتی"
+        caption = get_msg("voice_caption_lang", user_id).format(lang=LANG_NAMES.get(target_lang, target_lang)) if need_translation else get_msg("voice_caption", user_id)
         await msg.reply_voice(
             voice=audio_buffer,
             caption=caption,
@@ -1269,7 +1297,7 @@ async def cmd_voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await status_msg.delete()
     except Exception as e:
         logger.error(f"TTS Error: {e}")
-        await status_msg.edit_text("❌ خطا در ساخت فایل صوتی")
+        await status_msg.edit_text(get_msg("voice_error", user_id))
 
 
 def main():
