@@ -1729,9 +1729,11 @@ async def cmd_voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # 3. Build caption with smart_split
         lang_name = LANG_NAMES.get(target_lang, target_lang)
         if need_translation:
-            header = f"📝 <b>ترجمه ({lang_name}):</b>"
+            header = f"🎙️ <b>دوبله ({lang_name}):</b>"
+            overflow_title = "ادامه دوبله"
         else:
-            header = f"🔊 <b>تلفظ ({lang_name}):</b>"
+            header = f"🔊 <b>نسخه صوتی ({lang_name}):</b>"
+            overflow_title = "ادامه متن"
             
         caption, overflow_text = smart_split(target_text, header=header, max_len=1024)
         
@@ -1753,7 +1755,7 @@ async def cmd_voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 remaining = remaining[4000:]
                 await context.bot.send_message(
                     chat_id=msg.chat_id,
-                    text=f"📝 <b>ادامه ترجمه:</b>\n\n{html.escape(chunk)}",
+                    text=f"📝 <b>{overflow_title}:</b>\n\n{html.escape(chunk)}",
                     parse_mode='HTML',
                     reply_to_message_id=voice_msg.message_id
                 )
