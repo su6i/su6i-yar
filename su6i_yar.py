@@ -371,7 +371,7 @@ async def cmd_learn_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 3. Status Message
     original_msg_id = msg.reply_to_message.message_id if msg.reply_to_message else msg.message_id
     status_msg = await msg.reply_text(
-        "🧠 در حال آماده‌سازی محتوای آموزشی...",
+        "� در حال طراحی...",
         reply_to_message_id=original_msg_id
     )
 
@@ -423,6 +423,9 @@ async def cmd_learn_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.info("🖼️ Fetching all images in parallel...")
         async def get_img_data(index, prompt):
             try:
+                # Add a staggered delay to avoid 429 Too Many Requests
+                await asyncio.sleep(index * 1.5)
+                
                 encoded = urllib.parse.quote(prompt)
                 url = f"https://pollinations.ai/p/{encoded}?width=1024&height=1024&seed={int(asyncio.get_event_loop().time()) + index}&nologo=true"
                 def dl():
@@ -518,13 +521,14 @@ async def callback_learn_audio_handler(update: Update, context: ContextTypes.DEF
             
         tts_text, lang = LEARN_CACHE[audio_id]
         
-        # Generate and Send Voice
+        # Generate and Send Voice as a reply to the specific photo
         audio_buffer = await text_to_speech(tts_text, lang)
         await context.bot.send_voice(
             chat_id=query.message.chat_id,
             voice=audio_buffer,
             caption="🔊 تلفظ کلمه و جمله نمونه",
-            reply_to_message_id=query.message.message_id
+            reply_to_message_id=query.message.message_id,
+            read_timeout=90
         )
     except Exception as e:
         logger.error(f"Callback Audio Error: {e}")
