@@ -1347,27 +1347,30 @@ async def cmd_voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         translated_text = await translate_text(target_text, target_lang)
         
-        # Send translated text first (reply to original message)
-        translated_msg = await msg.reply_text(
-            f"📝 **ترجمه ({LANG_NAMES.get(target_lang, target_lang)}):**\n\n{translated_text}", 
-            parse_mode='Markdown',
-            reply_to_message_id=original_msg_id
-        )
-        
         await status_msg.edit_text(get_msg("voice_generating", user_id))
         target_text = translated_text
-        voice_reply_to = translated_msg.message_id  # Reply voice to translated text
+        voice_reply_to = original_msg_id  # Reply voice to original message
+        
+        # Build caption with translated text (max 1024 chars for Telegram)
+        caption_header = f"📝 **ترجمه ({LANG_NAMES.get(target_lang, target_lang)}):**\n\n"
+        max_text_len = 1024 - len(caption_header) - 3  # Reserve space for "..."
+        if len(translated_text) > max_text_len:
+            caption_text = translated_text[:max_text_len] + "..."
+        else:
+            caption_text = translated_text
+        caption = caption_header + caption_text
     else:
         status_msg = await msg.reply_text(get_msg("voice_generating", user_id))
         voice_reply_to = msg.reply_to_message.message_id if msg.reply_to_message else msg.message_id
+        caption = get_msg("voice_caption", user_id)
     
     try:
         audio_buffer = await text_to_speech(target_text, target_lang)
         
-        caption = get_msg("voice_caption_lang", user_id).format(lang=LANG_NAMES.get(target_lang, target_lang)) if need_translation else get_msg("voice_caption", user_id)
         await msg.reply_voice(
             voice=audio_buffer,
             caption=caption,
+            parse_mode='Markdown',
             reply_to_message_id=voice_reply_to
         )
         await status_msg.delete()
