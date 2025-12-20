@@ -1266,18 +1266,35 @@ async def cmd_voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Priority 1: Check if replied to a message
     target_text = ""
     if msg.reply_to_message:
+        logger.info(f"🔊 Reply detected: text={bool(msg.reply_to_message.text)}, caption={bool(msg.reply_to_message.caption)}")
         target_text = msg.reply_to_message.text or msg.reply_to_message.caption or ""
+    else:
+        logger.info("🔊 No reply_to_message detected")
     
-    # Priority 2: Check cache if no reply
+    # Priority 2: Check for direct text input (/voice <text> or /voice <lang> <text>)
+    if not target_text and context.args:
+        # If first arg is a language code, text starts from arg[1]
+        if context.args[0].lower() in LANG_ALIASES:
+            if len(context.args) > 1:
+                target_text = " ".join(context.args[1:])
+                logger.info(f"🔊 Using direct text after lang arg: {len(target_text)} chars")
+        else:
+            # First arg is text, not a language code
+            target_text = " ".join(context.args)
+            logger.info(f"🔊 Using direct text: {len(target_text)} chars")
+    
+    # Priority 3: Check cache if no reply and no direct text
     if not target_text:
         target_text = LAST_ANALYSIS_CACHE.get(user_id, "")
+        logger.info(f"🔊 Using cache: {bool(target_text)}")
     
     if not target_text:
+        logger.info("🔊 No text found, sending error")
         await msg.reply_text(get_msg("voice_no_text", user_id))
         return
     
-    # Check if translation is needed (if target_lang differs from detected language)
-    need_translation = context.args and len(context.args) > 0
+    # Check if translation is needed (if target_lang differs from user's default)
+    need_translation = target_lang != user_lang
     
     if need_translation:
         status_msg = await msg.reply_text(get_msg("voice_translating", user_id).format(lang=LANG_NAMES.get(target_lang, target_lang)))
