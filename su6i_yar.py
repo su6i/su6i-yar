@@ -498,6 +498,7 @@ MESSAGES = {
         "btn_dl": "📥 مدیریت دانلود",
         "btn_fc": "🧠 مدیریت هوش مصنوعی",
         "btn_stop": "🛑 خاموش کردن ربات",
+        "btn_voice": "🔊 صوتی",
         "btn_lang_fa": "🇮🇷 فارسی",
         "btn_lang_en": "🇺🇸 English",
         "btn_lang_fr": "🇫🇷 Français",
@@ -556,6 +557,7 @@ MESSAGES = {
         "btn_dl": "📥 Toggle Download",
         "btn_fc": "🧠 Toggle AI",
         "btn_stop": "🛑 Stop Bot",
+        "btn_voice": "🔊 Voice",
         "btn_lang_fa": "🇮🇷 فارسی",
         "btn_lang_en": "🇺🇸 English",
         "btn_lang_fr": "🇫🇷 Français",
@@ -614,6 +616,7 @@ MESSAGES = {
         "btn_dl": "📥 Téléchargement",
         "btn_fc": "🧠 IA",
         "btn_stop": "🛑 Arrêter",
+        "btn_voice": "🔊 Voix",
         "btn_lang_fa": "🇮🇷 فارسی",
         "btn_lang_en": "🇺🇸 English",
         "btn_lang_fr": "🇫🇷 Français",
@@ -672,6 +675,7 @@ MESSAGES = {
         "btn_dl": "📥 다운로드",
         "btn_fc": "🧠 AI",
         "btn_stop": "🛑 중지",
+        "btn_voice": "🔊 음성",
         "btn_lang_fa": "🇮🇷 فارسی",
         "btn_lang_en": "🇺🇸 English",
         "btn_lang_fr": "🇫🇷 Français",
@@ -743,7 +747,7 @@ def get_msg(key, user_id=None):
 def get_main_keyboard(user_id):
     """Generate the dynamic keyboard based on User Language"""
     kb = [
-        [KeyboardButton(get_msg("btn_status", user_id)), KeyboardButton(get_msg("btn_help", user_id)), KeyboardButton("🔊 Voice")],
+        [KeyboardButton(get_msg("btn_status", user_id)), KeyboardButton(get_msg("btn_help", user_id)), KeyboardButton(get_msg("btn_voice", user_id))],
         [KeyboardButton(get_msg("btn_dl", user_id)), KeyboardButton(get_msg("btn_fc", user_id))],
         [KeyboardButton("🇮🇷 فارسی"), KeyboardButton("🇺🇸 English"), KeyboardButton("🇫🇷 Français"), KeyboardButton("🇰🇷 한국어")]
     ]
