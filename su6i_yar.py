@@ -12,6 +12,7 @@ warnings.filterwarnings("ignore", category=UserWarning, module="langchain_core._
 from pathlib import Path
 from dotenv import load_dotenv
 import io
+import json
 import urllib.parse
 import urllib.request
 import edge_tts
@@ -379,96 +380,114 @@ async def cmd_translate_handler(update: Update, context: ContextTypes.DEFAULT_TY
     )
 
     try:
-        # 4. Combined Translation and Image Prompt (One AI Call)
-        logger.info("🤖 Step 1: Requesting AI translation and prompt...")
+        # 4. Educational AI Call: Get 3 variations in JSON format
+        logger.info("🤖 Step 1: Requesting educational variations from AI...")
         lang_name = LANG_NAMES.get(target_lang, target_lang)
         chain = get_smart_chain(grounding=False)
-        combined_prompt = (
-            f"You are a linguistic and visual expert.\n"
-            f"1. Translate this text to {lang_name}: \"{target_text}\"\n"
-            f"   - Use natural, everyday language.\n"
-            f"   - CRITICAL: Prioritize native or traditional words. Avoid using English loanwords or 'Koglich' if a common native word exists (e.g., for Korean use native words instead of phonetically transcribed English keywords).\n"
-            f"2. Create a short, descriptive English visual prompt (single sentence) for an image representing the core meaning of this text.\n"
-            f"Output format: TRANSLATION: <text> | PROMPT: <prompt>"
+        
+        educational_prompt = (
+            f"You are a linguistic tutor. Analyze the word/phrase: '{target_text}'.\n"
+            f"Provide 3 distinct nuances, variations, or common collocations in {lang_name} that are useful for a learner.\n"
+            f"For each one, provide:\n"
+            f"1. word: The term in {lang_name}.\n"
+            f"2. phonetic: Pronunciation in parentheses.\n"
+            f"3. meaning: A brief Persian explanation of this specific nuance.\n"
+            f"4. prompt: A short, descriptive English visual prompt (single sentence, no style words) for an image representing this specific variation.\n\n"
+            f"REPLY ONLY WITH A JSON LIST OF 3 OBJECTS. Example: [{{ \"word\": \"...\", \"phonetic\": \"...\", \"meaning\": \"...\", \"prompt\": \"...\" }}, ...]"
         )
         
-        response = await chain.ainvoke([HumanMessage(content=combined_prompt)])
+        response = await chain.ainvoke([HumanMessage(content=educational_prompt)])
         content = response.content.strip()
         
-        # Parse response
-        if "|" in content and "TRANSLATION:" in content and "PROMPT:" in content:
-            parts = content.split("|", 1)
-            translated_text = parts[0].replace("TRANSLATION:", "").strip()
-            img_prompt = parts[1].replace("PROMPT:", "").strip().replace('"', '').replace("'", "")
-        else:
-            logger.warning("⚠️ AI response format mismatch, using individual fallbacks...")
-            # If combined fails, do them separately (slower but correct)
+        # Clean JSON if AI adds triple backticks
+        if "```json" in content:
+            content = content.split("```json")[1].split("```")[0].strip()
+        elif "```" in content:
+            content = content.split("```")[1].split("```")[0].strip()
+            
+        try:
+            variations = json.loads(content)
+            if not isinstance(variations, list): variations = []
+            variations = variations[:3] # Limit to 3 for performance
+        except Exception as json_e:
+            logger.warning(f"⚠️ JSON parsing failed: {json_e}")
+            # Fallback to single item if JSON fails
             translated_text = await translate_text(target_text, target_lang)
             img_prompt = await generate_visual_prompt(target_text)
+            variations = [{
+                "word": translated_text,
+                "phonetic": "",
+                "meaning": "ترجمه مستقیم",
+                "prompt": img_prompt
+            }]
 
-        # 5. Construct Pollinations URL
-        encoded_prompt = urllib.parse.quote(img_prompt)
-        image_url = f"https://pollinations.ai/p/{encoded_prompt}?width=1024&height=1024&seed={int(asyncio.get_event_loop().time())}&nologo=true"
+        # 5. Loop through variations and send
+        last_msg_id = original_msg_id
         
-        # 6. Download Image locally (more reliable than Telegram URL fetch)
-        logger.info(f"🖼️ Step 3: Downloading image from {image_url}...")
-        try:
-            def download_img():
-                req = urllib.request.Request(image_url, headers={'User-Agent': 'Mozilla/5.0'})
-                with urllib.request.urlopen(req, timeout=45) as response:
-                    return response.read()
+        for i, var in enumerate(variations):
+            word = var.get("word", "")
+            phonetic = var.get("phonetic", "")
+            meaning = var.get("meaning", "")
+            img_prompt = var.get("prompt", target_text)
             
-            image_data = await asyncio.to_thread(download_img)
-            logger.info(f"🖼️ Downloaded {len(image_data)} bytes.")
+            # Construct Pollinations URL
+            encoded_prompt = urllib.parse.quote(img_prompt)
+            image_url = f"https://pollinations.ai/p/{encoded_prompt}?width=1024&height=1024&seed={int(asyncio.get_event_loop().time()) + i}&nologo=true"
             
-            photo_buffer = io.BytesIO(image_data)
-            photo_buffer.name = "translated_image.jpg"
-            
-            logger.info("📤 Step 4: Uploading photo to Telegram...")
-            caption = f"📝 **ترجمه ({lang_name}):**\n\n{translated_text}"
-            
-            photo_msg = await context.bot.send_photo(
-                chat_id=msg.chat_id,
-                photo=photo_buffer,
-                caption=caption[:1024],
-                parse_mode='Markdown',
-                reply_to_message_id=original_msg_id,
-                read_timeout=60,
-                write_timeout=60
-            )
-            logger.info("📤 Photo uploaded successfully.")
-        except Exception as dl_e:
-            logger.error(f"❌ Failed to download/send image: {dl_e}")
-            # Fallback: Send only text if image fails
-            caption = f"📝 **ترجمه ({lang_name}):**\n\n{translated_text}"
-            photo_msg = await msg.reply_text(
-                caption,
-                parse_mode='Markdown',
-                reply_to_message_id=original_msg_id
-            )
+            logger.info(f"🖼️ Variation {i+1}: Downloading image...")
+            try:
+                def download_img():
+                    req = urllib.request.Request(image_url, headers={'User-Agent': 'Mozilla/5.0'})
+                    with urllib.request.urlopen(req, timeout=45) as response:
+                        return response.read()
+                
+                image_data = await asyncio.to_thread(download_img)
+                photo_buffer = io.BytesIO(image_data)
+                photo_buffer.name = f"var_{i}.jpg"
+                
+                caption = f"� **{word}** {phonetic}\n\n{meaning}\n\n━━━━━━━━━━━━━━\n🎓 **آموزش ({i+1}/3)**"
+                
+                # Send Photo
+                photo_msg = await context.bot.send_photo(
+                    chat_id=msg.chat_id,
+                    photo=photo_buffer,
+                    caption=caption,
+                    parse_mode='Markdown',
+                    reply_to_message_id=last_msg_id
+                )
+                
+                # Update last_msg_id to chain them
+                last_msg_id = photo_msg.message_id
+                
+                # Send Voice for this word
+                audio_buffer = await text_to_speech(word, target_lang)
+                voice_msg = await context.bot.send_voice(
+                    chat_id=msg.chat_id,
+                    voice=audio_buffer,
+                    caption=f"🔊 تلفظ: {word}",
+                    reply_to_message_id=photo_msg.message_id
+                )
+                last_msg_id = voice_msg.message_id
 
-        # 7. Generate Voice (TTS)
-        logger.info("🔊 Step 5: Generating voice response...")
-        await status_msg.edit_text(get_msg("voice_generating", user_id))
-        audio_buffer = await text_to_speech(translated_text, target_lang)
-        
-        await context.bot.send_voice(
-            chat_id=msg.chat_id,
-            voice=audio_buffer,
-            caption=get_msg("voice_caption_lang", user_id).format(lang=lang_name),
-            reply_to_message_id=photo_msg.message_id,
-            read_timeout=60,
-            write_timeout=60
-        )
-        logger.info("🔊 Voice sent successfully.")
-        
+            except Exception as item_e:
+                logger.error(f"❌ Error sending variation {i+1}: {item_e}")
+                # Send text fallback
+                fallback_msg = await context.bot.send_message(
+                    chat_id=msg.chat_id,
+                    text=f"💡 **{word}** {phonetic}\n\n{meaning}",
+                    parse_mode='Markdown',
+                    reply_to_message_id=last_msg_id
+                )
+                last_msg_id = fallback_msg.message_id
+
+        # Final cleanup
         await status_msg.delete()
         increment_daily_usage(user_id)
         
     except Exception as e:
         import traceback
         error_detail = traceback.format_exc()
-        logger.error(f"Translate/Image Error: {e}\n{error_detail}")
+        logger.error(f"Educational Translate Error: {e}\n{error_detail}")
         await status_msg.edit_text(f"❌ خطایی رخ داد: {str(e)[:50]}")
 
 async def analyze_text_gemini(text, status_msg=None, lang_code="fa"):
