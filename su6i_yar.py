@@ -973,10 +973,26 @@ async def cmd_close_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def cmd_status_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info("📊 Command /status triggered")
-    dl_s = get_msg("dl_on") if SETTINGS["download"] else get_msg("dl_off")
-    fc_s = get_msg("fc_on") if SETTINGS["fact_check"] else get_msg("fc_off")
-    info = get_msg("status_fmt").format(dl=dl_s, fc=fc_s)
-    await update.message.reply_text(info, parse_mode='Markdown')
+    msg = update.message
+    user_id = update.effective_user.id
+    
+    dl_s = get_msg("dl_on", user_id) if SETTINGS["download"] else get_msg("dl_off", user_id)
+    fc_s = get_msg("fc_on", user_id) if SETTINGS["fact_check"] else get_msg("fc_off", user_id)
+    info = get_msg("status_fmt", user_id).format(dl=dl_s, fc=fc_s)
+    
+    # Add user quota info
+    has_quota, remaining = check_daily_limit(user_id)
+    limit = get_user_limit(user_id)
+    user_type = "👑 ادمین" if user_id == SETTINGS["admin_id"] else ("✅ عضو" if user_id in ALLOWED_USERS else "🆓 رایگان")
+    
+    quota_info = (
+        f"\n━━━━━━━━━━━━━━\n"
+        f"👤 **کاربر:** `{user_id}`\n"
+        f"🏷️ **نوع:** {user_type}\n"
+        f"📊 **سهمیه امروز:** {remaining}/{limit}"
+    )
+    
+    await msg.reply_text(info + quota_info, parse_mode='Markdown')
 
 async def cmd_toggle_dl_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info("📥 Command /toggle_dl triggered")
