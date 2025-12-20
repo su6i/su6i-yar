@@ -152,11 +152,11 @@ source venv/bin/activate
 pip install -r requirements.txt
 
 # 3. Create .env file
-nano .env
+vim .env
 # Add your tokens (TELEGRAM_BOT_TOKEN, GEMINI_API_KEY, etc.)
 
 # 4. Create systemd service
-sudo nano /etc/systemd/system/su6i-yar.service
+sudo vim /etc/systemd/system/su6i-yar.service
 ```
 
 Add this content:
