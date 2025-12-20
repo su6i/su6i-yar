@@ -17,6 +17,7 @@ import uuid
 import urllib.parse
 import urllib.request
 import edge_tts
+import html
 
 # Telegram Imports
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove, InlineKeyboardButton, InlineKeyboardMarkup
@@ -123,6 +124,49 @@ def get_user_limit(user_id: int) -> int:
     
     # Non-whitelisted users get free trial limit
     return SETTINGS["free_trial_limit"]
+
+def smart_split(text, header="", max_len=1024, overflow_prefix="... ادامه در پیام بعدی"):
+    """
+    Split text into two parts: a caption (max_len) and overflow_text.
+    Uses HTML formatting for stability.
+    Returns (final_caption_html, overflow_raw_text)
+    """
+    if not text:
+        return header, ""
+        
+    # Split by paragraphs
+    paragraphs = text.split('\n\n')
+    current_caption_raw = ""
+    overflow_text_raw = ""
+    overflow_started = False
+    
+    for para in paragraphs:
+        if overflow_started:
+            overflow_text_raw += ("\n\n" if overflow_text_raw else "") + para
+        else:
+            potential = (current_caption_raw + "\n\n" if current_caption_raw else "") + para
+            
+            # Test length with HTML escaping
+            test_caption_html = header + "\n\n" + html.escape(potential) + "\n\n<i>" + html.escape(overflow_prefix) + "</i>"
+            
+            if len(test_caption_html) <= max_len:
+                current_caption_raw = potential
+            else:
+                if not current_caption_raw:
+                    # Hard split if first paragraph is too long
+                    allowed = max_len - len(header) - len(overflow_prefix) - 30
+                    current_caption_raw = para[:allowed]
+                    overflow_text_raw = para[allowed:]
+                    overflow_started = True
+                else:
+                    overflow_started = True
+                    overflow_text_raw = para
+                    
+    final_caption_html = header + (("\n\n" + html.escape(current_caption_raw)) if current_caption_raw else "")
+    if overflow_text_raw:
+        final_caption_html += "\n\n<i>" + html.escape(overflow_prefix) + "</i>"
+        
+    return final_caption_html, overflow_text_raw
 
 def check_access(user_id: int, chat_id: int = None) -> tuple[bool, str]:
     """Check if user has access to use the bot. Returns (allowed, reason)."""
@@ -1168,60 +1212,48 @@ async def download_instagram(url, chat_id, bot, reply_to_message_id=None):
             except Exception as e:
                 logger.warning(f"Could not read caption: {e}")
 
-        # 6. Build caption with paragraph-based overflow
-        caption_header = "📥 **Su6i Yar** | @su6i\\_yar\\_bot\n\n"
-        max_caption_len = 1024
-        overflow_note = "\n\n_... ادامه در پیام بعدی_"
+        # 6. Build caption with smart_split
+        header = f"📥 <b>Su6i Yar</b> | @su6i_yar_bot"
+        caption, overflow_text = smart_split(original_caption, header=header, max_len=1024)
         
-        if original_caption:
-            paragraphs = original_caption.split('\n\n')
-            caption_text = ""
-            overflow_text = ""
-            overflow_started = False
-            
-            for para in paragraphs:
-                if overflow_started:
-                    overflow_text += ("\n\n" if overflow_text else "") + para
-                else:
-                    test_caption = caption_header + caption_text + ("\n\n" if caption_text else "") + para
-                    if len(test_caption) + len(overflow_note) <= max_caption_len:
-                        caption_text += ("\n\n" if caption_text else "") + para
-                    else:
-                        overflow_started = True
-                        overflow_text = para
-            
-            if overflow_text:
-                caption = caption_header + caption_text + overflow_note
-            else:
-                caption = caption_header + caption_text
-        else:
-            caption = "📥 **Su6i Yar** | @su6i\\_yar\\_bot"
-            overflow_text = ""
-
         # 7. Send to User
         if filename.exists():
-            with open(filename, "rb") as video_file:
-                video_msg = await bot.send_video(
-                    chat_id=chat_id,
-                    video=video_file,
-                    caption=caption,
-                    parse_mode='Markdown',
-                    reply_to_message_id=reply_to_message_id,
-                    supports_streaming=True
-                )
-            # Cleanup
-            filename.unlink()
-            
-            # Send overflow text as reply to video
-            if overflow_text:
-                await bot.send_message(
-                    chat_id=chat_id,
-                    text=f"📝 **ادامه کپشن:**\n\n{overflow_text}",
-                    parse_mode='Markdown',
-                    reply_to_message_id=video_msg.message_id
-                )
-            
-            return True
+            try:
+                with open(filename, "rb") as video_file:
+                    video_msg = await bot.send_video(
+                        chat_id=chat_id,
+                        video=video_file,
+                        caption=caption,
+                        parse_mode='HTML',
+                        reply_to_message_id=reply_to_message_id,
+                        supports_streaming=True,
+                        read_timeout=150,
+                        write_timeout=150
+                    )
+                
+                # Send overflow text as reply to video (multiple parts if needed)
+                if overflow_text:
+                    # For messages, max is 4096. No header needed for follow-up.
+                    # We can use smart_split again or just chunk it.
+                    remaining = overflow_text
+                    while remaining:
+                        chunk = remaining[:4000]
+                        remaining = remaining[4000:]
+                        await bot.send_message(
+                            chat_id=chat_id,
+                            text=f"📝 <b>ادامه کپشن:</b>\n\n{html.escape(chunk)}",
+                            parse_mode='HTML',
+                            reply_to_message_id=video_msg.message_id
+                        )
+                
+                # Cleanup
+                filename.unlink()
+                return True
+            except Exception as send_e:
+                logger.error(f"Error sending video/overflow: {send_e}")
+                # Try fallback without video or without caption
+                return False
+        return False
         return False
         
     except Exception as e:
@@ -1623,107 +1655,81 @@ async def cmd_voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Priority 1: Check if replied to a message
     target_text = ""
     if msg.reply_to_message:
-        logger.info(f"🔊 Reply detected: text={bool(msg.reply_to_message.text)}, caption={bool(msg.reply_to_message.caption)}")
         target_text = msg.reply_to_message.text or msg.reply_to_message.caption or ""
-    else:
-        logger.info("🔊 No reply_to_message detected")
     
-    # Priority 2: Check for direct text input (/voice <text> or /voice <lang> <text>)
+    # Priority 2: Check for direct text input
     if not target_text and context.args:
-        # If first arg is a language code, text starts from arg[1]
         if context.args[0].lower() in LANG_ALIASES:
             if len(context.args) > 1:
                 target_text = " ".join(context.args[1:])
-                logger.info(f"🔊 Using direct text after lang arg: {len(target_text)} chars")
         else:
-            # First arg is text, not a language code
             target_text = " ".join(context.args)
-            logger.info(f"🔊 Using direct text: {len(target_text)} chars")
     
-    # Priority 3: Check cache if no reply and no direct text
+    # Priority 3: Check cache
     if not target_text:
         target_text = LAST_ANALYSIS_CACHE.get(user_id, "")
-        logger.info(f"🔊 Using cache: {bool(target_text)}")
     
     if not target_text:
-        logger.info("🔊 No text found, sending error")
         await msg.reply_text(get_msg("voice_no_text", user_id))
         return
-    
-    # Check if translation is needed
-    # Translate if target language differs from user's current app language
-    # (assumes text is usually in the user's app language)
+
     need_translation = target_lang != user_lang
     
-    if need_translation:
-        original_msg_id = msg.reply_to_message.message_id if msg.reply_to_message else msg.message_id
-        status_msg = await msg.reply_text(
-            get_msg("voice_translating", user_id).format(lang=LANG_NAMES.get(target_lang, target_lang)),
-            reply_to_message_id=original_msg_id
-        )
-        translated_text = await translate_text(target_text, target_lang)
-        
-        await status_msg.edit_text(get_msg("voice_generating", user_id))
-        target_text = translated_text
-        voice_reply_to = original_msg_id  # Reply voice to original message
-        
-        # Build caption with translated text (max 1024 chars for Telegram)
-        caption_header = f"📝 **ترجمه ({LANG_NAMES.get(target_lang, target_lang)}):**\n\n"
-        max_caption_len = 1024
-        overflow_note = "\n\n_... ادامه در پیام بعدی_"
-        
-        # Split by paragraphs
-        paragraphs = translated_text.split('\n\n')
-        caption_text = ""
-        overflow_text = ""
-        overflow_started = False
-        
-        for para in paragraphs:
-            if overflow_started:
-                overflow_text += ("\n\n" if overflow_text else "") + para
-            else:
-                test_caption = caption_header + caption_text + ("\n\n" if caption_text else "") + para
-                if len(test_caption) + len(overflow_note) <= max_caption_len:
-                    caption_text += ("\n\n" if caption_text else "") + para
-                else:
-                    overflow_started = True
-                    overflow_text = para
-        
-        if overflow_text:
-            caption = caption_header + caption_text + overflow_note
-        else:
-            caption = caption_header + caption_text
-    else:
-        original_msg_id = msg.reply_to_message.message_id if msg.reply_to_message else msg.message_id
-        status_msg = await msg.reply_text(
-            get_msg("voice_generating", user_id),
-            reply_to_message_id=original_msg_id
-        )
-        voice_reply_to = original_msg_id
-        caption = get_msg("voice_caption", user_id)
-        overflow_text = ""
-    
     try:
+        # 1. Translate if needed
+        if need_translation:
+            original_msg_id = msg.reply_to_message.message_id if msg.reply_to_message else msg.message_id
+            status_msg = await msg.reply_text(
+                get_msg("voice_translating", user_id).format(lang=LANG_NAMES.get(target_lang, target_lang)),
+                reply_to_message_id=original_msg_id
+            )
+            translated_text = await translate_text(target_text, target_lang)
+            await status_msg.edit_text(get_msg("voice_generating", user_id))
+            target_text = translated_text
+            voice_reply_to = original_msg_id
+        else:
+            voice_reply_to = msg.message_id
+            
+        # 2. Convert to speech
         audio_buffer = await text_to_speech(target_text, target_lang)
         
-        voice_msg = await msg.reply_voice(
+        # 3. Build caption with smart_split
+        header = f"📝 <b>ترجمه ({LANG_NAMES.get(target_lang, target_lang)}):</b>"
+        caption, overflow_text = smart_split(target_text, header=header, max_len=1024)
+        
+        # 4. Send Voice
+        voice_msg = await context.bot.send_voice(
+            chat_id=msg.chat_id,
             voice=audio_buffer,
             caption=caption,
-            parse_mode='Markdown',
-            reply_to_message_id=voice_reply_to
+            parse_mode='HTML',
+            reply_to_message_id=voice_reply_to,
+            read_timeout=90
         )
-        await status_msg.delete()
         
-        # Send overflow text as reply to voice message
+        # 5. Send overflow parts
         if overflow_text:
-            await msg.reply_text(
-                f"📝 **ادامه ترجمه:**\n\n{overflow_text}",
-                parse_mode='Markdown',
-                reply_to_message_id=voice_msg.message_id
-            )
+            remaining = overflow_text
+            while remaining:
+                chunk = remaining[:4000]
+                remaining = remaining[4000:]
+                await context.bot.send_message(
+                    chat_id=msg.chat_id,
+                    text=f"📝 <b>ادامه ترجمه:</b>\n\n{html.escape(chunk)}",
+                    parse_mode='HTML',
+                    reply_to_message_id=voice_msg.message_id
+                )
+        
+        if 'status_msg' in locals():
+            await status_msg.delete()
+            
     except Exception as e:
-        logger.error(f"TTS Error: {e}")
-        await status_msg.edit_text(get_msg("voice_error", user_id))
+        logger.error(f"Voice Error: {e}")
+        error_msg = get_msg("err_ai", user_id) if 'user_id' in locals() else "خطایی رخ داد."
+        if 'status_msg' in locals():
+            await status_msg.edit_text(error_msg)
+        else:
+            await msg.reply_text(error_msg)
 
 
 def main():
