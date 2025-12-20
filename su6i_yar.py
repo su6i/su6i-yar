@@ -272,7 +272,7 @@ async def global_message_handler(update: Update, context: ContextTypes.DEFAULT_T
                 await status_msg.edit_text(get_msg("uploading", user_id))
                 await msg.reply_video(
                     video=open(file_path, 'rb'), 
-                    caption="📥 Downloaded by **Su6i Yar** | @su6i_yar_bot",
+                    caption="📥 **Su6i Yar** | @su6i\\_yar\\_bot",
                     reply_to_message_id=msg.message_id,
                     parse_mode='Markdown'
                 )
@@ -958,7 +958,7 @@ async def download_instagram(url, chat_id, bot, reply_to_message_id=None):
                 await bot.send_video(
                     chat_id=chat_id,
                     video=video_file,
-                    caption="📥 Downloaded by **Su6i Yar** | @su6i_yar_bot",
+                    caption="📥 **Su6i Yar** | @su6i\\_yar\\_bot",
                     parse_mode='Markdown',
                     reply_to_message_id=reply_to_message_id,
                     supports_streaming=True
