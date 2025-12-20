@@ -380,12 +380,15 @@ async def cmd_translate_handler(update: Update, context: ContextTypes.DEFAULT_TY
 
     try:
         # 4. Combined Translation and Image Prompt (One AI Call)
+        logger.info("🤖 Step 1: Requesting AI translation and prompt...")
         lang_name = LANG_NAMES.get(target_lang, target_lang)
         chain = get_smart_chain(grounding=False)
         combined_prompt = (
-            f"You are a translator and visual expert.\n"
+            f"You are a linguistic and visual expert.\n"
             f"1. Translate this text to {lang_name}: \"{target_text}\"\n"
-            f"2. Create a short, descriptive English visual prompt (single sentence) for an image representing this text.\n"
+            f"   - Use natural, everyday language.\n"
+            f"   - CRITICAL: Prioritize native or traditional words. Avoid using English loanwords or 'Koglich' if a common native word exists (e.g., for Korean use native words instead of phonetically transcribed English keywords).\n"
+            f"2. Create a short, descriptive English visual prompt (single sentence) for an image representing the core meaning of this text.\n"
             f"Output format: TRANSLATION: <text> | PROMPT: <prompt>"
         )
         
