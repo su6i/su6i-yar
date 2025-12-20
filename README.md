@@ -33,8 +33,14 @@ A powerful, intelligent Telegram bot that downloads Instagram videos and verifie
 *   **Detail on Demand:** Reply with `/detail` to get full scientific analysis with references.
 *   **Smart Chunking:** Long responses are split by paragraphs, not mid-sentence.
 
+### 🔊 Voice Response (TTS)
+*   **Text-to-Speech:** Convert any text to voice using `/voice` command.
+*   **Multi-Language Voice:** Reply to any message with `/voice en`, `/voice fa`, etc.
+*   **Translation + Voice:** Automatically translates to target language before speaking.
+*   **Powered by edge-tts:** High-quality Neural TTS voices.
+
 ### 🌍 Multi-Language Support
-*   Full support for **Persian (FA)** 🇮🇷, **English (EN)** 🇺🇸, and **French (FR)** 🇫🇷.
+*   Full support for **Persian (FA)** 🇮🇷, **English (EN)** 🇺🇸, **French (FR)** 🇫🇷, and **Korean (KO)** 🇰🇷.
 *   AI responses are fully localized (labels, examples, conclusions).
 *   Instantly switch languages via the bot menu.
 
@@ -46,6 +52,11 @@ A powerful, intelligent Telegram bot that downloads Instagram videos and verifie
 ### 🎨 Clean Logging
 *   Colored console output (Green=INFO, Yellow=WARNING, Red=ERROR).
 *   Filters verbose httpx and google_genai logs for cleaner output.
+
+### ⚙️ Server Optimizations
+*   **Concurrent Updates:** Handle multiple users simultaneously.
+*   **Rate Limiting:** Prevents spam (5 sec cooldown per user).
+*   **Auto-Restart (Dev):** Use `./run_dev.sh` for auto-reload on file changes.
 
 ---
 
@@ -120,9 +131,10 @@ The bot is primarily controlled via the interactive keyboard:
 | :--- | :--- |
 | **📊 Status** | Show current settings (AI/Download status). |
 | **🆘 Help** | Show instructions. |
+| **🔊 Voice** | Get voice version of last analysis. |
 | **📥 Toggle Download** | Turn Instagram Downloading On/Off. |
 | **🧠 Toggle AI** | Turn Gemini Fact-Checking On/Off. |
-| **🇮🇷 / 🇺🇸 / 🇫🇷** | Switch Bot Language instantly. |
+| **🇮🇷 / 🇺🇸 / 🇫🇷 / 🇰🇷** | Switch Bot Language instantly. |
 | **🛑 Stop Bot** | (Admin Only) Shutdown the bot. |
 
 ### 🤖 Commands
@@ -134,6 +146,11 @@ The bot is primarily controlled via the interactive keyboard:
 | `/help`  | Show help instructions. |
 | `/check` | Reply to text to Fact-Check it. |
 | `/detail` | Reply to AI analysis to get full scientific details. |
+| `/voice` | Reply to any message to get voice version. |
+| `/voice en` | Translate to English and speak. |
+| `/voice fa` | Translate to Persian and speak. |
+| `/voice fr` | Translate to French and speak. |
+| `/voice ko` | Translate to Korean and speak. |
 | `/toggle_dl` | Toggle Download ON/OFF. |
 | `/toggle_fc` | Toggle AI ON/OFF. |
 | `/close` | Close/Remove the menu keyboard. |

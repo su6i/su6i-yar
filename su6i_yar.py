@@ -525,6 +525,7 @@ MESSAGES = {
             "   /status - وضعیت سیستم\n"
             "   /check [متن] - تحلیل متن\n"
             "   /detail - جزئیات تحلیل قبلی\n"
+            "   /voice [زبان] - نسخه صوتی\n"
             "   /stop - خاموش کردن (ادمین)\n\n"
             "━━━━━━━━━━━━━━"
         ),
@@ -591,6 +592,7 @@ MESSAGES = {
             "   /status - System status\n"
             "   /check [text] - Analyze text\n"
             "   /detail - Previous analysis details\n"
+            "   /voice [lang] - Voice version\n"
             "   /stop - Shutdown (Admin)\n\n"
             "━━━━━━━━━━━━━━"
         ),
@@ -657,6 +659,7 @@ MESSAGES = {
             "   /status - État du système\n"
             "   /check [texte] - Analyser texte\n"
             "   /detail - Détails analyse précédente\n"
+            "   /voice [lang] - Version audio\n"
             "   /stop - Arrêter (Admin)\n\n"
             "━━━━━━━━━━━━━━"
         ),
@@ -724,7 +727,7 @@ MESSAGES = {
             "   /status - 시스템 상태\n"
             "   /check [텍스트] - 텍스트 분석\n"
             "   /detail - 이전 분석 상세\n"
-            "   /voice - 음성 응답\n"
+            "   /voice [언어] - 음성 버전\n"
             "   /stop - 중지 (관리자)\n\n"
             "━━━━━━━━━━━━━━"
         ),
