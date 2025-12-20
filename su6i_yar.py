@@ -1221,7 +1221,7 @@ LANG_ALIASES = {
     "fa": "fa", "farsi": "fa", "persian": "fa", "فارسی": "fa",
     "en": "en", "english": "en", "انگلیسی": "en",
     "fr": "fr", "french": "fr", "français": "fr", "فرانسوی": "fr",
-    "ko": "ko", "korean": "ko", "한국어": "ko", "کره‌ای": "ko"
+    "ko": "ko", "kr": "ko", "korean": "ko", "한국어": "ko", "کره‌ای": "ko"
 }
 
 LANG_NAMES = {
