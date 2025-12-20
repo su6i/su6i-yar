@@ -1343,8 +1343,13 @@ async def cmd_voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         status_msg = await msg.reply_text(get_msg("voice_translating", user_id).format(lang=LANG_NAMES.get(target_lang, target_lang)))
         translated_text = await translate_text(target_text, target_lang)
         
-        # Send translated text first
-        translated_msg = await msg.reply_text(f"📝 **ترجمه ({LANG_NAMES.get(target_lang, target_lang)}):**\n\n{translated_text}", parse_mode='Markdown')
+        # Send translated text first (reply to original message)
+        original_msg_id = msg.reply_to_message.message_id if msg.reply_to_message else msg.message_id
+        translated_msg = await msg.reply_text(
+            f"📝 **ترجمه ({LANG_NAMES.get(target_lang, target_lang)}):**\n\n{translated_text}", 
+            parse_mode='Markdown',
+            reply_to_message_id=original_msg_id
+        )
         
         await status_msg.edit_text(get_msg("voice_generating", user_id))
         target_text = translated_text
