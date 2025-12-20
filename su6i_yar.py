@@ -13,13 +13,14 @@ from pathlib import Path
 from dotenv import load_dotenv
 import io
 import json
+import uuid
 import urllib.parse
 import urllib.request
 import edge_tts
 
 # Telegram Imports
-from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
-from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, MessageHandler, filters
+from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, MessageHandler, filters, CallbackQueryHandler
 
 # LangChain Imports
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -433,7 +434,7 @@ async def cmd_learn_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 logger.info(f"🖼️ Variation {i+1}: Fetching image...")
                 def download_img():
                     req = urllib.request.Request(image_url, headers={'User-Agent': 'Mozilla/5.0'})
-                    with urllib.request.urlopen(req, timeout=30) as r: return r.read()
+                    with urllib.request.urlopen(req, timeout=45) as r: return r.read()
                 
                 image_data = await asyncio.to_thread(download_img)
                 photo_buffer = io.BytesIO(image_data)
@@ -447,12 +448,10 @@ async def cmd_learn_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 
                 # 2. Prepare TTS Data for Button
-                import uuid
                 audio_id = str(uuid.uuid4())[:8]
                 LEARN_CACHE[audio_id] = (f"{word}. {sentence}", target_lang)
                 
                 # Create Inline Button
-                from telegram import InlineKeyboardButton, InlineKeyboardMarkup
                 keyboard = InlineKeyboardMarkup([
                     [InlineKeyboardButton("🔊 پخش تلفظ (کلمه + جمله)", callback_data=f"learn_tts:{audio_id}")]
                 ])
@@ -475,7 +474,6 @@ async def cmd_learn_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except Exception as item_e:
                 logger.error(f"❌ Error sending item {i+1}: {item_e}")
                 # Fallback: Send text with button if photo fails
-                import uuid
                 audio_id = str(uuid.uuid4())[:8]
                 LEARN_CACHE[audio_id] = (f"{word}. {sentence}", target_lang)
                 keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("🔊 تلفظ", callback_data=f"learn_tts:{audio_id}")]])
@@ -1726,7 +1724,6 @@ def main():
     app.add_handler(CommandHandler("stop", cmd_stop_bot_handler))
     
     # Callbacks
-    from telegram.ext import CallbackQueryHandler
     app.add_handler(CallbackQueryHandler(callback_learn_audio_handler, pattern="^learn_tts:"))
 
     # All Messages (Text)
