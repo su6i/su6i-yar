@@ -134,7 +134,7 @@ pip install -r requirements.txt
 sudo apt update && sudo apt install ffmpeg -y
 
 # 4. Create systemd service
-sudo nano /etc/systemd/system/su6i-yar.service
+sudo vim /etc/systemd/system/su6i-yar.service
 ```
 
 Add this content (replace `/path/to/su6i-yar` and `your_user`):
