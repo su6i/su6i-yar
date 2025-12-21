@@ -1855,35 +1855,38 @@ async def merge_bilingual_audio(target_audio: io.BytesIO, trans_audio: io.BytesI
     import os
     import subprocess
     
-    with tempfile.TemporaryDirectory() as tmpdir:
-        t_path = os.path.join(tmpdir, "target.mp3")
-        tr_path = os.path.join(tmpdir, "trans.mp3")
-        sil_path = os.path.join(tmpdir, "silence.mp3")
-        out_path = os.path.join(tmpdir, "merged.mp3")
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            t_path = os.path.join(tmpdir, "target.mp3")
+            tr_path = os.path.join(tmpdir, "trans.mp3")
+            sil_path = os.path.join(tmpdir, "silence.mp3")
+            out_path = os.path.join(tmpdir, "merged.mp3")
+            
+            with open(t_path, "wb") as f: f.write(target_audio.getvalue())
+            with open(tr_path, "wb") as f: f.write(trans_audio.getvalue())
+            
+            # Generate 1 sec of silence
+            subprocess.run([
+                "ffmpeg", "-y", "-f", "lavfi", "-i", "anullsrc=r=24000:cl=mono", 
+                "-t", "1", "-q:a", "9", sil_path
+            ], capture_output=True, check=True)
+            
+            # Concat: Target -> Silence -> Translation
+            cmd = [
+                "ffmpeg", "-y",
+                "-i", t_path, "-i", sil_path, "-i", tr_path,
+                "-filter_complex", "[0:a][1:a][2:a]concat=n=3:v=0:a=1[out]",
+                "-map", "[out]", "-acodec", "libmp3lame", "-b:a", "64k", out_path
+            ]
+            subprocess.run(cmd, capture_output=True, check=True)
+            
+            if os.path.exists(out_path):
+                with open(out_path, "rb") as f:
+                    return io.BytesIO(f.read())
+    except Exception as e:
+        logger.warning(f"⚠️ merge_bilingual_audio failed (likely missing ffmpeg): {e}. Falling back to single-language audio.")
         
-        with open(t_path, "wb") as f: f.write(target_audio.getvalue())
-        with open(tr_path, "wb") as f: f.write(trans_audio.getvalue())
-        
-        # Generate 1 sec of silence
-        subprocess.run([
-            "ffmpeg", "-y", "-f", "lavfi", "-i", "anullsrc=r=24000:cl=mono", 
-            "-t", "1", "-q:a", "9", sil_path
-        ], capture_output=True)
-        
-        # Concat: Target -> Silence -> Translation
-        # filter_complex to ensure sample rate match and smooth join
-        cmd = [
-            "ffmpeg", "-y",
-            "-i", t_path, "-i", sil_path, "-i", tr_path,
-            "-filter_complex", "[0:a][1:a][2:a]concat=n=3:v=0:a=1[out]",
-            "-map", "[out]", "-acodec", "libmp3lame", "-b:a", "64k", out_path
-        ]
-        subprocess.run(cmd, capture_output=True)
-        
-        if os.path.exists(out_path):
-            with open(out_path, "rb") as f:
-                return io.BytesIO(f.read())
-    return target_audio # Fallback
+    return target_audio # Fallback to just the target language audio
 
 # Language code mapping for /voice command
 LANG_ALIASES = {
