@@ -20,7 +20,8 @@ import edge_tts
 import html
 
 # Telegram Imports
-from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove, InlineKeyboardButton, InlineKeyboardMarkup, constants
+from telegram.constants import ParseMode
 from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, MessageHandler, filters, CallbackQueryHandler
 
 # LangChain Imports
@@ -112,6 +113,7 @@ ALLOWED_GROUPS = set()  # Add group IDs here, e.g., {-1001234567890}
 from datetime import date
 USER_DAILY_USAGE = {}  # user_id -> {"count": int, "date": str}
 USER_LANG = {}         # user_id -> "fa" | "en" | "fr" | "ko"
+SEARCH_FILE_ID = None  # Persistent telegram file_id for the status GIF
 
 PERSISTENCE_FILE = "user_data.json"
 
@@ -120,7 +122,8 @@ def save_persistence():
     try:
         data = {
             "user_lang": USER_LANG,
-            "user_usage": USER_DAILY_USAGE
+            "user_usage": USER_DAILY_USAGE,
+            "search_file_id": SEARCH_FILE_ID
         }
         with open(PERSISTENCE_FILE, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=4)
@@ -137,7 +140,9 @@ def load_persistence():
                 # Convert string keys back to int if needed (JSON keys are always strings)
                 USER_LANG = {int(k): v for k, v in data.get("user_lang", {}).items()}
                 USER_DAILY_USAGE = {int(k): v for k, v in data.get("user_usage", {}).items()}
-                logger.info(f"📁 Loaded persistence: {len(USER_LANG)} users, {len(USER_DAILY_USAGE)} usage records")
+                global SEARCH_FILE_ID
+                SEARCH_FILE_ID = data.get("search_file_id")
+                logger.info(f"📁 Loaded persistence: {len(USER_LANG)} users, {len(USER_DAILY_USAGE)} usage, GIF: {'Exists' if SEARCH_FILE_ID else 'None'}")
         except Exception as e:
             logger.error(f"Persistence Load Error: {e}")
 
@@ -349,7 +354,10 @@ class StatusUpdateCallback(AsyncCallbackHandler):
 
 # User Preferences (In-Memory)
 USER_LANG = {}
-LEARN_CACHE = {}  # UUID -> (tts_text, lang) for /learn buttons (retained for backward compatibility if needed)
+LEARN_LOCK = asyncio.Lock()  # Prevent concurrent /learn requests to avoid API 429s
+LEARN_WAITERS = []           # List of {user_id, status_msg, lang} for live queue updates
+# Fallback Tenor Animation (Direct link)
+SEARCH_GIF_FALLBACK = "https://media1.tenor.com/m/kI2WQAiG3KAAAAAC/waiting.gif"
 
 # ... (Localization Dictionary MESSAGES is unchanged, skipping for brevity) ...
 
@@ -461,11 +469,40 @@ def check_rate_limit(user_id):
     RATE_LIMIT[user_id] = now
     return True
 
+async def refresh_learn_queue():
+    """Update all waiting users about their position in the queue."""
+    for index, waiter in enumerate(LEARN_WAITERS):
+        try:
+            user_id = waiter["user_id"]
+            msg_obj = waiter["status_msg"]
+            
+            # Get the current slide progress if it's the active one
+            prog = waiter.get("progress", "")
+            base_text = get_msg("learn_designing", user_id)
+            if prog:
+                base_text = f"{base_text} ({prog})"
+            
+            # Position Label:
+            # If index is 0, they are the 'active' one (Position 1 in queue)
+            # but we only show the label to make it clear why it's not starting yet.
+            pos_label = get_msg("learn_queue_pos", user_id).format(pos=index + 1)
+            
+            await msg_obj.edit_caption(
+                caption=f"🪄 {base_text}{pos_label}",
+                parse_mode=ParseMode.MARKDOWN
+            )
+        except Exception:
+            pass
+
 async def cmd_learn_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Educational tutor: 3 variations with images, definitions, and sentence audio."""
     msg = update.effective_message
     user_id = update.effective_user.id
-    user_lang = USER_LANG.get(user_id, "fa")
+    
+    # Ensure User Lang is initialized immediately
+    if user_id not in USER_LANG:
+        USER_LANG[user_id] = "fa"
+    user_lang = USER_LANG[user_id]
     
     # Check Daily Limit
     if not check_daily_limit(user_id):
@@ -495,101 +532,176 @@ async def cmd_learn_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await msg.reply_text(get_msg("learn_no_text", user_id))
         return
 
-    # 3. Status Message
+    # 3. Queue Management & Status Message
     original_msg_id = msg.reply_to_message.message_id if msg.reply_to_message else msg.message_id
-    status_msg = await msg.reply_text(
-        get_msg("learn_designing", user_id),
-        reply_to_message_id=original_msg_id
-    )
-
+    
+    global SEARCH_FILE_ID
     try:
-        # 4. Educational AI Call: Get 3 variations + sentences
-        logger.info(f"🤖 Step 1: Requesting deep educational content from AI in {target_lang}...")
-        lang_name = LANG_NAMES.get(target_lang, target_lang)
-        explanation_lang = "Persian" if user_lang == "fa" else ("English" if user_lang == "en" else ("French" if user_lang == "fr" else "Korean"))
-        chain = get_smart_chain(grounding=False)
-        
-        educational_prompt = (
-            f"You are a linguistic tutor. Analyze the word/phrase: '{target_text}'.\n"
-            f"Provide 3 distinct nuances or variations in {lang_name} for a learner.\n"
-            f"STRICT LANGUAGE REQUIREMENT: You MUST provide all explanations (meaning) and all translations (translation) in the {explanation_lang} language.\n"
-            f"DO NOT use Persian if the explanation language is {explanation_lang}.\n\n"
-            f"For each object in the list, provide:\n"
-            f"1. word: The term in {lang_name}.\n"
-            f"2. phonetic: Pronunciation in parentheses.\n"
-            f"3. meaning: A brief tutorial explanation STRICTLY in {explanation_lang}.\n"
-            f"4. sentence: A simple, natural example sentence in {lang_name}.\n"
-            f"5. translation: The translation of the example sentence STRICTLY in {explanation_lang}.\n"
-            f"6. prompt: A descriptive English visual prompt for an image representing this scenario.\n\n"
-            f"REPLY ONLY WITH A JSON LIST OF 3 OBJECTS. Example: [{{ \"word\": \"...\", \"phonetic\": \"...\", \"meaning\": \"...\", \"sentence\": \"...\", \"translation\": \"...\", \"prompt\": \"...\" }}, ...]"
+        status_msg = await msg.reply_animation(
+            animation=SEARCH_FILE_ID or SEARCH_GIF_FALLBACK,
+            caption=f"🪄 {get_msg('learn_designing', user_id)}",
+            reply_to_message_id=original_msg_id,
+            parse_mode=ParseMode.MARKDOWN
         )
-        
-        response = await chain.ainvoke([HumanMessage(content=educational_prompt)])
-        content = response.content.strip()
-        
-        # Clean JSON
-        if "```json" in content: content = content.split("```json")[1].split("```")[0].strip()
-        elif "```" in content: content = content.split("```")[1].split("```")[0].strip()
+        # Capture file_id for next time
+        if not SEARCH_FILE_ID and status_msg.animation:
+            SEARCH_FILE_ID = status_msg.animation.file_id
+            save_persistence()
+            logger.info(f"🚀 Captured and cached Search GIF file_id: {SEARCH_FILE_ID}")
+    except Exception as e:
+        logger.error(f"GIF status failed: {e}")
+        # Clear cache if it failed, maybe the file_id is invalid
+        if SEARCH_FILE_ID:
+            SEARCH_FILE_ID = None
+            save_persistence()
+        status_msg = await msg.reply_text(get_msg("learn_designing", user_id), reply_to_message_id=original_msg_id)
+    
+    # Add to waiters and refresh positions
+    waiter_entry = {"user_id": user_id, "status_msg": status_msg, "lang": user_lang}
+    LEARN_WAITERS.append(waiter_entry)
+    await refresh_learn_queue()
+
+    # 4. Wait for Global Lock
+    async with LEARN_LOCK:
+        try:
+            await refresh_learn_queue()
+        except: pass
             
         try:
-            variations = json.loads(content)
-            variations = variations[:3]
-        except Exception:
-            # Basic fallback
-            translated_text = await translate_text(target_text, target_lang)
-            img_prompt = await generate_visual_prompt(target_text)
-            variations = [{
-                "word": translated_text,
-                "phonetic": "",
-                "meaning": get_msg("learn_fallback_meaning", user_id),
-                "sentence": "Example sentence goes here.",
-                "translation": get_msg("learn_fallback_translation", user_id),
-                "prompt": img_prompt
-            }]
-
-        # 5. Loop and Send
-        last_msg_id = original_msg_id
-        
-        # 5. Parallel Image Downloads
-        logger.info("🖼️ Fetching all images in parallel...")
-        async def get_img_data(index, prompt):
-            try:
-                # Increased delay to 2.5s to avoid 429 Too Many Requests
-                await asyncio.sleep(index * 2.5)
-                
-                encoded = urllib.parse.quote(prompt)
-                url = f"https://pollinations.ai/p/{encoded}?width=1024&height=1024&seed={int(asyncio.get_event_loop().time()) + index}&nologo=true"
-                def dl():
-                    req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-                    with urllib.request.urlopen(req, timeout=60) as r: return r.read()
-                return await asyncio.to_thread(dl)
-            except Exception as e:
-                logger.error(f"Image download failed for index {index}: {e}")
-                return None
-
-        # Gather all image data and build variations list
-        tasks = [get_img_data(i, v.get("prompt", target_text)) for i, v in enumerate(variations)]
-        images_data = await asyncio.gather(*tasks)
-
-        # 6. Sequential Sending (maintaining reply chain)
-        last_msg_id = original_msg_id
-        
-        for i, var in enumerate(variations):
-            word = var.get("word", "")
-            phonetic = var.get("phonetic", "")
-            meaning = var.get("meaning", "")
-            sentence = var.get("sentence", "")
-            translation = var.get("translation", "")
-            image_bytes = images_data[i]
-            audio_id = str(uuid.uuid4())[:8]
+            # 4. Educational AI Call
+            logger.info(f"🤖 Step 1: Requesting deep educational content from AI in {target_lang}...")
+            lang_name = LANG_NAMES.get(target_lang, target_lang)
+            explanation_lang = "Persian" if user_lang == "fa" else ("English" if user_lang == "en" else ("French" if user_lang == "fr" else "Korean"))
+            chain = get_smart_chain(grounding=False)
             
+            educational_prompt = (
+                f"SYSTEM ROLE: You are a linguistic tutor. Your student's interface language is '{explanation_lang}'.\n\n"
+                f"CORE TASK: The student wants to learn about the concept: '{target_text}' in '{target_lang}'.\n\n"
+                f"STRICT LANGUAGE MAPPING (FAILURE TO COMPLY IS UNACCEPTABLE):\n"
+                f"1. 'word': MUST be the translation of '{target_text}' into '{target_lang}'.\n"
+                f"2. 'sentence': MUST be a complete example sentence ONLY in '{target_lang}'.\n"
+                f"3. 'meaning': MUST be a definition/explanation written ONLY in '{explanation_lang}'.\n"
+                f"4. 'translation': MUST be the translation of the 'sentence' (field #2) ONLY into '{explanation_lang}'.\n\n"
+                f"IMPORTANT: Even if the input '{target_text}' is in '{explanation_lang}' or any other language, you MUST provide ALL explanations (meaning/translation) in '{explanation_lang}'.\n\n"
+                f"GRAMMAR RULES (CRITICAL):\n"
+                f"- For ALL nouns in '{target_lang}', you MUST provide the word in EXACTLY THREE formats separated by slashes: Indefinite Singular / Definite Singular / Plural (e.g., 'un livre / le livre / des livres' for French, or 'a book / the book / books' for English).\n"
+                f"- This 'Triple Format' MUST be used as the 'word' field in the JSON.\n"
+                f"- Include phonetics for the '{target_lang}' word.\n\n"
+                f"Return ONLY valid JSON in this structure:\n"
+                f"{{\n"
+                f"  \"valid\": true/false,\n"
+                f"  \"lang\": \"detected language of '{target_text}'\",\n"
+                f"  \"lang_code\": \"ISO code\",\n"
+                f"  \"dict\": \"source dictionary\",\n"
+                f"  \"is_correction\": true/false,\n"
+                f"  \"suggestion\": \"corrected '{target_text}' if misspelled\",\n"
+                f"  \"slides\": [\n"
+                f"    {{ \"word\": \"[{target_lang} terms]\", \"phonetic\": \"...\", \"meaning\": \"[Explanations ONLY in {explanation_lang}]\", \"sentence\": \"[{target_lang} sentence]\", \"translation\": \"[Translation ONLY in {explanation_lang}]\", \"prompt\": \"visual description\" }},\n"
+                f"    ... (exactly 3 variant objects)\n"
+                f"  ]\n"
+                f"}}\n"
+                f"REPLY ONLY WITH JSON."
+            )
+            
+            response = await chain.ainvoke([HumanMessage(content=educational_prompt)])
+            content = response.content.strip()
+            
+            # Clean JSON
+            if "```json" in content: content = content.split("```json")[1].split("```")[0].strip()
+            elif "```" in content: content = content.split("```")[1].split("```")[0].strip()
+                
             try:
-                if image_bytes:
+                res = json.loads(content)
+                if not res.get("valid"):
+                    await status_msg.edit_caption(
+                        caption=get_msg("learn_word_not_found_no_suggestion", user_id).format(word=target_text),
+                        parse_mode=ParseMode.MARKDOWN
+                    )
+                    return
+
+                det_lang = res.get("lang", "Unknown")
+                det_lang_code = res.get("lang_code", target_lang)
+                det_dict = res.get("dict", "General")
+                
+                if res.get("is_correction"):
+                    suggestion = res.get("suggestion", target_text)
+                    await status_msg.edit_caption(
+                        caption=get_msg("learn_word_not_found", user_id).format(word=target_text, suggestion=suggestion, lang=det_lang, dict=det_dict),
+                        parse_mode=ParseMode.MARKDOWN
+                    )
+                else:
+                    await status_msg.edit_caption(
+                        caption=get_msg("learn_searching_stats", user_id).format(word=target_text, lang=det_lang, dict=det_dict),
+                        parse_mode=ParseMode.MARKDOWN
+                    )
+
+                # Extract slides
+                variations = res.get("slides")
+                if not variations or not isinstance(variations, list): raise ValueError("Empty slides")
+                variations = variations[:3]
+
+            except Exception:
+                # Basic fallback
+                translated_text = await translate_text(target_text, target_lang)
+                img_prompt = await generate_visual_prompt(target_text)
+                variations = [{
+                    "word": translated_text,
+                    "phonetic": "",
+                    "meaning": get_msg("learn_fallback_meaning", user_id),
+                    "sentence": "Example sentence goes here.",
+                    "translation": get_msg("learn_fallback_translation", user_id),
+                    "prompt": img_prompt
+                }]
+
+            # 5. Sequential Delivery (Download & Send one-by-one)
+            logger.info("🎬 Starting sequential delivery to avoid timeouts...")
+            
+            for i, var in enumerate(variations):
+                # Update progress for queue visibility
+                waiter_entry["progress"] = f"{i+1}/3"
+                await refresh_learn_queue()
+
+                # If this is the start of sending real content, remove the temporary status GIF
+                if i == 0 and status_msg:
+                    try: 
+                        await status_msg.delete()
+                        status_msg = None # Clear to avoid trying to delete again later
+                    except: pass
+
+                if i > 0: await asyncio.sleep(3.5)
+                    
+                word = var.get("word", "")
+                phonetic = var.get("phonetic", "")
+                meaning = var.get("meaning", "")
+                sentence = var.get("sentence", "")
+                translation = var.get("translation", "")
+                img_prompt = var.get("prompt", target_text)
+                
+                # --- Per-Slide Image Download ---
+                image_bytes = None
+                max_retries = 3 # Increased retries
+                for attempt in range(max_retries + 1):
+                    try:
+                        if attempt > 0: await asyncio.sleep(attempt * 1.5)
+                        encoded = urllib.parse.quote(img_prompt)
+                        seed = int(asyncio.get_event_loop().time()) + i + (attempt * 15)
+                        url = f"https://pollinations.ai/p/{encoded}?width=1024&height=1024&seed={seed}&nologo=true"
+                        
+                        def dl():
+                            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+                            # Increased timeout to 90s for reliability
+                            with urllib.request.urlopen(req, timeout=90) as r: return r.read()
+                        
+                        image_bytes = await asyncio.to_thread(dl)
+                        if image_bytes and len(image_bytes) > 5000: break # Ensure it's a real image
+                    except Exception as e:
+                        logger.warning(f"Image {i} attempt {attempt+1} failed: {e}")
+                        if attempt == max_retries:
+                            logger.error(f"Image {i} permanently failed after {max_retries+1} attempts.")
+
+                try:
                     target_flag = LANG_FLAGS.get(target_lang, "🌐")
                     user_flag = LANG_FLAGS.get(user_lang, "🇮🇷")
-                    
-                    photo_buffer = io.BytesIO(image_bytes)
-                    photo_buffer.name = f"learn_{i}.jpg"
                     
                     caption = (
                         f"💡 **{word}** {phonetic}\n"
@@ -599,93 +711,73 @@ async def cmd_learn_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         f"{user_flag} {translation}\n\n"
                         f"━━━━━━━━━━━━━━\n{get_msg('learn_slide_footer', user_id).format(index=i+1)}"
                     )
-                    
-                    # Interaction
-                    keyboard = InlineKeyboardMarkup([[
-                        InlineKeyboardButton(get_msg("learn_btn_listen", user_id), callback_data=f"listen:{audio_id}")
-                    ]])
-                    
-                    # Send Photo
-                    photo_msg = await context.bot.send_photo(
-                        chat_id=msg.chat_id,
-                        photo=photo_buffer,
-                        caption=caption,
-                        parse_mode='Markdown',
-                        reply_markup=keyboard,
-                        reply_to_message_id=last_msg_id,
-                        read_timeout=150,
-                        write_timeout=150
-                    )
-                    last_msg_id = photo_msg.message_id
-                    
-                    # Send Audio Sequential (No reply as requested)
-                    tts_text = f"{word}. {sentence}"
-                    audio_buffer = await text_to_speech(tts_text, target_lang)
-                    voice_msg = await context.bot.send_voice(
-                        chat_id=msg.chat_id,
-                        voice=audio_buffer,
-                        caption=f"🔊 {word}",
-                        read_timeout=120
-                    )
-                    
-                    # Store in cache for Listen button
-                    LEARN_CACHE[audio_id] = audio_buffer
-                    # We don't link audio to chain to see how it looks
-                else:
-                    raise Exception("No image data available")
 
-            except Exception as item_e:
-                logger.error(f"❌ Error sending item {i+1}: {item_e}")
-                fb_msg = await context.bot.send_message(
-                    chat_id=msg.chat_id,
-                    text=f"💡 **{word}**\n`{sentence}`",
-                    parse_mode='Markdown',
-                    reply_markup=keyboard,
-                    reply_to_message_id=last_msg_id
-                )
-                last_msg_id = fb_msg.message_id
+                    current_slide_msg = None
+                    if image_bytes:
+                        photo_buffer = io.BytesIO(image_bytes)
+                        photo_buffer.name = f"learn_{i}.jpg"
+                        current_slide_msg = await context.bot.send_photo(
+                            chat_id=msg.chat_id,
+                            photo=photo_buffer,
+                            caption=caption,
+                            parse_mode='Markdown',
+                            reply_to_message_id=original_msg_id, # Anchor to the specific request
+                            read_timeout=150
+                        )
+                    else:
+                        current_slide_msg = await context.bot.send_message(
+                            chat_id=msg.chat_id,
+                            text=caption,
+                            parse_mode='Markdown',
+                            reply_to_message_id=original_msg_id
+                        )
+                    
+                    # Audio (linked to the SLIDE)
+                    # 1. Target Language (Word + Sentence)
+                    target_tts = f"{word}. {sentence}"
+                    target_audio_buf = await text_to_speech(target_tts, target_lang)
+                    
+                    # 2. Interface Language (Translation)
+                    trans_audio_buf = await text_to_speech(translation, user_lang)
+                    
+                    # 3. Merge them (Podcast Style)
+                    final_audio_buf = await merge_bilingual_audio(target_audio_buf, trans_audio_buf)
+                    
+                    if final_audio_buf and current_slide_msg:
+                        await context.bot.send_voice(
+                            chat_id=msg.chat_id,
+                            voice=final_audio_buf,
+                            caption=f"🔊 {word}",
+                            reply_to_message_id=current_slide_msg.message_id, # Link audio to its slide
+                            read_timeout=120
+                        )
 
-        await status_msg.delete()
-        increment_daily_usage(user_id)
-        
-    except Exception as e:
-        logger.error(f"Learn Error: {e}")
-        if 'status_msg' in locals():
-            await status_msg.edit_text(get_msg("learn_error", user_id))
+                except Exception as item_e:
+                    logger.info(f"❌ Error sending item {i+1}: {item_e}")
+                    try:
+                        await context.bot.send_message(
+                            chat_id=msg.chat_id,
+                            text=f"❌ **{word}**\nError: {item_e}",
+                            reply_to_message_id=original_msg_id
+                        )
+                    except: pass
 
-async def callback_learn_audio_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle the 'Listen' button click in /learn slides."""
-    query = update.callback_query
-    await query.answer() # Ack the click
-    
-    try:
-        data = query.data.split(":")
-        if len(data) < 2: return
-        audio_id = data[1]
-        
-        # Remove button immediately to indicate processing/completion
-        try:
-            await query.edit_message_reply_markup(reply_markup=None)
-        except Exception: pass
-        
-        if audio_id not in LEARN_CACHE:
-            await query.message.reply_text("❌ متأسفانه این فایل صوتی موقت منقضی شده است.")
-            return
+            try: await status_msg.delete()
+            except: pass
             
-        tts_text, lang = LEARN_CACHE[audio_id]
-        
-        # Generate and Send Voice as a reply to the specific photo
-        audio_buffer = await text_to_speech(tts_text, lang)
-        await context.bot.send_voice(
-            chat_id=query.message.chat_id,
-            voice=audio_buffer,
-            caption="🔊 تلفظ کلمه و جمله نمونه",
-            reply_to_message_id=query.message.message_id,
-            read_timeout=90
-        )
-    except Exception as e:
-        logger.error(f"Callback Audio Error: {e}")
-        await query.message.reply_text("❌ خطا در ارسال فایل صوتی.")
+            # FINISHED: Remove from waiters and refresh positions for others
+            if waiter_entry in LEARN_WAITERS:
+                LEARN_WAITERS.remove(waiter_entry)
+            await refresh_learn_queue()
+            
+            increment_daily_usage(user_id)
+            
+        except Exception as e:
+            logger.error(f"Learn Loop Error: {e}")
+            try:
+                await status_msg.edit_text(get_msg("learn_error", user_id))
+            except: pass
+
 
 async def analyze_text_gemini(text, status_msg=None, lang_code="fa"):
     """Analyze text using Smart Chain Fallback"""
@@ -893,11 +985,13 @@ MESSAGES = {
         "learn_quota_exceeded": "❌ سهمیه روزانه شما تمام شده است.",
         "learn_no_text": "❌ لطفاً متن یا کلمه‌ای برای یادگیری بفرستید (مثال: /learn apple یا در پاسخ به یک پیام).",
         "learn_example_sentence": "📖 **جمله نمونه:**",
-        "learn_slide_footer": "🎓 **آموزش ({index}/3)**",
+        "learn_slide_footer": "🎓 *آموزش ({index}/3)*",
+        "learn_queue_pos": " (نفر {pos} در صف...)",
+        "learn_word_not_found": "❌ کلمه **{word}** پیدا نشد.\nآیا منظورتان **{suggestion}** بود؟\n(منبع: {lang} - {dict})",
+        "learn_word_not_found_no_suggestion": "❌ کلمه **{word}** در هیچ دیکشنری معتبری پیدا نشد. لطفاً املای آن را بررسی کنید.",
         "learn_error": "❌ خطایی در فرآیند آموزش رخ داد.",
         "learn_fallback_meaning": "ترجمه مستقیم",
         "learn_fallback_translation": "ترجمه جمله نمونه",
-        "learn_btn_listen": "🎧 شنیدن",
         "status_label_user": "کاربر",
         "status_label_type": "نوع",
         "status_label_quota": "سهمیه امروز",
@@ -984,11 +1078,13 @@ MESSAGES = {
         "learn_quota_exceeded": "❌ Daily limit reached.",
         "learn_no_text": "❌ Please provide a word or phrase (e.g., /learn apple).",
         "learn_example_sentence": "📖 **Example Sentence:**",
-        "learn_slide_footer": "🎓 **Education ({index}/3)**",
+        "learn_slide_footer": "🎓 *Education ({index}/3)*",
+        "learn_queue_pos": " (Position {pos} in queue...)",
+        "learn_word_not_found": "❌ **{word}** not found.\nDid you mean **{suggestion}**?\n(Source: {lang} - {dict})",
+        "learn_word_not_found_no_suggestion": "❌ Word '**{word}**' was not found in any reliable dictionary. Please check your spelling.",
         "learn_error": "❌ An error occurred during the educational process.",
         "learn_fallback_meaning": "Direct translation",
         "learn_fallback_translation": "Example sentence translation",
-        "learn_btn_listen": "🎧 Listen",
         "status_label_user": "User",
         "status_label_type": "Type",
         "status_label_quota": "Daily Quota",
@@ -1076,10 +1172,12 @@ MESSAGES = {
         "learn_no_text": "❌ Veuillez fournir un mot ou une phrase (ex: /learn apple).",
         "learn_example_sentence": "📖 **Exemple de phrase:**",
         "learn_slide_footer": "🎓 **Éducation ({index}/3)**",
+        "learn_searching_stats": "🔍 Recherche de **{word}** en {lang} (Source : {dict})...",
+        "learn_word_not_found": "⚠️ Mot '**{word}**' introuvable. Affichage des résultats pour '**{suggestion}**' trouvé en {lang} ({dict}) à la place...",
+        "learn_word_not_found_no_suggestion": "❌ Le mot '**{word}**' n'a été trouvé dans aucun dictionnaire fiable. Veuillez vérifier l'orthographe.",
         "learn_error": "❌ Une erreur est survenue pendant le processus éducatif.",
         "learn_fallback_meaning": "Traduction directe",
         "learn_fallback_translation": "Traduction de la phrase d'exemple",
-        "learn_btn_listen": "🎧 Écouter",
         "status_label_user": "Utilisateur",
         "status_label_type": "Type",
         "status_label_quota": "Quota Journalier",
@@ -1167,11 +1265,13 @@ MESSAGES = {
         "learn_quota_exceeded": "❌ 일일 한도에 도달했습니다.",
         "learn_no_text": "❌ 단어나 문장을 입력해주세요 (예: /learn apple).",
         "learn_example_sentence": "📖 **예문:**",
-        "learn_slide_footer": "🎓 **교육 ({index}/3)**",
+        "learn_slide_footer": "🎓 *학습 ({index}/3)*",
+        "learn_queue_pos": " (대기 순서 {pos}번...)",
+        "learn_word_not_found": "❌ **{word}** 을(를) 찾을 수 없습니다.\n혹시 **{suggestion}** 을(를) 찾으시나요?\n(출처: {lang} - {dict})",
+        "learn_word_not_found_no_suggestion": "❌ **{word}** 단어를 신뢰할 수 있는 사전에서 찾을 수 없습니다. 철자를 확인해 주세요.",
         "learn_error": "❌ 교육 과정 중 오류가 발생했습니다.",
         "learn_fallback_meaning": "직역",
         "learn_fallback_translation": "예문 번역",
-        "learn_btn_listen": "🎧 듣기",
         "status_label_user": "사용자",
         "status_label_type": "유형",
         "status_label_quota": "일일 사용량",
@@ -1189,17 +1289,33 @@ MESSAGES = {
 
 def get_msg(key, user_id=None):
     """Retrieve localized message based on User ID or Global Settings"""
+    # 1. Determine user's current language
     lang = "fa"
-    if user_id and user_id in USER_LANG:
-        lang = USER_LANG[user_id]
-        # logger.info(f"DEBUG: Found User {user_id} Lang: {lang}") # Debug
+    if user_id:
+        if user_id in USER_LANG:
+            lang = USER_LANG[user_id]
+        else:
+            # First interaction via command? Initialize default
+            USER_LANG[user_id] = "fa"
+            lang = "fa"
     else:
         lang = SETTINGS.get("lang", "fa")
     
-    # Validation
-    if lang not in MESSAGES: lang = "fa"
+    # 2. Validation & Fallback Logic
+    if lang not in MESSAGES: 
+        lang = "fa"
     
-    return MESSAGES.get(lang, MESSAGES["en"]).get(key, MESSAGES["en"].get(key, ""))
+    # Priority: User Lang Key -> English Key -> Farsi Key -> Empty String
+    target_dict = MESSAGES.get(lang, MESSAGES["fa"])
+    if key in target_dict:
+        return target_dict[key]
+    
+    # Fallback to English if key missing in target lang
+    if key in MESSAGES["en"]:
+        return MESSAGES["en"][key]
+        
+    # Fallback to Farsi as ultimate default
+    return MESSAGES["fa"].get(key, "")
 
 # ==============================================================================
 # LOGIC: MENU & KEYBOARDS
@@ -1538,14 +1654,14 @@ async def global_message_handler(update: Update, context: ContextTypes.DEFAULT_T
         if not detail_text:
             await msg.reply_text("⛔ هیچ تحلیل ذخیره‌شده‌ای موجود نیست.")
             return
-        status_msg = await msg.reply_text("🔊 در حال ساخت فایل صوتی...")
+        status_msg = await msg.reply_text(get_msg("voice_generating", user_id))
         try:
             audio_buffer = await text_to_speech(detail_text, lang)
             await msg.reply_voice(voice=audio_buffer, caption="🔊 نسخه صوتی تحلیل")
             await status_msg.delete()
         except Exception as e:
             logger.error(f"TTS Error: {e}")
-            await status_msg.edit_text("❌ خطا در ساخت فایل صوتی")
+            await status_msg.edit_text(get_msg("voice_error", user_id))
         return
         
     # Help
@@ -1624,8 +1740,9 @@ async def global_message_handler(update: Update, context: ContextTypes.DEFAULT_T
         # Show remaining requests (skip for admin)
         if user_id != SETTINGS["admin_id"]:
             limit = get_user_limit(user_id)
+            limit = get_user_limit(user_id)
             await msg.reply_text(
-                f"📊 {remaining}/{limit} درخواست باقی‌مانده امروز",
+                get_msg("remaining_requests", user_id).format(remaining=remaining, limit=limit),
                 reply_to_message_id=status_msg.message_id
             )
         return
@@ -1702,11 +1819,20 @@ TTS_VOICES = {
 
 async def text_to_speech(text: str, lang: str = "fa") -> io.BytesIO:
     """Convert text to speech using edge-tts. Returns audio as BytesIO."""
-    voice = TTS_VOICES.get(lang, TTS_VOICES["fa"])
+    # Ensure lang is 2-letter
+    lang_key = lang[:2].lower()
+    voice = TTS_VOICES.get(lang_key, TTS_VOICES["en"]) # Fallback to English if unknown
+    
+    # Heuristic: If text contains Persian/Arabic chars, FORCE Persian voice
+    # This regex is more comprehensive for all Persian characters
+    if re.search(r'[\u0600-\u06FF\uFB50-\uFDFF\uFE70-\uFEFF]', text):
+        voice = TTS_VOICES["fa"]
     
     # Clean text for TTS (remove markdown)
     clean_text = re.sub(r'\*\*|▫️|━+|✅|❌|⚠️|🧠|📄|💡', '', text)
     clean_text = re.sub(r'\[.*?\]', '', clean_text)  # Remove markdown links
+    # Replace slashes with a double pause (two commas + pauses) for natural dictation
+    clean_text = clean_text.replace(" / ", ", ... , ... ")
     clean_text = clean_text.strip()
     
     # Limit length for TTS (avoid very long audio)
@@ -1722,6 +1848,42 @@ async def text_to_speech(text: str, lang: str = "fa") -> io.BytesIO:
     
     audio_buffer.seek(0)
     return audio_buffer
+
+async def merge_bilingual_audio(target_audio: io.BytesIO, trans_audio: io.BytesIO) -> io.BytesIO:
+    """Merge two audio streams with a silence gap using ffmpeg."""
+    import tempfile
+    import os
+    import subprocess
+    
+    with tempfile.TemporaryDirectory() as tmpdir:
+        t_path = os.path.join(tmpdir, "target.mp3")
+        tr_path = os.path.join(tmpdir, "trans.mp3")
+        sil_path = os.path.join(tmpdir, "silence.mp3")
+        out_path = os.path.join(tmpdir, "merged.mp3")
+        
+        with open(t_path, "wb") as f: f.write(target_audio.getvalue())
+        with open(tr_path, "wb") as f: f.write(trans_audio.getvalue())
+        
+        # Generate 1 sec of silence
+        subprocess.run([
+            "ffmpeg", "-y", "-f", "lavfi", "-i", "anullsrc=r=24000:cl=mono", 
+            "-t", "1", "-q:a", "9", sil_path
+        ], capture_output=True)
+        
+        # Concat: Target -> Silence -> Translation
+        # filter_complex to ensure sample rate match and smooth join
+        cmd = [
+            "ffmpeg", "-y",
+            "-i", t_path, "-i", sil_path, "-i", tr_path,
+            "-filter_complex", "[0:a][1:a][2:a]concat=n=3:v=0:a=1[out]",
+            "-map", "[out]", "-acodec", "libmp3lame", "-b:a", "64k", out_path
+        ]
+        subprocess.run(cmd, capture_output=True)
+        
+        if os.path.exists(out_path):
+            with open(out_path, "rb") as f:
+                return io.BytesIO(f.read())
+    return target_audio # Fallback
 
 # Language code mapping for /voice command
 LANG_ALIASES = {

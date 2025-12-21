@@ -4,7 +4,7 @@ A powerful, intelligent Telegram bot that downloads Instagram videos, verifies f
 
 **Rewritten from scratch for speed, stability, and ease of use.**
 
-![Version](https://img.shields.io/badge/Version-3.5.0-blue.svg)
+![Version](https://img.shields.io/badge/Version-4.0.0-blue.svg)
 ![Python](https://img.shields.io/badge/Python-3.9+-yellow.svg)
 ![License](https://img.shields.io/badge/License-MIT-green.svg)
 
@@ -25,8 +25,10 @@ A powerful, intelligent Telegram bot that downloads Instagram videos, verifies f
 ### 🎓 Educational Mode (/learn)
 *   **Multimodal Learning:** Provides 3 nuanced variations for any word/phrase.
 *   **AI Visuals:** Generates unique, relevant images for each variation using Pollinations.ai.
-*   **Dual-Audio:** Sends high-quality voice messages for both the word and a sample sentence.
-*   **Bilingual Captions:** Includes phonetic pronunciation, meaning, and translated example sentences.
+*   **Mini-Podcast Audio:** Sophisticated Bilingual TTS that reads the Target Sentence then the Translation with a natural delay.
+*   **Triple-Format Nouns:** Strictly provides nouns as `Indefinite / Definite / Plural` (e.g., `un / le / des`).
+*   **Dynamic UI:** Shows real-time progress (e.g., `1/3`) on animated Mr. Bean status GIFs.
+*   **Natural Pacing:** Intelligent TTS silences instead of reading slashes for a human-like recitation.
 *   **Visual Polish:** Uses language flags (🇰🇷, 🇺🇸, 🇫🇷, 🇮🇷) for a clean, professional look.
 
 ### 🔊 Voice Response (TTS)

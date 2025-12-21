@@ -13,3 +13,4 @@ langchain-openai>=0.2.0
 
 # TTS (Text-to-Speech)
 edge-tts>=6.1.0
+aiofiles>=23.0.0
