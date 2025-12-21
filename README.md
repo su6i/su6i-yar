@@ -86,7 +86,85 @@ GEMINI_API_KEY=your_gemini_api_key
 
 ---
 
+---
+
 ## 🎮 Usage
+
+### 💻 Run on Personal Computer (Local Mode)
+
+Perfect for personal use - run the bot on your laptop/desktop:
+
+```bash
+# 1. Activate virtual environment (recommended)
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# 2. Install dependencies
+pip install -r requirements.txt
+
+# 3. Run the bot
+python3 su6i_yar.py
+```
+
+> **Important:** The bot will only work while your computer is running. Close the terminal = bot stops.
+
+#### 🔄 Development Mode (Auto-Restart on Changes)
+
+```bash
+./run_dev.sh
+```
+
+---
+
+### 🖥️ Run on Server (24/7 Mode)
+
+For always-on availability, run on a VPS (Ubuntu/Debian):
+
+```bash
+# 1. Clone and setup
+git clone https://github.com/su6i/su6i-yar.git
+cd su6i-yar
+
+# 2. Setup Virtual Environment
+python3 -m venv venv
+source venv/bin/activate
+
+# 3. Install dependencies & tools
+pip install -r requirements.txt
+sudo apt update && sudo apt install ffmpeg -y
+
+# 4. Create systemd service
+sudo nano /etc/systemd/system/su6i-yar.service
+```
+
+Add this content (replace `/path/to/su6i-yar` and `your_user`):
+```ini
+[Unit]
+Description=Su6i Yar Telegram Bot
+After=network.target
+
+[Service]
+User=your_user
+Group=your_user
+WorkingDirectory=/path/to/su6i-yar
+ExecStart=/path/to/su6i-yar/venv/bin/python su6i_yar.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Then:
+```bash
+# 5. Enable and start
+sudo systemctl daemon-reload
+sudo systemctl enable su6i-yar
+sudo systemctl start su6i-yar
+
+# 6. Check status
+sudo systemctl status su6i-yar
+```
 
 ### ⌨️ Menu Buttons
 
