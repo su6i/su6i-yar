@@ -426,6 +426,7 @@ async def cmd_check_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def get_smart_chain(grounding=True):
     """Constructs the self-healing AI model chain (8-Layer Defense)"""
     logger.info(f"⛓️ Building Smart AI Chain (Grounding: {grounding})...")
+    logger.info(f"🔑 Keys found: Gemini={'Yes' if GEMINI_API_KEY else 'No'}, DeepSeek={'Yes' if DEEPSEEK_API_KEY else 'No'}")
     
     defaults = {"google_api_key": GEMINI_API_KEY, "temperature": 0.3}
 
@@ -887,7 +888,7 @@ async def analyze_text_gemini(text, status_msg=None, lang_code="fa"):
         )
         
         chain = get_smart_chain()
-        logger.info("🚀 Invoking LangChain...")
+        logger.info(f"🚀 Invoking LangChain with 8-Layer Defense for user {user_id}...")
         
         # Add callback for live model name updates
         config = {}
@@ -895,7 +896,14 @@ async def analyze_text_gemini(text, status_msg=None, lang_code="fa"):
             config["callbacks"] = [StatusUpdateCallback(status_msg, get_msg)]
         
         # Invoke Chain (Async) with callbacks
-        response = await chain.ainvoke([HumanMessage(content=prompt_text)], config=config)
+        try:
+            response = await chain.ainvoke([HumanMessage(content=prompt_text)], config=config)
+        except Exception as chain_error:
+            logger.error(f"🚨 CRITICAL CHAIN FAILURE: Type={type(chain_error).__name__} | Msg={chain_error}")
+            # Log the full traceback for deep debugging
+            import traceback
+            logger.error(traceback.format_exc())
+            raise # Re-raise to be caught by the outer block which sends 'price_error'
         
         # Final status update with actual model name
         if status_msg:
