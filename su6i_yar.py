@@ -1348,8 +1348,23 @@ MESSAGES = {
         "status_private_error": "⛔ 먼저 @su6i\\_yar\\_bot으로 개인 메시지를 보내주세요.",
         "analyzing_model": "🧠 {model}(으)로 분석 중...",
         "analysis_complete": "✅ {model} 분석 완료\n(응답 준비 중...)",
-        "analysis_header": "🧠 **{model}의 분석**",
-        "analysis_footer_note": "\n\n━━━━━━━━━━━━━━\n💡 **전체 분석 상세 정보:**\n이 메시지에 `/detail`로 답장하세요"
+        "analysis_footer_note": "\n\n━━━━━━━━━━━━━━\n💡 **전체 분석 상세 정보:**\n이 메시지에 `/detail`로 답장하세요",
+        "btn_price": "💰 환율 및 금 시세",
+        "price_loading": "⏳ tgju.org에서 실시간 시세를 가져오는 중...",
+        "price_error": "❌ tgju.org에서 시세를 가져오는 중 오류가 발생했습니다. 다시 시도해 주세요.",
+        "price_msg": (
+            "💰 **실시간 시장 시세 (tgju.org)**\n"
+            "━━━━━━━━━━━━━━\n"
+            "🇺🇸 **미국 달러 (USD):** `{usd}` 리알\n"
+            "🇪🇺 **유로 (EUR):** `{eur}` 리알\n"
+            "🟡 **18k 금:** `{gold18}` 리알\n"
+            "🌐 **국제 금 온스:** `{ons}`$\n"
+            "━━━━━━━━━━━━━━\n"
+            "⚖️ **금 시세 분석:**\n"
+            "계산된 가격 (온스 당 18k):\n"
+            "`{theoretical}` 리알\n"
+            "시장 차ی: `{diff}` 리알"
+        )
     }
 }
 
