@@ -795,7 +795,7 @@ async def cmd_learn_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except: pass
 
 
-async def analyze_text_gemini(text, status_msg=None, lang_code="fa"):
+async def analyze_text_gemini(text, status_msg=None, lang_code="fa", user_id=None):
     """Analyze text using Smart Chain Fallback"""
     # Fix: Allow analysis even if disabled in settings (controlled by caller)
     # if not SETTINGS["fact_check"]: return None
@@ -1951,7 +1951,7 @@ async def global_message_handler(update: Update, context: ContextTypes.DEFAULT_T
             get_msg("analyzing", user_id),
             reply_to_message_id=msg.message_id
         )
-        response = await analyze_text_gemini(target_text, status_msg, lang)
+        response = await analyze_text_gemini(target_text, status_msg, lang, user_id)
         
         # Increment usage and get remaining
         remaining = increment_daily_usage(user_id)
