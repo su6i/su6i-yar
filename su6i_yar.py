@@ -431,11 +431,11 @@ def get_smart_chain(grounding=True):
     defaults = {"google_api_key": GEMINI_API_KEY, "temperature": 0.3}
 
     # 1. Gemini 2.5 Pro (Primary)
-    model_kwargs = {"tools": [{"google_search_retrieval": {}}]} if grounding else {}
+    # model_kwargs = {"tools": [{"google_search_retrieval": {}}]} if grounding else {}
     primary = ChatGoogleGenerativeAI(
         model="gemini-2.5-pro", 
-        **defaults,
-        model_kwargs=model_kwargs
+        **defaults
+        # model_kwargs=model_kwargs  <-- Removed to fix ValidationError
     )
     
     # Define Fallbacks in Order
