@@ -369,6 +369,12 @@ SEARCH_GIF_FALLBACK = "https://media1.tenor.com/m/kI2WQAiG3KAAAAAC/waiting.gif"
 
 # ... (Localization Dictionary MESSAGES is unchanged, skipping for brevity) ...
 
+
+class FallbackErrorCallback(AsyncCallbackHandler):
+    """Log errors when a model fails in the fallback chain"""
+    async def on_llm_error(self, error: Exception, **kwargs):
+        logger.warning(f"⚠️ Model Failure in Chain: {error}")
+
 async def cmd_check_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info("✅ Command /check triggered")
     msg = update.message
@@ -404,7 +410,7 @@ async def cmd_check_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         get_msg("analyzing", user_id),
         reply_to_message_id=msg.message_id
     )
-    response = await analyze_text_gemini(target_text, status_msg, lang)
+    response = await analyze_text_gemini(target_text, status_msg, lang, user_id=user_id)
     
     # Increment usage and get remaining
     remaining = increment_daily_usage(user_id)
@@ -856,6 +862,7 @@ async def analyze_text_gemini(text, status_msg=None, lang_code="fa", user_id=Non
             "PART 1: SUMMARY (VERY SHORT - Mobile Display)\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             "IMPORTANT: Keep this section VERY SHORT (max 500 words)\n"
+            "RULE: If the text contains only ONE simple claim, analyze ONLY that claim. DO NOT invent 'implied' claims unless they are dangerous or misleading.\n"
             f"Format EXACTLY like this:\n\n"
             f"{overall_status_label} [✅/⚠️/❌]\n\n"
             f"{comparison_table_label}\n"
@@ -899,7 +906,12 @@ async def analyze_text_gemini(text, status_msg=None, lang_code="fa", user_id=Non
         
         # Invoke Chain (Async) with callbacks
         try:
-            response = await chain.ainvoke([HumanMessage(content=prompt_text)], config=config)
+            # Add error logging callback (Ensure correct instantiation)
+            run_config = config.copy() if config else {}
+            run_config["callbacks"] = run_config.get("callbacks", []) + [FallbackErrorCallback()]
+            
+            response = await chain.ainvoke([HumanMessage(content=prompt_text)], config=run_config)
+
         except Exception as chain_error:
             logger.error(f"🚨 CRITICAL CHAIN FAILURE: Type={type(chain_error).__name__} | Msg={chain_error}")
             # Log the full traceback for deep debugging
@@ -1951,7 +1963,7 @@ async def global_message_handler(update: Update, context: ContextTypes.DEFAULT_T
             get_msg("analyzing", user_id),
             reply_to_message_id=msg.message_id
         )
-        response = await analyze_text_gemini(target_text, status_msg, lang, user_id)
+        response = await analyze_text_gemini(text, status_msg, lang, user_id)
         
         # Increment usage and get remaining
         remaining = increment_daily_usage(user_id)
