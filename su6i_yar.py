@@ -1411,42 +1411,34 @@ def get_msg(key, user_id=None):
 # ==============================================================================
 
 def get_main_keyboard(user_id):
-    """Generate the dynamic keyboard based on User Language"""
+    """Generate a compact 3-row keyboard for all user types"""
     is_admin = user_id == SETTINGS["admin_id"]
     
-    # 1. Row 1: System Info, Help, AI Voice (Static)
-    row_system = [
-        KeyboardButton(get_msg("btn_status", user_id)), 
-        KeyboardButton(get_msg("btn_help", user_id)), 
-        KeyboardButton(get_msg("btn_voice", user_id))
+    # Row 1: Core Features (Status, Help, Price)
+    row1 = [
+        KeyboardButton(get_msg("btn_status", user_id)),
+        KeyboardButton(get_msg("btn_help", user_id)),
+        KeyboardButton(get_msg("btn_price", user_id))
     ]
     
-    # 2. Row 2: Price Button (Base for all users)
-    row_price = [KeyboardButton(get_msg("btn_price", user_id))]
-    
-    # 3. Row 3: Admin Row (Only for admin)
-    row_admin = []
+    # Row 2: Dynamic row (Voice + Admin)
+    row2 = [KeyboardButton(get_msg("btn_voice", user_id))]
     if is_admin:
-        row_admin = [
-            KeyboardButton(get_msg("btn_dl", user_id)), 
-            KeyboardButton(get_msg("btn_fc", user_id)), 
-            KeyboardButton(get_msg("btn_stop", user_id))
-        ]
-        
-    # 4. Row 4: Language Selection
-    row_langs = [
+        # For admin, we mix Voice with the most critical toggle
+        row2.append(KeyboardButton(get_msg("btn_dl", user_id)))
+        row2.append(KeyboardButton(get_msg("btn_fc", user_id)))
+        # Note: 'Stop Bot' is moved to row2 for admin to stay within 3 rows
+        row2.append(KeyboardButton(get_msg("btn_stop", user_id)))
+    
+    # Row 3: Languages (Always at bottom)
+    row3 = [
         KeyboardButton("🇮🇷 فارسی"), 
         KeyboardButton("🇺🇸 English"), 
         KeyboardButton("🇫🇷 Français"), 
         KeyboardButton("🇰🇷 한국어")
     ]
     
-    # Assemble KB
-    kb = [row_system, row_price]
-    if row_admin:
-        kb.append(row_admin)
-    kb.append(row_langs)
-    
+    kb = [row1, row2, row3]
     return ReplyKeyboardMarkup(kb, resize_keyboard=True)
 
 async def send_welcome(update: Update):
