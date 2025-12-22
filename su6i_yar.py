@@ -1949,7 +1949,16 @@ async def global_message_handler(update: Update, context: ContextTypes.DEFAULT_T
             get_msg("analyzing", user_id),
             reply_to_message_id=msg.message_id
         )
-        response = await analyze_text_gemini(text, status_msg, lang)
+        logger.info(f"⏳ Calling analyze_text_gemini for user {user_id}...")
+        try:
+            response = await analyze_text_gemini(text, status_msg, lang) # Kept original arguments and assignment for functionality
+            logger.info(f"✅ analyze_text_gemini completed for user {user_id}")
+        except Exception as e:
+            logger.error(f"❌ Error during analyze_text_gemini call: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            await status_msg.edit_text(get_msg("price_error", user_id)) # Assuming price_error is a generic error message
+            return # Exit if analysis fails
         
         # Increment usage and get remaining
         remaining = increment_daily_usage(user_id)
