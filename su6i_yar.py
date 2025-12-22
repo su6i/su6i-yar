@@ -934,7 +934,7 @@ MESSAGES = {
         "btn_status": "📊 وضعیت ربات",
         "btn_help": "🆘 راهنما",
         "btn_dl": "📥 مدیریت دانلود",
-        "btn_fc": "🧠 مدیریت هوش مصنوعی",
+        "btn_fc": "🧠 راستی‌آزمایی",
         "btn_stop": "🛑 خاموش کردن ربات",
         "btn_voice": "🔊 صوتی",
         "btn_lang_fa": "🇮🇷 فارسی",
@@ -1481,20 +1481,31 @@ async def fetch_market_data():
             
         soup = BeautifulSoup(resp.text, 'html.parser')
         
-        # Scrape data using verified selectors
-        def get_val(selector):
-            el = soup.select_one(selector)
-            if el:
-                # Remove commas and non-numeric chars for calculation, but keep raw for display
-                raw = el.get_text(strip=True)
-                val = re.sub(r'[^\d.]', '', raw)
-                return raw, float(val) if val else 0.0
+        # Scrape data using verified selectors with fallbacks
+        def get_val(selectors):
+            if isinstance(selectors, str):
+                selectors = [selectors]
+            
+            for selector in selectors:
+                el = soup.select_one(selector)
+                if el:
+                    # Remove commas and non-numeric chars for calculation, but keep raw for display
+                    raw = el.get_text(strip=True)
+                    # For Euro particularly, sometimes the text has extra labels, clean it
+                    if "یورو" in raw: raw = raw.replace("یورو", "").strip()
+                    val = re.sub(r'[^\d.]', '', raw)
+                    if val:
+                        return raw, float(val)
             return "N/A", 0.0
 
-        usd_raw, usd_val = get_val("li#l-price_dollar_rl span span")
-        eur_raw, eur_val = get_val("li#l-price_eur span span")
-        gold18_raw, gold18_val = get_val("li#l-geram18 span span")
-        ons_raw, ons_val = get_val("li#l-ons span span")
+        usd_raw, usd_val = get_val(["li#l-price_dollar_rl span span", "tr[data-market-nameslug='price_dollar_rl'] td.market-price"])
+        eur_raw, eur_val = get_val([
+            "li#l-price_eur span span", 
+            "tr[data-market-nameslug='price_eur'] td.market-price",
+            "tr[data-market-row='price_eur'] td.market-price"
+        ])
+        gold18_raw, gold18_val = get_val(["li#l-geram18 span span", "tr[data-market-nameslug='geram18'] td.market-price"])
+        ons_raw, ons_val = get_val(["li#l-ons span span", "tr[data-market-nameslug='ons'] td.market-price"])
 
         if usd_val == 0 or ons_val == 0:
             logger.warning("⚠️ Scraper returned zero for critical values. Check selectors.")
@@ -1872,7 +1883,7 @@ async def global_message_handler(update: Update, context: ContextTypes.DEFAULT_T
         return
 
     # Toggle FC
-    if text.startswith("🧠"):
+    if text.startswith("🧠") or "راستی‌آزمایی" in text:
         SETTINGS["fact_check"] = not SETTINGS["fact_check"]
         state = get_msg("fc_on", user_id) if SETTINGS["fact_check"] else get_msg("fc_off", user_id)
         await msg.reply_text(get_msg("action_fc", user_id).format(state=state))
