@@ -1414,16 +1414,38 @@ def get_main_keyboard(user_id):
     """Generate the dynamic keyboard based on User Language"""
     is_admin = user_id == SETTINGS["admin_id"]
     
-    # Base keyboard for all users
-    kb = [
-        [KeyboardButton(get_msg("btn_status", user_id)), KeyboardButton(get_msg("btn_help", user_id)), KeyboardButton(get_msg("btn_voice", user_id))],
-        [KeyboardButton(get_msg("btn_price", user_id))],
-        [KeyboardButton("🇮🇷 فارسی"), KeyboardButton("🇺🇸 English"), KeyboardButton("🇫🇷 Français"), KeyboardButton("🇰🇷 한국어")]
+    # 1. Row 1: System Info, Help, AI Voice (Static)
+    row_system = [
+        KeyboardButton(get_msg("btn_status", user_id)), 
+        KeyboardButton(get_msg("btn_help", user_id)), 
+        KeyboardButton(get_msg("btn_voice", user_id))
     ]
     
-    # Admin-only: Settings row
+    # 2. Row 2: Price Button (Base for all users)
+    row_price = [KeyboardButton(get_msg("btn_price", user_id))]
+    
+    # 3. Row 3: Admin Row (Only for admin)
+    row_admin = []
     if is_admin:
-        kb.insert(1, [KeyboardButton(get_msg("btn_dl", user_id)), KeyboardButton(get_msg("btn_fc", user_id)), KeyboardButton(get_msg("btn_stop", user_id))])
+        row_admin = [
+            KeyboardButton(get_msg("btn_dl", user_id)), 
+            KeyboardButton(get_msg("btn_fc", user_id)), 
+            KeyboardButton(get_msg("btn_stop", user_id))
+        ]
+        
+    # 4. Row 4: Language Selection
+    row_langs = [
+        KeyboardButton("🇮🇷 فارسی"), 
+        KeyboardButton("🇺🇸 English"), 
+        KeyboardButton("🇫🇷 Français"), 
+        KeyboardButton("🇰🇷 한국어")
+    ]
+    
+    # Assemble KB
+    kb = [row_system, row_price]
+    if row_admin:
+        kb.append(row_admin)
+    kb.append(row_langs)
     
     return ReplyKeyboardMarkup(kb, resize_keyboard=True)
 
