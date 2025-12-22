@@ -1030,15 +1030,15 @@ MESSAGES = {
         "price_msg": (
             "💰 **قیمت لحظه‌ای بازار (tgju.org)**\n"
             "━━━━━━━━━━━━━━\n"
-            "🇺🇸 **دلار:** `{usd}` ریال\n"
-            "🇪🇺 **یورو:** `{eur}` ریال\n"
-            "🟡 **طلا ۱۸ عیار:** `{gold18}` ریال\n"
+            "🇺🇸 **دلار:** `{usd_tm}` تومان\n"
+            "🇪🇺 **یورو:** `{eur_tm}` تومان\n"
+            "🟡 **طلا ۱۸ عیار:** `{gold18_tm}` تومان\n"
             "🌐 **انس جهانی:** `{ons}`$\n"
             "━━━━━━━━━━━━━━\n"
             "⚖️ **تحلیل حباب طلا:**\n"
             "قیمت محاسبه شده (انس به ۱۸):\n"
-            "`{theoretical}` ریال\n"
-            "اختلاف با بازار: `{diff}` ریال"
+            "`{theoretical_tm}` تومان\n"
+            "اختلاف با بازار: `{diff_tm}` تومان"
         )
     },
     "en": {
@@ -1518,6 +1518,7 @@ async def fetch_market_data():
         
         # Format helpers
         def fmt_curr(val): return f"{int(val):,}"
+        def fmt_tm(val): return f"{int(val/10):,}"
         
         data = {
             "usd": usd_raw,
@@ -1525,7 +1526,13 @@ async def fetch_market_data():
             "gold18": gold18_raw,
             "ons": ons_raw,
             "theoretical": fmt_curr(theoretical_val),
-            "diff": ("+" if diff_val > 0 else "") + fmt_curr(diff_val)
+            "diff": ("+" if diff_val > 0 else "") + fmt_curr(diff_val),
+            # Toman versions for Farsi
+            "usd_tm": fmt_tm(usd_val),
+            "eur_tm": fmt_tm(eur_val),
+            "gold18_tm": fmt_tm(gold18_val),
+            "theoretical_tm": fmt_tm(theoretical_val),
+            "diff_tm": ("+" if diff_val > 0 else "") + fmt_tm(diff_val)
         }
         
         MARKET_DATA_CACHE = data
