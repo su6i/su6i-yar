@@ -436,22 +436,21 @@ def get_smart_chain(grounding=True):
     
     defaults = {"google_api_key": GEMINI_API_KEY, "temperature": 0.3}
 
-    # 1. Gemini 2.5 Pro (Primary)
-    # model_kwargs = {"tools": [{"google_search_retrieval": {}}]} if grounding else {}
+    # 1. Gemini 3 Flash Preview (Primary - Experimental/Fast)
     primary = ChatGoogleGenerativeAI(
-        model="gemini-2.5-pro", 
+        model="gemini-3-flash-preview", 
         **defaults
-        # model_kwargs=model_kwargs  <-- Removed to fix ValidationError
     )
     
-    # Define Fallbacks in Order
+    # Define Fallbacks in Order (Power > Speed)
     fallback_models = [
-        "gemini-1.5-pro",        # 2
-        "gemini-2.5-flash",      # 3
-        "gemini-2.0-flash",      # 4
-        "gemini-2.5-flash-lite", # 5
-        "gemini-1.5-flash",      # 6
-        "gemini-1.5-flash-8b"    # 7
+        "gemini-2.5-pro",                   # 2. Powerhouse
+        "gemini-2.5-flash",                 # 3. Balanced
+        "gemini-2.5-flash-test",            # 4. Preview variant
+        "gemini-2.5-flash-lite",            # 5. Cost-effective
+        "gemini-2.0-flash",                 # 6. Reliable Legacy
+        "gemini-2.0-flash-lite",            # 7. Fast Legacy
+        "gemini-1.5-flash"                  # 8. Ultimate Safety Net
     ]
     
     # Create Google Runnables
