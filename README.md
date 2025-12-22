@@ -4,7 +4,7 @@ A powerful, intelligent Telegram bot that downloads Instagram videos, verifies f
 
 **Rewritten from scratch for speed, stability, and ease of use.**
 
-![Version](https://img.shields.io/badge/Version-4.0.0-blue.svg)
+![Version](https://img.shields.io/badge/Version-4.2.0-blue.svg)
 ![Python](https://img.shields.io/badge/Python-3.9+-yellow.svg)
 ![License](https://img.shields.io/badge/License-MIT-green.svg)
 
@@ -36,6 +36,11 @@ A powerful, intelligent Telegram bot that downloads Instagram videos, verifies f
 *   **Multi-Language Voice:** Reply to any message with `/voice en`, `/voice fa`, etc.
 *   **Translation + Voice:** Automatically translates to the target language before speaking.
 *   **Powered by edge-tts:** High-quality Neural TTS voices.
++ 
++ ### 💰 Live Market Data (Currency & Gold)
++ *   **Real-time Rates:** Fetches live USD, EUR, Gold 18k, and Global Ounce rates strictly from `tgju.org`.
++ *   **Gold Parity Analysis:** Automatically calculates the theoretical price of 18k gold based on global ounce/USD parity and shows the "Market Gap" (Bobble).
++ *   **Smart Caching:** Uses a 5-minute async cache to prevent rate-limiting and ensure ultra-fast response times.
 
 ### 🌍 Multi-Language Support
 *   Full support for **Persian (FA)** 🇮🇷, **English (EN)** 🇺🇸, **French (FR)** 🇫🇷, and **Korean (KO)** 🇰🇷.
@@ -174,6 +179,7 @@ sudo systemctl status su6i-yar
 | **🆘 Help** | Show the full command guide. |
 | **📥 Manage Download** | Toggle Instagram Downloading On/Off. |
 | **🧠 Manage AI** | Toggle Gemini Fact-Checking On/Off. |
+| **💰 Currency & Gold** | Show live market rates and gold parity analysis. |
 | **🇮🇷 / 🇺🇸 / 🇫🇷 / 🇰🇷** | Switch Bot Language instantly. |
 | **🛑 Stop Bot** | (Admin Only) Shutdown the bot safely. |
 
@@ -186,6 +192,7 @@ sudo systemctl status su6i-yar
 | `/voice` | Reply to message to get voice version. Supports `/v en`, `/v fa`, etc. |
 | `/check` | Reply to text to Fact-Check it using search grounding. |
 | `/status` | View your user type and remaining daily quota. |
+| `/price`  | **Live Market:** Show currency and gold rates (alias: `/p`). |
 | `/help`  | Show instructions. |
 | `/detail` | Reply to analysis to get full scientific breakdown. |
 | `/stop`  | **(Admin Only)** Shutdown the bot. |
