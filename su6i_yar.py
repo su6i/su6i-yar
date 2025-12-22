@@ -18,6 +18,9 @@ import urllib.parse
 import urllib.request
 import edge_tts
 import html
+import httpx
+from bs4 import BeautifulSoup
+import time
 
 # Telegram Imports
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove, InlineKeyboardButton, InlineKeyboardMarkup, constants
@@ -98,6 +101,11 @@ SETTINGS = {
 
 # Rate Limiting (per user)
 RATE_LIMIT = {}  # user_id -> last_request_time
+
+# Market Data Caching (tgju.org)
+MARKET_DATA_CACHE = None
+MARKET_DATA_TIMESTAMP = 0
+MARKET_CACHE_TTL = 300  # 5 minutes
 RATE_LIMIT_SECONDS = 5  # Minimum seconds between AI requests per user
 
 # Access Control: Whitelist
@@ -1013,7 +1021,23 @@ MESSAGES = {
         "analyzing_model": "🧠 در حال تحلیل ادعاها با {model}...",
         "analysis_complete": "✅ تحلیل توسط {model} تمام شد\n(در حال نهایی کردن...)",
         "analysis_header": "🧠 **تحلیل توسط {model}**",
-        "analysis_footer_note": "\n\n━━━━━━━━━━━━━━\n💡 **برای مشاهده تحلیل کامل:**\nبه این پیام ریپلای بزنید و `/detail` بنویسید"
+        "analysis_footer_note": "\n\n━━━━━━━━━━━━━━\n💡 **برای مشاهده تحلیل کامل:**\nبه این پیام ریپلای بزنید و `/detail` بنویسید",
+        "btn_price": "💰 قیمت ارز و طلا",
+        "price_loading": "⏳ در حال دریافت قیمت‌های لحظه‌ای از tgju.org...",
+        "price_error": "❌ خطا در دریافت قیمت‌ها از tgju.org. لطفاً دوباره تلاش کنید.",
+        "price_msg": (
+            "💰 **قیمت لحظه‌ای بازار (tgju.org)**\n"
+            "━━━━━━━━━━━━━━\n"
+            "🇺🇸 **دلار:** `{usd}` ریال\n"
+            "🇪🇺 **یورو:** `{eur}` ریال\n"
+            "🟡 **طلا ۱۸ عیار:** `{gold18}` ریال\n"
+            "🌐 **انس جهانی:** `{ons}`$\n"
+            "━━━━━━━━━━━━━━\n"
+            "⚖️ **تحلیل حباب طلا:**\n"
+            "قیمت محاسبه شده (انس به ۱۸):\n"
+            "`{theoretical}` ریال\n"
+            "اختلاف با بازار: `{diff}` ریال"
+        )
     },
     "en": {
         "welcome": (
@@ -1106,7 +1130,23 @@ MESSAGES = {
         "analyzing_model": "🧠 Analyzing claims with {model}...",
         "analysis_complete": "✅ Analysis by {model} completed\n(Finalizing response...)",
         "analysis_header": "🧠 **Analysis by {model}**",
-        "analysis_footer_note": "\n\n━━━━━━━━━━━━━━\n💡 **For full analysis details:**\nReply to this message with `/detail`"
+        "analysis_footer_note": "\n\n━━━━━━━━━━━━━━\n💡 **For full analysis details:**\nReply to this message with `/detail`",
+        "btn_price": "💰 Currency & Gold",
+        "price_loading": "⏳ Fetching live rates from tgju.org...",
+        "price_error": "❌ Error fetching rates from tgju.org. Please try again.",
+        "price_msg": (
+            "💰 **Live Market Rates (tgju.org)**\n"
+            "━━━━━━━━━━━━━━\n"
+            "🇺🇸 **USD:** `{usd}` Rial\n"
+            "🇪🇺 **EUR:** `{eur}` Rial\n"
+            "🟡 **Gold 18k:** `{gold18}` Rial\n"
+            "🌐 **Global Ounce:** `{ons}`$\n"
+            "━━━━━━━━━━━━━━\n"
+            "⚖️ **Gold Parity Analysis:**\n"
+            "Calculated Price (Ounce to 18k):\n"
+            "`{theoretical}` Rial\n"
+            "Market Gap: `{diff}` Rial"
+        )
     },
     "fr": {
         "welcome": (
@@ -1199,7 +1239,23 @@ MESSAGES = {
         "analyzing_model": "🧠 Analyse des affirmations avec {model}...",
         "analysis_complete": "✅ Analyse par {model} terminée\n(Finalisation de la réponse...)",
         "analysis_header": "🧠 **Analyse par {model}**",
-        "analysis_footer_note": "\n\n━━━━━━━━━━━━━━\n💡 **Pour les détails de l'analyse:**\nRépondez à ce message avec `/detail`"
+        "analysis_footer_note": "\n\n━━━━━━━━━━━━━━\n💡 **Pour les détails de l'analyse:**\nRépondez à ce message avec `/detail`",
+        "btn_price": "💰 Devises & Or",
+        "price_loading": "⏳ Récupération des taux en direct de tgju.org...",
+        "price_error": "❌ Erreur lors de la récupération des taux de tgju.org. Veuillez réessayer.",
+        "price_msg": (
+            "💰 **Taux du Marché en Direct (tgju.org)**\n"
+            "━━━━━━━━━━━━━━\n"
+            "🇺🇸 **USD:** `{usd}` Rial\n"
+            "🇪🇺 **EUR:** `{eur}` Rial\n"
+            "🟡 **Or 18k:** `{gold18}` Rial\n"
+            "🌐 **Once Mondiale:** `{ons}`$\n"
+            "━━━━━━━━━━━━━━\n"
+            "⚖️ **Analyse de la Parité de l'Or:**\n"
+            "Prix calculé (Once à 18k):\n"
+            "`{theoretical}` Rial\n"
+            "Écart du Marché: `{diff}` Rial"
+        )
     },
     "ko": {
         "welcome": (
@@ -1338,6 +1394,7 @@ def get_main_keyboard(user_id):
     # Base keyboard for all users
     kb = [
         [KeyboardButton(get_msg("btn_status", user_id)), KeyboardButton(get_msg("btn_help", user_id)), KeyboardButton(get_msg("btn_voice", user_id))],
+        [KeyboardButton(get_msg("btn_price", user_id))],
         [KeyboardButton("🇮🇷 فارسی"), KeyboardButton("🇺🇸 English"), KeyboardButton("🇫🇷 Français"), KeyboardButton("🇰🇷 한국어")]
     ]
     
@@ -1360,6 +1417,91 @@ async def send_welcome(update: Update):
 
 
 
+
+# ==============================================================================
+# LOGIC: MARKET RATES (tgju.org)
+# ==============================================================================
+
+async def fetch_market_data():
+    """Scrape USD, EUR, Gold 18k, and Ons from tgju.org with caching"""
+    global MARKET_DATA_CACHE, MARKET_DATA_TIMESTAMP
+    
+    now = time.time()
+    if MARKET_DATA_CACHE and (now - MARKET_DATA_TIMESTAMP) < MARKET_CACHE_TTL:
+        logger.info("📡 Using cached market data")
+        return MARKET_DATA_CACHE
+
+    logger.info("🌐 Fetching live market data from tgju.org")
+    url = "https://www.tgju.org/"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=20, follow_redirects=True) as client:
+            resp = await client.get(url, headers=headers)
+            resp.raise_for_status()
+            
+        soup = BeautifulSoup(resp.text, 'html.parser')
+        
+        # Scrape data using verified selectors
+        def get_val(selector):
+            el = soup.select_one(selector)
+            if el:
+                # Remove commas and non-numeric chars for calculation, but keep raw for display
+                raw = el.get_text(strip=True)
+                val = re.sub(r'[^\d.]', '', raw)
+                return raw, float(val) if val else 0.0
+            return "N/A", 0.0
+
+        usd_raw, usd_val = get_val("li#l-price_dollar_rl span span")
+        eur_raw, eur_val = get_val("li#l-price_eur span span")
+        gold18_raw, gold18_val = get_val("li#l-geram18 span span")
+        ons_raw, ons_val = get_val("li#l-ons span span")
+
+        if usd_val == 0 or ons_val == 0:
+            logger.warning("⚠️ Scraper returned zero for critical values. Check selectors.")
+            return None
+
+        # Calculate Theoretical Gold (18k)
+        # Formula: (Ons * Dollar) / 31.1034768 * 0.750
+        theoretical_val = (ons_val * usd_val) / 31.1034768 * 0.750
+        diff_val = gold18_val - theoretical_val
+        
+        # Format helpers
+        def fmt_curr(val): return f"{int(val):,}"
+        
+        data = {
+            "usd": usd_raw,
+            "eur": eur_raw,
+            "gold18": gold18_raw,
+            "ons": ons_raw,
+            "theoretical": fmt_curr(theoretical_val),
+            "diff": ("+" if diff_val > 0 else "") + fmt_curr(diff_val)
+        }
+        
+        MARKET_DATA_CACHE = data
+        MARKET_DATA_TIMESTAMP = now
+        return data
+
+    except Exception as e:
+        logger.error(f"❌ Scraper Exception: {e}")
+        return None
+
+async def cmd_price_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /price command and button"""
+    msg = update.message
+    user_id = update.effective_user.id
+    
+    status_msg = await msg.reply_text(get_msg("price_loading", user_id))
+    
+    data = await fetch_market_data()
+    if not data:
+        await status_msg.edit_text(get_msg("price_error", user_id))
+        return
+
+    price_text = get_msg("price_msg", user_id).format(**data)
+    await status_msg.edit_text(price_text, parse_mode='Markdown')
 
 # ==============================================================================
 # HELPERS
@@ -1678,6 +1820,11 @@ async def global_message_handler(update: Update, context: ContextTypes.DEFAULT_T
     if text.startswith("ℹ️") or text.startswith("🆘"):
         help_text = get_msg("help_msg", user_id)
         await msg.reply_text(help_text, parse_mode='Markdown') 
+        return
+
+    # Price Check
+    if "قیمت ارز و طلا" in text or "Currency & Gold" in text or "Devises & Or" in text or "환율 및 금 시세" in text:
+        await cmd_price_handler(update, context)
         return
 
     # Toggle DL
@@ -2072,6 +2219,8 @@ def main():
     app.add_handler(CommandHandler("status", cmd_status_handler))
     app.add_handler(CommandHandler("toggle_dl", cmd_toggle_dl_handler))
     app.add_handler(CommandHandler("toggle_fc", cmd_toggle_fc_handler))
+    app.add_handler(CommandHandler("price", cmd_price_handler))
+    app.add_handler(CommandHandler("p", cmd_price_handler))
     app.add_handler(CommandHandler("check", cmd_check_handler))
     app.add_handler(CommandHandler("detail", cmd_detail_handler))
     app.add_handler(CommandHandler("voice", cmd_voice_handler))  # TTS Voice
