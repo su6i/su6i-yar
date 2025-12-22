@@ -797,7 +797,9 @@ async def cmd_learn_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def analyze_text_gemini(text, status_msg=None, lang_code="fa"):
     """Analyze text using Smart Chain Fallback"""
-    if not SETTINGS["fact_check"]: return None
+    # Fix: Allow analysis even if disabled in settings (controlled by caller)
+    # if not SETTINGS["fact_check"]: return None
+
 
     # Map lang_code to English name for Prompt
     lang_map = {"fa": "Persian (Farsi)", "en": "English", "fr": "French"}
@@ -1949,16 +1951,7 @@ async def global_message_handler(update: Update, context: ContextTypes.DEFAULT_T
             get_msg("analyzing", user_id),
             reply_to_message_id=msg.message_id
         )
-        logger.info(f"⏳ Calling analyze_text_gemini for user {user_id}...")
-        try:
-            response = await analyze_text_gemini(text, status_msg, lang) # Kept original arguments and assignment for functionality
-            logger.info(f"✅ analyze_text_gemini completed for user {user_id}")
-        except Exception as e:
-            logger.error(f"❌ Error during analyze_text_gemini call: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
-            await status_msg.edit_text(get_msg("price_error", user_id)) # Assuming price_error is a generic error message
-            return # Exit if analysis fails
+        response = await analyze_text_gemini(target_text, status_msg, lang)
         
         # Increment usage and get remaining
         remaining = increment_daily_usage(user_id)
