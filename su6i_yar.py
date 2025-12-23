@@ -1768,31 +1768,51 @@ async def download_instagram_cobalt(url: str, filename: Path) -> bool:
             "Content-Type": "application/json",
             "User-Agent": "Mozilla/5.0 (compatible; Su6iYar/4.5)"
         }
-        payload = {
-            "url": url,
-            "vCodec": "h264",
-            "vQuality": "max",
-            "aFormat": "mp3",
-            "filenamePattern": "basic"
-        }
-
         async with httpx.AsyncClient(timeout=30) as client:
-            # 1. Get Download Link
-            resp = await client.post(api_url, json=payload, headers=headers)
-            resp.raise_for_status()
-            data = resp.json()
+            # Strategy: Try v10 keys first, then fallback to v7 keys
+            payloads_to_try = [
+                # v10 Syntax
+                {
+                    "url": url,
+                    "videoQuality": "max",
+                    "audioFormat": "mp3",
+                    "filenameStyle": "basic"
+                },
+                # v7 Syntax (Legacy)
+                {
+                    "url": url,
+                    "vCodec": "h264",
+                    "vQuality": "max",
+                    "aFormat": "mp3",
+                    "filenamePattern": "basic"
+                }
+            ]
 
-            if data.get("status") in ["error", "redirect"]:
-                logger.error(f"Cobalt API Error: {data.get('text')}")
-                return False
+            dl_url = None
+            for i, payload in enumerate(payloads_to_try):
+                try:
+                    resp = await client.post(api_url, json=payload, headers=headers)
+                    resp.raise_for_status()
+                    data = resp.json()
 
-            # Cobalt returns URL in 'url' field for 'stream' status or 'picker' items
-            dl_url = data.get("url")
-            if not dl_url and data.get("picker"):
-                dl_url = data["picker"][0]["url"] # Default to first item
+                    if data.get("status") in ["error", "redirect"]:
+                        err_text = data.get('text', 'Unknown Error')
+                        logger.warning(f"Cobalt Attempt {i+1} Failed: {err_text}")
+                        continue
+
+                    # Success - Extract URL
+                    dl_url = data.get("url")
+                    if not dl_url and data.get("picker"):
+                        dl_url = data["picker"][0]["url"]
+                    
+                    if dl_url:
+                        break # Found it!
+                except Exception as loop_e:
+                    logger.warning(f"Cobalt Req {i+1} Exception: {loop_e}")
+                    continue
 
             if not dl_url:
-                logger.error("No URL found in Cobalt response")
+                logger.error("No URL found in Cobalt responses (both v10/v7 failed)")
                 return False
 
             # 2. Download File Stream
