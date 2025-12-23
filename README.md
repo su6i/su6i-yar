@@ -62,6 +62,12 @@ A powerful, intelligent Telegram bot that downloads Instagram videos, verifies f
 *   **Parallel Fetching:** Downloads all educational slides in parallel to prevent timeouts.
 *   **Staggered Requests:** Avoids rate-limiting (429) errors during image generation.
 
+### 🎨 User Experience Enhancements
+*   **Countdown Timers:** Temporary messages (help, status, price) show live countdown before auto-deletion in groups.
+*   **Monospace Help Menus:** Clean, consistent help formatting across all 4 languages.
+*   **Smart Auto-Cleanup:** Informational messages auto-delete after 30-60s to keep group chats clean.
+*   **Cookie Upload Script:** `upload_cookie.py` for easy Instagram authentication management.
+
 ---
 
 ## 🚀 Installation
