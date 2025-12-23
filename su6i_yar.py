@@ -33,9 +33,6 @@ from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.callbacks import AsyncCallbackHandler
 
-# Google AI (for audio/multimodal)
-import google.generativeai as genai
-
 # ==============================================================================
 # CONFIGURATION & SETUP
 # ==============================================================================
@@ -1106,10 +1103,7 @@ MESSAGES = {
             "**طلای ۱۸ جهانی:**\n"
             "`{theoretical_tm}` تومان"
         ),
-        "dl_usage_error": "⛔ لطفاً لینک اینستاگرام را بفرستید یا روی آن ریپلای کنید.",
-        "asr_transcribing": "🎤 در حال رونویسی صوت...",
-        "asr_no_audio": "⛔ لطفاً به یک پیام صوتی یا تصویری ریپلای بزنید.",
-        "asr_error": "❌ خطا در رونویسی صوت. دوباره تلاش کنید."
+        "dl_usage_error": "⛔ لطفاً لینک اینستاگرام را بفرستید یا روی آن ریپلای کنید."
     },
     "en": {
         "welcome": (
@@ -1257,10 +1251,7 @@ MESSAGES = {
             "`{theoretical}` Rial\n"
             "Market Gap: `{diff}` Rial"
         ),
-        "dl_usage_error": "⛔ Please provide an Instagram link or reply to one.",
-        "asr_transcribing": "🎤 Transcribing audio...",
-        "asr_no_audio": "⛔ Please reply to a voice or video message.",
-        "asr_error": "❌ Error transcribing audio. Please try again."
+        "dl_usage_error": "⛔ Please provide an Instagram link or reply to one."
     },
     "fr": {
         "welcome": (
@@ -1408,10 +1399,7 @@ MESSAGES = {
             "`{theoretical}` Rial\n"
             "Écart du Marché: `{diff}` Rial"
         ),
-        "dl_usage_error": "⛔ Veuillez fournir un lien Instagram ou y répondre.",
-        "asr_transcribing": "🎤 Transcription audio...",
-        "asr_no_audio": "⛔ Veuillez répondre à un message vocal ou vidéo.",
-        "asr_error": "❌ Erreur de transcription audio. Veuillez réessayer."
+        "dl_usage_error": "⛔ Veuillez fournir un lien Instagram ou y répondre."
     },
     "ko": {
         "welcome": (
@@ -1556,10 +1544,7 @@ MESSAGES = {
             "`{theoretical}` 리알\n"
             "시장 차이: `{diff}` 리알"
         ),
-        "dl_usage_error": "⛔ 인스타그램 링크를 보내거나 답장하세요.",
-        "asr_transcribing": "🎤 음성 변환 중...",
-        "asr_no_audio": "⛔ 음성 또는 비디오 메시지에 답장하세요.",
-        "asr_error": "❌ 음성 변환 오류. 다시 시도하세요."
+        "dl_usage_error": "⛔ 인스타그램 링크를 보내거나 답장하세요."
     }
 }
 
@@ -2646,150 +2631,6 @@ async def generate_visual_prompt(text: str) -> str:
         return "abstract conceptual representation"  # Safe default
 
 
-# ==============================================================================
-# ASR (SPEECH-TO-TEXT)
-# ==============================================================================
-
-async def transcribe_audio(audio_file_path: str, target_lang: str = None) -> dict:
-    """
-    Transcribe audio using Gemini with fallback support.
-    
-    Args:
-        audio_file_path: Path to audio file
-        target_lang: Optional language code for translation (fa, en, fr, ko)
-    
-    Returns:
-        dict with 'transcription' and optionally 'translation'
-    """
-    # Model priority list (best to fallback)
-    models_to_try = [
-        "gemini-3-pro-preview",      # Most powerful
-        "gemini-2.5-flash",           # Stable, good performance
-        "gemini-2.5-flash-preview-09-2025"  # Fallback
-    ]
-    
-    try:
-        # Configure Gemini
-        genai.configure(api_key=GEMINI_API_KEY)
-        
-        # Upload audio/video file
-        media_file = genai.upload_file(audio_file_path)
-        
-        # Build prompt
-        if target_lang:
-            lang_names = {
-                "fa": "Persian (فارسی)",
-                "en": "English",
-                "fr": "French (Français)",
-                "ko": "Korean (한국어)"
-            }
-            prompt = f"Transcribe this audio and translate it to {lang_names.get(target_lang, 'English')}. Format:\n[Original Transcription]\n---\n[Translation]"
-        else:
-            prompt = "Transcribe this audio accurately. Detect the language automatically."
-        
-        # Try models in order
-        last_error = None
-        for model_name in models_to_try:
-            try:
-                logger.info(f"🎤 Trying ASR with {model_name}")
-                model = genai.GenerativeModel(model_name)
-                response = model.generate_content([prompt, media_file])
-                
-                # Parse response
-                if target_lang and "---" in response.text:
-                    parts = response.text.split("---", 1)
-                    return {
-                        "transcription": parts[0].strip(),
-                        "translation": parts[1].strip() if len(parts) > 1 else None
-                    }
-                else:
-                    return {"transcription": response.text.strip()}
-                    
-            except Exception as e:
-                last_error = e
-                logger.warning(f"ASR failed with {model_name}: {e}")
-                continue  # Try next model
-        
-        # All models failed
-        logger.error(f"All ASR models failed. Last error: {last_error}")
-        return None
-            
-    except Exception as e:
-        logger.error(f"ASR Error: {e}")
-        return None
-
-
-async def cmd_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    Transcribe voice/audio/video message to text with optional translation.
-    Usage: /text [language]
-    Examples: /text, /text fa, /text en
-    """
-    logger.info("🎤 Command /text triggered")
-    msg = update.message
-    user_id = update.effective_user.id
-    
-    # Check if replying to voice/audio/video
-    if not msg.reply_to_message or not (msg.reply_to_message.voice or msg.reply_to_message.audio or msg.reply_to_message.video):
-        await msg.reply_text(get_msg("asr_no_audio", user_id))
-        return
-    
-    # Parse target language
-    target_lang = None
-    if context.args:
-        arg = context.args[0].lower()
-        # Map language names to codes
-        lang_map = {
-            "fa": "fa", "persian": "fa", "فارسی": "fa",
-            "en": "en", "english": "en", "انگلیسی": "en",
-            "fr": "fr", "french": "fr", "فرانسه": "fr",
-            "ko": "ko", "korean": "ko", "کره‌ای": "ko"
-        }
-        target_lang = lang_map.get(arg)
-        
-        if not target_lang:
-            await msg.reply_text(get_msg("voice_invalid_lang", user_id))
-            return
-    
-    # Show status
-    status_msg = await msg.reply_text(get_msg("asr_transcribing", user_id))
-    
-    # Download audio/video
-    media = msg.reply_to_message.voice or msg.reply_to_message.audio or msg.reply_to_message.video
-    media_file = await media.get_file()
-    
-    # Determine file extension
-    if msg.reply_to_message.video:
-        file_ext = "mp4"
-    elif msg.reply_to_message.voice:
-        file_ext = "ogg"
-    else:
-        file_ext = "mp3"
-    
-    media_path = f"media_{user_id}_{int(time.time())}.{file_ext}"
-    await media_file.download_to_drive(media_path)
-    
-    # Transcribe
-    result = await transcribe_audio(media_path, target_lang)
-    
-    # Cleanup
-    try:
-        os.remove(media_path)
-    except:
-        pass
-    
-    if not result:
-        await status_msg.edit_text(get_msg("asr_error", user_id))
-        return
-    
-    # Format response
-    if result.get("translation"):
-        response = f"📝 **متن اصلی:**\n{result['transcription']}\n\n🌐 **ترجمه:**\n{result['translation']}"
-    else:
-        response = f"📝 **متن:**\n{result['transcription']}"
-    
-    await status_msg.edit_text(response, parse_mode='Markdown')
-
 
 async def cmd_voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
@@ -2939,7 +2780,6 @@ def main():
     app.add_handler(CommandHandler("check", cmd_check_handler))
     app.add_handler(CommandHandler("detail", cmd_detail_handler))
     app.add_handler(CommandHandler("voice", cmd_voice_handler))  # TTS Voice
-    app.add_handler(CommandHandler("text", cmd_text_handler))  # ASR Transcription
     app.add_handler(CommandHandler("learn", cmd_learn_handler))
     app.add_handler(CommandHandler("l", cmd_learn_handler))
     app.add_handler(CommandHandler("t", cmd_learn_handler))  # /t is for /learn
