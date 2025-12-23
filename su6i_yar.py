@@ -1582,6 +1582,42 @@ def get_msg(key, user_id=None):
 # HELPERS: CLEANUP & ERROR REPORTING
 # ==============================================================================
 
+async def schedule_countdown_delete(context, chat_id: int, message_id: int, user_message_id: int, 
+                                   original_text: str, total_seconds: int = 60, parse_mode: str = 'Markdown'):
+    """
+    Updates message with countdown timer and deletes after time expires.
+    Shows countdown every 10 seconds.
+    """
+    intervals = [50, 40, 30, 20, 10]  # Show countdown at these seconds remaining
+    
+    for remaining in intervals:
+        if remaining < total_seconds:
+            await asyncio.sleep(total_seconds - remaining - (intervals[intervals.index(remaining) - 1] if intervals.index(remaining) > 0 else total_seconds))
+            try:
+                countdown_text = f"⏱️ {remaining}s\n\n{original_text}"
+                await context.bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    text=countdown_text,
+                    parse_mode=parse_mode
+                )
+            except Exception:
+                pass  # Message might be already deleted or edited
+    
+    # Final sleep before deletion
+    await asyncio.sleep(10)
+    
+    # Delete both messages
+    try:
+        await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
+    except Exception:
+        pass
+    
+    try:
+        await context.bot.delete_message(chat_id=chat_id, message_id=user_message_id)
+    except Exception:
+        pass
+
 async def reply_and_delete(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str, delay: int = 15, **kwargs):
     """
     Sends a reply and schedules its deletion if sent in a group.
@@ -1776,15 +1812,18 @@ async def cmd_price_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     price_text = get_msg("price_msg", user_id).format(**data)
     await status_msg.edit_text(price_text, parse_mode='Markdown')
     
-    # Auto-delete in groups to keep chat clean
+    # Auto-delete with countdown in groups
     if msg.chat_id < 0:  # Group chat
-        context.job_queue.run_once(
-            lambda ctx: ctx.bot.delete_message(chat_id=msg.chat_id, message_id=status_msg.message_id),
-            60  # Delete after 60 seconds
-        )
-        context.job_queue.run_once(
-            lambda ctx: ctx.bot.delete_message(chat_id=msg.chat_id, message_id=msg.message_id),
-            60  # Delete user's command too
+        asyncio.create_task(
+            schedule_countdown_delete(
+                context=context,
+                chat_id=msg.chat_id,
+                message_id=status_msg.message_id,
+                user_message_id=msg.message_id,
+                original_text=price_text,
+                total_seconds=60,
+                parse_mode='Markdown'
+            )
         )
 
 # ==============================================================================
