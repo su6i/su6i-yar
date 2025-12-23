@@ -2668,8 +2668,8 @@ async def transcribe_audio(audio_file_path: str, target_lang: str = None) -> dic
         # Upload audio file
         audio_file = genai.upload_file(audio_file_path)
         
-        # Create model (using latest Gemini 3 Flash)
-        model = genai.GenerativeModel("gemini-3-flash-preview")
+        # Create model (using stable Gemini 2.5 Flash - best price/performance with audio support)
+        model = genai.GenerativeModel("gemini-2.5-flash")
         
         # Build prompt
         if target_lang:
