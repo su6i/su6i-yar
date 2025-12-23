@@ -1007,6 +1007,40 @@ MESSAGES = {
             "`/detail`\n\n"
             "━━━━━━━━━━━━━━"
         ),
+        "help_msg_mono": (
+            "📚 **راهنمای نسخه مونو (تست)**\n"
+            "━━━━━━━━━━━━━━\n\n"
+            "📥 **دانلودر اینستاگرام**\n"
+            "```\n"
+            "Link       -> Auto Download\n"
+            "/dl [Link] -> Force Download\n"
+            "```\n"
+            "🧠 **راستی‌آزمایی**\n"
+            "```\n"
+            "/check        -> (Reply)\n"
+            "/check [Text] -> Direct\n"
+            "```\n"
+            "🎓 **آموزش زبان**\n"
+            "```\n"
+            "/learn        -> (Reply)\n"
+            "/learn [Word] -> Direct\n"
+            "```\n"
+            "🔊 **تبدیل متن به صوت**\n"
+            "```\n"
+            "/voice        -> (Reply)\n"
+            "/voice [Text] -> Direct\n"
+            "/voice en ... -> Translate\n"
+            "```\n"
+            "💰 **قیمت‌ها**\n"
+            "```\n"
+            "/price        -> Live Rates\n"
+            "```\n"
+            "📄 **جزئیات**\n"
+            "```\n"
+            "/detail       -> (Reply)\n"
+            "```\n"
+            "━━━━━━━━━━━━━━"
+        ),
         "dl_on": "✅ فعال",
         "dl_off": "❌ غیرفعال",
         "fc_on": "✅ فعال",
@@ -1948,6 +1982,17 @@ async def global_message_handler(update: Update, context: ContextTypes.DEFAULT_T
     if text.startswith("ℹ️") or text.startswith("🆘"):
         help_text = get_msg("help_msg", user_id)
         await msg.reply_text(help_text, parse_mode='Markdown') 
+        
+        # A/B Test for Persian Users
+        if lang == 'fa':
+            # Option 2: Monospace
+            help_mono = get_msg("help_msg_mono", user_id)
+            if help_mono:
+                await msg.reply_text(help_mono, parse_mode='Markdown')
+            
+            # Option 3: Image
+            if os.path.exists("help_fa.png"):
+                await msg.reply_photo(photo=open("help_fa.png", "rb"), caption="🖼️ **گزینه سوم: تصویر جدول**")
         return
 
     # Price Check
