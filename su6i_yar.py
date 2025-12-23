@@ -2169,10 +2169,10 @@ async def download_instagram(url, chat_id, bot, reply_to_message_id=None):
 
 async def cmd_start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"🚀 Command /start triggered by {update.effective_user.id}")
-    # Use reply_and_delete for welcome message in group, strict cleanup
+    # Use reply_with_countdown for welcome message in group
     user = update.effective_user
     text = get_msg("welcome", user.id).format(name=user.first_name)
-    await reply_and_delete(update, context, text, delay=60, 
+    await reply_with_countdown(update, context, text, delay=60, 
                            parse_mode='Markdown', 
                            reply_markup=get_main_keyboard(user.id))
 
