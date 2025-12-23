@@ -106,3 +106,4 @@ bot.log
 user_data.json
 benchmark_models.py
 benchmark_report.md
+manual_cookie.py
