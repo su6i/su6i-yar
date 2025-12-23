@@ -1501,6 +1501,7 @@ async def reply_and_delete(update: Update, context: ContextTypes.DEFAULT_TYPE, t
             lambda ctx: ctx.bot.delete_message(chat_id=msg.chat_id, message_id=msg.message_id),
             delay
         )
+    return reply_msg
 
 async def report_error_to_admin(context: ContextTypes.DEFAULT_TYPE, user_id: int, command: str, error_msg: str):
     """
