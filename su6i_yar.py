@@ -1801,6 +1801,9 @@ async def cmd_toggle_dl_handler(update: Update, context: ContextTypes.DEFAULT_TY
     state = get_msg("dl_on") if SETTINGS["download"] else get_msg("dl_off")
     await update.message.reply_text(get_msg("action_dl").format(state=state))
 
+async def cmd_toggle_fc_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.info("🧠 Command /toggle_fc triggered")
+    SETTINGS["fact_check"] = not SETTINGS["fact_check"]
     state = get_msg("fc_on") if SETTINGS["fact_check"] else get_msg("fc_off")
     await update.message.reply_text(get_msg("action_fc").format(state=state))
 
