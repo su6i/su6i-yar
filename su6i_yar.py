@@ -391,7 +391,7 @@ async def cmd_check_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     has_quota, remaining = check_daily_limit(user_id)
     if not has_quota:
         limit = get_user_limit(user_id)
-        await msg.reply_text(get_msg("limit_reached", user_id).format(remaining=0, limit=limit))
+        await reply_and_delete(update, context, get_msg("limit_reached", user_id).format(remaining=0, limit=limit), delay=10)
         return
 
     # Check if reply or arguments
@@ -403,7 +403,7 @@ async def cmd_check_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         target_text = " ".join(context.args)
     
     if not target_text:
-        await msg.reply_text("⛔ Reply to a message or provide text: `/check <text>`")
+        await reply_and_delete(update, context, "⛔ Reply to a message or provide text: `/check <text>`", delay=10)
         return
 
     status_msg = await msg.reply_text(
@@ -418,12 +418,10 @@ async def cmd_check_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await smart_reply(msg, status_msg, response, user_id)
     
     # Show remaining requests (skip for admin)
+    # Show remaining requests (skip for admin)
     if user_id != SETTINGS["admin_id"]:
         limit = get_user_limit(user_id)
-        await msg.reply_text(
-            f"📊 {remaining}/{limit} درخواست باقی‌مانده امروز",
-            reply_to_message_id=status_msg.message_id
-        )
+        await reply_and_delete(update, context, f"📊 {remaining}/{limit} درخواست باقی‌مانده امروز", delay=15, reply_to_message_id=status_msg.message_id)
 
 # ==============================================================================
 # LOGIC: SMART CHAIN FACTORY (LANGCHAIN)
@@ -1479,6 +1477,44 @@ def get_msg(key, user_id=None):
     return MESSAGES["fa"].get(key, "")
 
 # ==============================================================================
+# HELPERS: CLEANUP & ERROR REPORTING
+# ==============================================================================
+
+async def reply_and_delete(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str, delay: int = 15, **kwargs):
+    """
+    Sends a reply and schedules its deletion if sent in a group.
+    """
+    msg = update.message
+    if not msg: return
+    
+    reply_msg = await msg.reply_text(text, **kwargs)
+    
+    # Only auto-delete in groups (negative chat_id)
+    if msg.chat_id < 0:
+        context.job_queue.run_once(
+            lambda ctx: ctx.bot.delete_message(chat_id=msg.chat_id, message_id=reply_msg.message_id),
+            delay
+        )
+
+async def report_error_to_admin(context: ContextTypes.DEFAULT_TYPE, user_id: int, command: str, error_msg: str):
+    """
+    Silently reports an error to the admin instead of spamming the group.
+    """
+    admin_id = SETTINGS["admin_id"]
+    if not admin_id: return
+
+    try:
+        report = (
+            f"❌ **Error Report**\n"
+            f"👤 User: `{user_id}`\n"
+            f"💻 Command: `{command}`\n"
+            f"⚠️ Error: `{error_msg}`"
+        )
+        await context.bot.send_message(chat_id=admin_id, text=report, parse_mode='Markdown')
+    except Exception as e:
+        logger.error(f"Failed to send error report to admin: {e}")
+
+# ==============================================================================
 # LOGIC: MENU & KEYBOARDS
 # ==============================================================================
 
@@ -1620,11 +1656,12 @@ async def cmd_price_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.message
     user_id = update.effective_user.id
     
-    status_msg = await msg.reply_text(get_msg("price_loading", user_id))
+    status_msg = await reply_and_delete(update, context, get_msg("price_loading", user_id), delay=60)
     
     data = await fetch_market_data()
     if not data:
         await status_msg.edit_text(get_msg("price_error", user_id))
+        await report_error_to_admin(context, user_id, "/price", "Scraper Failure")
         return
 
     price_text = get_msg("price_msg", user_id).format(**data)
@@ -1817,14 +1854,17 @@ async def download_instagram(url, chat_id, bot, reply_to_message_id=None):
 
 async def cmd_start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"🚀 Command /start triggered by {update.effective_user.id}")
-    await send_welcome(update)
+    # Use reply_and_delete for welcome message in group, strict cleanup
+    user = update.effective_user
+    text = get_msg("welcome", user.id).format(name=user.first_name)
+    await reply_and_delete(update, context, text, delay=60, 
+                           parse_mode='Markdown', 
+                           reply_markup=get_main_keyboard(user.id))
 
 async def cmd_close_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info("❌ Command /close triggered")
-    await update.message.reply_text(
-        get_msg("menu_closed"), 
-        reply_markup=ReplyKeyboardRemove()
-    )
+    user_id = update.effective_user.id
+    await reply_and_delete(update, context, get_msg("menu_closed", user_id), delay=5, reply_markup=ReplyKeyboardRemove())
 
 async def cmd_status_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info("📊 Command /status triggered")
@@ -1837,19 +1877,19 @@ async def cmd_status_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
     
     # Add user quota info
     full_status = get_status_text(user_id)
-    await msg.reply_text(full_status, parse_mode='Markdown')
+    await reply_and_delete(update, context, full_status, delay=30, parse_mode='Markdown')
 
 async def cmd_toggle_dl_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info("📥 Command /toggle_dl triggered")
     SETTINGS["download"] = not SETTINGS["download"]
     state = get_msg("dl_on") if SETTINGS["download"] else get_msg("dl_off")
-    await update.message.reply_text(get_msg("action_dl").format(state=state))
+    await reply_and_delete(update, context, get_msg("action_dl").format(state=state), delay=10)
 
 async def cmd_toggle_fc_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info("🧠 Command /toggle_fc triggered")
     SETTINGS["fact_check"] = not SETTINGS["fact_check"]
     state = get_msg("fc_on") if SETTINGS["fact_check"] else get_msg("fc_off")
-    await update.message.reply_text(get_msg("action_fc").format(state=state))
+    await reply_and_delete(update, context, get_msg("action_fc").format(state=state), delay=10)
 
 async def cmd_download_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Force download manual override"""
@@ -1857,34 +1897,54 @@ async def cmd_download_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     msg = update.message
     user_id = update.effective_user.id
     
-    # 1. Find the link (Reply or Arg)
+    # 1. Determine Target (Link & Reply ID)
     target_link = ""
+    reply_to_id = msg.message_id  # Default: reply to command
+    
     if context.args:
         target_link = context.args[0]
     elif msg.reply_to_message:
         target_link = msg.reply_to_message.text or msg.reply_to_message.caption or ""
+        reply_to_id = msg.reply_to_message.message_id  # Fix: Reply to original link
     
-    # 2. Extract URL if mixed with text
+    # 2. Extract URL
     match = re.search(r'(https?://(?:www\.)?instagram\.com/\S+)', target_link)
     if match:
         target_link = match.group(1)
     
     # 3. Validate
     if "instagram.com" not in target_link:
-        await msg.reply_text(get_msg("dl_usage_error", user_id))
+        await reply_and_delete(update, context, get_msg("dl_usage_error", user_id))
         return
 
-    # 4. Force Download (Ignoring SETTINGS["download"])
+    # 4. Status Message (Auto-Delete on completion/fail)
     status_msg = await msg.reply_text(
         get_msg("downloading", user_id),
-        reply_to_message_id=msg.message_id
+        reply_to_message_id=reply_to_id 
     )
     
-    success = await download_instagram(target_link, msg.chat_id, context.bot, msg.message_id)
-    if success:
+    # 5. Execute Download
+    try:
+        success = await download_instagram(target_link, msg.chat_id, context.bot, reply_to_message_id=reply_to_id)
+        if success:
+            # Video sent successfully, cleanup status
+            await status_msg.delete()
+            # Cleanup command msg if in group
+            if msg.chat_id < 0:
+                context.job_queue.run_once(
+                    lambda ctx: ctx.bot.delete_message(chat_id=msg.chat_id, message_id=msg.message_id),
+                    1 # Almost immediate
+                )
+        else:
+            await status_msg.delete()
+            # Silent error to admin, generic fade-out to user
+            await report_error_to_admin(context, user_id, "/dl", f"Download failed for {target_link}")
+            await reply_and_delete(update, context, get_msg("err_dl", user_id), delay=10)
+            
+    except Exception as e:
         await status_msg.delete()
-    else:
-        await status_msg.edit_text(get_msg("err_dl", user_id))
+        await report_error_to_admin(context, user_id, "/dl", str(e))
+        await reply_and_delete(update, context, get_msg("err_dl", user_id), delay=10)
 
 
 async def cmd_stop_bot_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1927,23 +1987,19 @@ async def global_message_handler(update: Update, context: ContextTypes.DEFAULT_T
                     text=full_status,
                     parse_mode='Markdown'
                 )
-                notify = await msg.reply_text(get_msg("status_private_sent", user_id))
-                await asyncio.sleep(5)
-                await notify.delete()
+                notify = await reply_and_delete(update, context, get_msg("status_private_sent", user_id), delay=10)
             except Exception:
                 # User hasn't started private chat with bot
-                notify = await msg.reply_text(get_msg("status_private_error", user_id))
-                await asyncio.sleep(5)
-                await notify.delete()
+                await reply_and_delete(update, context, get_msg("status_private_error", user_id), delay=15)
         else:
-            await msg.reply_text(full_status, parse_mode='Markdown')
+            await reply_and_delete(update, context, full_status, delay=30, parse_mode='Markdown')
         return
 
     # Language Switching
     if "فارسی" in text:
         USER_LANG[user_id] = "fa"
         save_persistence()
-        await msg.reply_text("✅ زبان فارسی انتخاب شد.", reply_markup=get_main_keyboard(user_id))
+        await reply_and_delete(update, context, "✅ زبان فارسی انتخاب شد.", reply_markup=get_main_keyboard(user_id))
         return
     if "English" in text:
         USER_LANG[user_id] = "en"
@@ -1954,7 +2010,7 @@ async def global_message_handler(update: Update, context: ContextTypes.DEFAULT_T
     if "Français" in text:
         USER_LANG[user_id] = "fr"
         save_persistence()
-        await msg.reply_text("✅ Langue française sélectionnée.", reply_markup=get_main_keyboard(user_id))
+        await reply_and_delete(update, context, "✅ Langue française sélectionnée.", reply_markup=get_main_keyboard(user_id))
         return
     if "한국어" in text:
         USER_LANG[user_id] = "ko"
@@ -1981,14 +2037,14 @@ async def global_message_handler(update: Update, context: ContextTypes.DEFAULT_T
     # Help
     if text.startswith("ℹ️") or text.startswith("🆘"):
         help_text = get_msg("help_msg", user_id)
-        await msg.reply_text(help_text, parse_mode='Markdown') 
+        await reply_and_delete(update, context, help_text, delay=60, parse_mode='Markdown') 
         
         # A/B Test for Persian Users
         if lang == 'fa':
             # Option 2: Monospace
             help_mono = get_msg("help_msg_mono", user_id)
             if help_mono:
-                await msg.reply_text(help_mono, parse_mode='Markdown')
+                await reply_and_delete(update, context, help_mono, delay=60, parse_mode='Markdown')
             
             # Option 3: Image
             if os.path.exists("help_fa.png"):
@@ -2296,7 +2352,7 @@ async def cmd_voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         target_text = LAST_ANALYSIS_CACHE.get(user_id, "")
     
     if not target_text:
-        await msg.reply_text(get_msg("voice_no_text", user_id))
+        await reply_and_delete(update, context, get_msg("voice_no_text", user_id), delay=10)
         return
 
     # Decide target language and translation need
@@ -2370,11 +2426,12 @@ async def cmd_voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
     except Exception as e:
         logger.error(f"Voice Error: {e}")
+        await report_error_to_admin(context, user_id, "/voice", str(e))
         error_msg = get_msg("err_ai", user_id) if 'user_id' in locals() else "خطایی رخ داد."
         if 'status_msg' in locals():
-            await status_msg.edit_text(error_msg)
-        else:
-            await msg.reply_text(error_msg)
+            await status_msg.delete()
+        
+        await reply_and_delete(update, context, error_msg, delay=10)
 
 
 def main():
