@@ -1775,6 +1775,17 @@ async def cmd_price_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     price_text = get_msg("price_msg", user_id).format(**data)
     await status_msg.edit_text(price_text, parse_mode='Markdown')
+    
+    # Auto-delete in groups to keep chat clean
+    if msg.chat_id < 0:  # Group chat
+        context.job_queue.run_once(
+            lambda ctx: ctx.bot.delete_message(chat_id=msg.chat_id, message_id=status_msg.message_id),
+            60  # Delete after 60 seconds
+        )
+        context.job_queue.run_once(
+            lambda ctx: ctx.bot.delete_message(chat_id=msg.chat_id, message_id=msg.message_id),
+            60  # Delete user's command too
+        )
 
 # ==============================================================================
 # HELPERS
