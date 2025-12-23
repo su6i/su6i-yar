@@ -1766,9 +1766,19 @@ async def download_instagram(url, chat_id, bot, reply_to_message_id=None):
         filename = Path(f"insta_{timestamp}.mp4")
         info_file = Path(f"insta_{timestamp}.info.json")
         
-        # 2. Command - also extract info
+        # 2. Command - use absolute path if in venv
+        import sys
+        
+        # Determine yt-dlp path relative to current python interpreter
+        # If running from venv/bin/python, yt-dlp should be in venv/bin/yt-dlp
+        venv_bin = Path(sys.executable).parent
+        yt_dlp_path = venv_bin / "yt-dlp"
+        
+        # Fallback to system command if venv binary doesn't exist
+        executable = str(yt_dlp_path) if yt_dlp_path.exists() else "yt-dlp"
+        
         cmd = [
-            "yt-dlp",
+            executable,
             "-f", "best[ext=mp4]",
             "-o", str(filename),
             "--write-info-json",
