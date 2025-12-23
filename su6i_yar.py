@@ -1152,6 +1152,40 @@ MESSAGES = {
             "   • Gold parity & market gap analysis\n\n"
             "━━━━━━━━━━━━━━"
         ),
+        "help_msg_mono": (
+            "📚 **Complete Bot Guide (Mono)**\n"
+            "━━━━━━━━━━━━━━\n\n"
+            "📥 **Instagram Downloader**\n"
+            "```\n"
+            "Link       -> Auto Download\n"
+            "/dl [Link] -> Force Download\n"
+            "```\n"
+            "🧠 **Fact-Checking**\n"
+            "```\n"
+            "/check        -> (Reply)\n"
+            "/check [Text] -> Direct\n"
+            "```\n"
+            "🎓 **Language Learning**\n"
+            "```\n"
+            "/learn        -> (Reply)\n"
+            "/learn [Word] -> Direct\n"
+            "```\n"
+            "🔊 **Text to Speech**\n"
+            "```\n"
+            "/voice        -> (Reply)\n"
+            "/voice [Text] -> Direct\n"
+            "/voice en ... -> Translate\n"
+            "```\n"
+            "💰 **Prices**\n"
+            "```\n"
+            "/price        -> Live Rates\n"
+            "```\n"
+            "📄 **Details**\n"
+            "```\n"
+            "/detail       -> (Reply)\n"
+            "```\n"
+            "━━━━━━━━━━━━━━"
+        ),
         "dl_on": "✅ Active",
         "dl_off": "❌ Inactive",
         "fc_on": "✅ Active",
@@ -1266,6 +1300,40 @@ MESSAGES = {
             "   • Analyse de parité et écart du marché\n\n"
             "━━━━━━━━━━━━━━"
         ),
+        "help_msg_mono": (
+            "📚 **Guide Complet du Bot (Mono)**\n"
+            "━━━━━━━━━━━━━━\n\n"
+            "📥 **Téléchargeur Instagram**\n"
+            "```\n"
+            "Lien       -> Téléchargement Auto\n"
+            "/dl [Lien] -> Téléchargement Forcé\n"
+            "```\n"
+            "🧠 **Vérification**\n"
+            "```\n"
+            "/check        -> (Répondre)\n"
+            "/check [Text] -> Direct\n"
+            "```\n"
+            "🎓 **Apprentissage**\n"
+            "```\n"
+            "/learn        -> (Répondre)\n"
+            "/learn [Mot]  -> Direct\n"
+            "```\n"
+            "🔊 **Synthèse Vocale**\n"
+            "```\n"
+            "/voice        -> (Répondre)\n"
+            "/voice [Text] -> Direct\n"
+            "/voice en ... -> Traduire\n"
+            "```\n"
+            "💰 **Prix**\n"
+            "```\n"
+            "/price        -> Taux en Direct\n"
+            "```\n"
+            "📄 **Détails**\n"
+            "```\n"
+            "/detail       -> (Répondre)\n"
+            "```\n"
+            "━━━━━━━━━━━━━━"
+        ),
         "dl_on": "✅ Actif",
         "dl_off": "❌ Inactif",
         "fc_on": "✅ Actif",
@@ -1376,6 +1444,40 @@ MESSAGES = {
             "   • 언어: fa, en, fr, ko (kr)\n\n"
             "📄 **분석 상세:**\n"
             "   • /detail - 전체 분석\n\n"
+            "━━━━━━━━━━━━━━"
+        ),
+        "help_msg_mono": (
+            "📚 **봇 가이드 (Mono)**\n"
+            "━━━━━━━━━━━━━━\n\n"
+            "📥 **인스타그램 다운로더**\n"
+            "```\n"
+            "링크       -> 자동 다운로드\n"
+            "/dl [링크] -> 강제 다운로드\n"
+            "```\n"
+            "🧠 **팩트체크**\n"
+            "```\n"
+            "/check        -> (답장)\n"
+            "/check [텍스트] -> 직접\n"
+            "```\n"
+            "🎓 **언어 학습**\n"
+            "```\n"
+            "/learn        -> (답장)\n"
+            "/learn [단어] -> 직접\n"
+            "```\n"
+            "🔊 **텍스트 음성 변환**\n"
+            "```\n"
+            "/voice        -> (답장)\n"
+            "/voice [텍스트] -> 직접\n"
+            "/voice en ... -> 번역\n"
+            "```\n"
+            "💰 **가격**\n"
+            "```\n"
+            "/price        -> 실시간 환율\n"
+            "```\n"
+            "📄 **상세정보**\n"
+            "```\n"
+            "/detail       -> (답장)\n"
+            "```\n"
             "━━━━━━━━━━━━━━"
         ),
         "dl_on": "✅ 활성화",
@@ -2172,24 +2274,14 @@ async def global_message_handler(update: Update, context: ContextTypes.DEFAULT_T
         
     # Help
     if text.startswith("ℹ️") or text.startswith("🆘"):
-        # A/B Test for Persian Users - DISABLED (keeping only monospace)
-        # Option 1: Text (commented out)
-        # help_text = get_msg("help_msg", user_id)
-        # await reply_and_delete(update, context, help_text, delay=60, parse_mode='Markdown') 
-        
-        # Option 2: Monospace (ACTIVE)
-        if lang == 'fa':
-            help_mono = get_msg("help_msg_mono", user_id)
-            if help_mono:
-                await reply_and_delete(update, context, help_mono, delay=60, parse_mode='Markdown')
+        # Use monospace help for all languages
+        help_mono = get_msg("help_msg_mono", user_id)
+        if help_mono:
+            await reply_and_delete(update, context, help_mono, delay=60, parse_mode='Markdown')
         else:
-            # For non-Persian users, use standard help
+            # Fallback to standard help if mono not available
             help_text = get_msg("help_msg", user_id)
             await reply_and_delete(update, context, help_text, delay=60, parse_mode='Markdown')
-        
-        # Option 3: Image (commented out)
-        # if os.path.exists("help_fa.png"):
-        #     await msg.reply_photo(photo=open("help_fa.png", "rb"), caption="🖼️ **گزینه سوم: تصویر جدول**")
         return
 
     # Price Check
