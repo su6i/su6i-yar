@@ -2750,7 +2750,14 @@ def main():
         return
 
     print("🚀 Starting SmartBot Core...")
-    app = ApplicationBuilder().token(TELEGRAM_TOKEN).concurrent_updates(True).build()
+    from telegram.ext import JobQueue
+    app = (
+        ApplicationBuilder()
+        .token(TELEGRAM_TOKEN)
+        .concurrent_updates(True)
+        .job_queue(JobQueue())  # Enable JobQueue for countdown timers
+        .build()
+    )
 
     # Commands
     app.add_handler(CommandHandler("dl", cmd_download_handler))
