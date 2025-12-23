@@ -2172,19 +2172,24 @@ async def global_message_handler(update: Update, context: ContextTypes.DEFAULT_T
         
     # Help
     if text.startswith("ℹ️") or text.startswith("🆘"):
-        help_text = get_msg("help_msg", user_id)
-        await reply_and_delete(update, context, help_text, delay=60, parse_mode='Markdown') 
+        # A/B Test for Persian Users - DISABLED (keeping only monospace)
+        # Option 1: Text (commented out)
+        # help_text = get_msg("help_msg", user_id)
+        # await reply_and_delete(update, context, help_text, delay=60, parse_mode='Markdown') 
         
-        # A/B Test for Persian Users
+        # Option 2: Monospace (ACTIVE)
         if lang == 'fa':
-            # Option 2: Monospace
             help_mono = get_msg("help_msg_mono", user_id)
             if help_mono:
                 await reply_and_delete(update, context, help_mono, delay=60, parse_mode='Markdown')
-            
-            # Option 3: Image
-            if os.path.exists("help_fa.png"):
-                await msg.reply_photo(photo=open("help_fa.png", "rb"), caption="🖼️ **گزینه سوم: تصویر جدول**")
+        else:
+            # For non-Persian users, use standard help
+            help_text = get_msg("help_msg", user_id)
+            await reply_and_delete(update, context, help_text, delay=60, parse_mode='Markdown')
+        
+        # Option 3: Image (commented out)
+        # if os.path.exists("help_fa.png"):
+        #     await msg.reply_photo(photo=open("help_fa.png", "rb"), caption="🖼️ **گزینه سوم: تصویر جدول**")
         return
 
     # Price Check
