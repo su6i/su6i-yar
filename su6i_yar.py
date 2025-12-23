@@ -1755,8 +1755,59 @@ async def smart_reply(msg, status_msg, response, user_id):
             await status_msg.edit_text(final_text, parse_mode=None)
 
 # ==============================================================================
-# LOGIC: INSTAGRAM DOWNLOAD
+# LOGIC: INSTAGRAM DOWNLOAD (YT-DLP + COBALT FALLBACK)
 # ==============================================================================
+
+async def download_instagram_cobalt(url: str, filename: Path) -> bool:
+    """Download video using Cobalt API as fallback"""
+    logger.info("🛡️ Falling back to Cobalt API...")
+    try:
+        api_url = "https://api.cobalt.tools/api/json"
+        headers = {
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "User-Agent": "Mozilla/5.0 (compatible; Su6iYar/4.5)"
+        }
+        payload = {
+            "url": url,
+            "vCodec": "h264",
+            "vQuality": "max",
+            "aFormat": "mp3",
+            "filenamePattern": "basic"
+        }
+
+        async with httpx.AsyncClient(timeout=30) as client:
+            # 1. Get Download Link
+            resp = await client.post(api_url, json=payload, headers=headers)
+            resp.raise_for_status()
+            data = resp.json()
+
+            if data.get("status") in ["error", "redirect"]:
+                logger.error(f"Cobalt API Error: {data.get('text')}")
+                return False
+
+            # Cobalt returns URL in 'url' field for 'stream' status or 'picker' items
+            dl_url = data.get("url")
+            if not dl_url and data.get("picker"):
+                dl_url = data["picker"][0]["url"] # Default to first item
+
+            if not dl_url:
+                logger.error("No URL found in Cobalt response")
+                return False
+
+            # 2. Download File Stream
+            logger.info("⬇️ Downloading stream from Cobalt...")
+            async with client.stream("GET", dl_url, follow_redirects=True) as dl_resp:
+                dl_resp.raise_for_status()
+                with open(filename, "wb") as f:
+                    async for chunk in dl_resp.aiter_bytes():
+                        f.write(chunk)
+            
+            return True
+
+    except Exception as e:
+        logger.error(f"Cobalt Fallback Failed: {e}")
+        return False
 
 async def download_instagram(url, chat_id, bot, reply_to_message_id=None):
     """Download and send video using yt-dlp with caption extraction"""
@@ -1799,7 +1850,13 @@ async def download_instagram(url, chat_id, bot, reply_to_message_id=None):
         
         if process.returncode != 0:
             logger.error(f"Download Error: {stderr.decode()}")
-            return False
+            # AUTO-FALLBACK TO COBALT
+            logger.warning("⚠️ local yt-dlp failed, trying Cobalt API...")
+            success = await download_instagram_cobalt(url, filename)
+            if not success:
+                return False
+            # If cobalt success, we won't have the info.json from yt-dlp, 
+            # so original_caption will be empty, which is fine.
 
         # 5. Extract caption from info.json
         original_caption = ""
