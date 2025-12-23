@@ -1750,7 +1750,6 @@ async def download_instagram(url, chat_id, bot, reply_to_message_id=None):
                 # Try fallback without video or without caption
                 return False
         return False
-        return False
         
     except Exception as e:
         logger.error(f"DL Exception: {e}")
@@ -1794,11 +1793,44 @@ async def cmd_toggle_dl_handler(update: Update, context: ContextTypes.DEFAULT_TY
     state = get_msg("dl_on") if SETTINGS["download"] else get_msg("dl_off")
     await update.message.reply_text(get_msg("action_dl").format(state=state))
 
-async def cmd_toggle_fc_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logger.info("🧠 Command /toggle_fc triggered")
-    SETTINGS["fact_check"] = not SETTINGS["fact_check"]
     state = get_msg("fc_on") if SETTINGS["fact_check"] else get_msg("fc_off")
     await update.message.reply_text(get_msg("action_fc").format(state=state))
+
+async def cmd_download_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Force download manual override"""
+    logger.info("📥 Command /dl triggered")
+    msg = update.message
+    user_id = update.effective_user.id
+    
+    # 1. Find the link (Reply or Arg)
+    target_link = ""
+    if context.args:
+        target_link = context.args[0]
+    elif msg.reply_to_message:
+        target_link = msg.reply_to_message.text or msg.reply_to_message.caption or ""
+    
+    # 2. Extract URL if mixed with text
+    match = re.search(r'(https?://(?:www\.)?instagram\.com/\S+)', target_link)
+    if match:
+        target_link = match.group(1)
+    
+    # 3. Validate
+    if "instagram.com" not in target_link:
+        await msg.reply_text("⛔ لطفاً لینک اینستاگرام را بفرستید یا روی آن ریپلای کنید.")
+        return
+
+    # 4. Force Download (Ignoring SETTINGS["download"])
+    status_msg = await msg.reply_text(
+        get_msg("downloading", user_id),
+        reply_to_message_id=msg.message_id
+    )
+    
+    success = await download_instagram(target_link, msg.chat_id, context.bot, msg.message_id)
+    if success:
+        await status_msg.delete()
+    else:
+        await status_msg.edit_text(get_msg("err_dl", user_id))
+
 
 async def cmd_stop_bot_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -2288,6 +2320,8 @@ def main():
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).concurrent_updates(True).build()
 
     # Commands
+    app.add_handler(CommandHandler("dl", cmd_download_handler))
+    app.add_handler(CommandHandler("download", cmd_download_handler))
     app.add_handler(CommandHandler("start", cmd_start_handler))
     app.add_handler(CommandHandler("help", cmd_start_handler)) # Reuse start for help
     app.add_handler(CommandHandler("close", cmd_close_handler))
