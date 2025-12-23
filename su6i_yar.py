@@ -2652,7 +2652,7 @@ async def generate_visual_prompt(text: str) -> str:
 
 async def transcribe_audio(audio_file_path: str, target_lang: str = None) -> dict:
     """
-    Transcribe audio using Gemini 2.0 Flash with optional translation.
+    Transcribe audio using Gemini with fallback support.
     
     Args:
         audio_file_path: Path to audio file
@@ -2661,15 +2661,19 @@ async def transcribe_audio(audio_file_path: str, target_lang: str = None) -> dic
     Returns:
         dict with 'transcription' and optionally 'translation'
     """
+    # Model priority list (best to fallback)
+    models_to_try = [
+        "gemini-3-pro-preview",      # Most powerful
+        "gemini-2.5-flash",           # Stable, good performance
+        "gemini-2.5-flash-preview-09-2025"  # Fallback
+    ]
+    
     try:
         # Configure Gemini
         genai.configure(api_key=GEMINI_API_KEY)
         
         # Upload audio/video file
         media_file = genai.upload_file(audio_file_path)
-        
-        # Create model (using Gemini 3 Pro - most powerful multimodal model with audio/video support)
-        model = genai.GenerativeModel("gemini-3-pro-preview")
         
         # Build prompt
         if target_lang:
@@ -2683,18 +2687,32 @@ async def transcribe_audio(audio_file_path: str, target_lang: str = None) -> dic
         else:
             prompt = "Transcribe this audio accurately. Detect the language automatically."
         
-        # Generate response
-        response = model.generate_content([prompt, media_file])
+        # Try models in order
+        last_error = None
+        for model_name in models_to_try:
+            try:
+                logger.info(f"🎤 Trying ASR with {model_name}")
+                model = genai.GenerativeModel(model_name)
+                response = model.generate_content([prompt, media_file])
+                
+                # Parse response
+                if target_lang and "---" in response.text:
+                    parts = response.text.split("---", 1)
+                    return {
+                        "transcription": parts[0].strip(),
+                        "translation": parts[1].strip() if len(parts) > 1 else None
+                    }
+                else:
+                    return {"transcription": response.text.strip()}
+                    
+            except Exception as e:
+                last_error = e
+                logger.warning(f"ASR failed with {model_name}: {e}")
+                continue  # Try next model
         
-        # Parse response
-        if target_lang and "---" in response.text:
-            parts = response.text.split("---", 1)
-            return {
-                "transcription": parts[0].strip(),
-                "translation": parts[1].strip() if len(parts) > 1 else None
-            }
-        else:
-            return {"transcription": response.text.strip()}
+        # All models failed
+        logger.error(f"All ASR models failed. Last error: {last_error}")
+        return None
             
     except Exception as e:
         logger.error(f"ASR Error: {e}")
