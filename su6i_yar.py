@@ -1911,11 +1911,11 @@ async def download_instagram(url, chat_id, bot, reply_to_message_id=None):
         
         if process.returncode != 0:
             logger.error(f"Download Error: {stderr.decode()}")
-            # AUTO-FALLBACK TO COBALT
-            logger.warning("⚠️ local yt-dlp failed, trying Cobalt API...")
-            success = await download_instagram_cobalt(url, filename)
-            if not success:
-                return False
+            # AUTO-FALLBACK DISABLED BY USER REQUEST due to server DNS issues
+            # logger.warning("⚠️ local yt-dlp failed, trying Cobalt API...")
+            # success = await download_instagram_cobalt(url, filename)
+            # if not success:
+            return False
             # If cobalt success, we won't have the info.json from yt-dlp, 
             # so original_caption will be empty, which is fine.
 
