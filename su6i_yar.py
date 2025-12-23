@@ -1762,73 +1762,104 @@ async def download_instagram_cobalt(url: str, filename: Path) -> bool:
     """Download video using Cobalt API as fallback"""
     logger.info("🛡️ Falling back to Cobalt API...")
     try:
-        api_url = "https://api.cobalt.tools/api/json"
+        # List of public instances (Official + Community)
+        # Source: https://instances.cobalt.tools
+        instances = [
+            "https://api.cobalt.tools/api/json",      # Official (might block)
+            "https://cobalt.pub",                     # Community 1
+            "https://api.cobalt.kwiatekmiki.pl",      # Community 2
+            "https://cobalt.hyperr.net",              # Community 3
+            "https://api.server.cobalt.tools"         # Alternative Official
+        ]
+        
         headers = {
             "Accept": "application/json",
             "Content-Type": "application/json",
             "User-Agent": "Mozilla/5.0 (compatible; Su6iYar/4.5)"
         }
-        async with httpx.AsyncClient(timeout=30) as client:
-            # Strategy: Try v10 keys first, then fallback to v7 keys
-            payloads_to_try = [
-                # v10 Syntax
-                {
-                    "url": url,
-                    "videoQuality": "max",
-                    "audioFormat": "mp3",
-                    "filenameStyle": "basic"
-                },
-                # v7 Syntax (Legacy)
-                {
-                    "url": url,
-                    "vCodec": "h264",
-                    "vQuality": "max",
-                    "aFormat": "mp3",
-                    "filenamePattern": "basic"
-                }
-            ]
 
-            dl_url = None
-            for i, payload in enumerate(payloads_to_try):
-                try:
-                    resp = await client.post(api_url, json=payload, headers=headers)
-                    resp.raise_for_status()
-                    data = resp.json()
+        async with httpx.AsyncClient(timeout=20, follow_redirects=True) as client:
+            # Strategy: Try each instance
+            for base_url in instances:
+                # Handle endpoint differences
+                # v7 uses /api/json, v10 uses /
+                # We try both implicitly by constructing full URLs or base
+                
+                # Clean base URL
+                base = base_url.rstrip("/")
+                if base.endswith("/api/json"):
+                    api_url = base # v7 style
+                else:
+                    api_url = base # v10 style (often root)
 
-                    if data.get("status") in ["error", "redirect"]:
-                        err_text = data.get('text', 'Unknown Error')
-                        logger.warning(f"Cobalt Attempt {i+1} Failed: {err_text}")
-                        continue
+                logger.info(f"🛡️ Trying Cobalt Instance: {api_url}")
 
-                    # Success - Extract URL
-                    dl_url = data.get("url")
-                    if not dl_url and data.get("picker"):
-                        dl_url = data["picker"][0]["url"]
+                # Define Payloads (v10 vs v7)
+                payloads_to_try = [
+                    # v10 Syntax
+                    {
+                        "url": url,
+                        "videoQuality": "max",
+                        "audioFormat": "mp3",
+                        "filenameStyle": "basic"
+                    },
+                    # v7 Syntax (Legacy)
+                    {
+                        "url": url,
+                        "vCodec": "h264",
+                        "vQuality": "max",
+                        "aFormat": "mp3",
+                        "filenamePattern": "basic"
+                    }
+                ]
+
+                dl_url = None
+                for i, payload in enumerate(payloads_to_try):
+                    try:
+                        resp = await client.post(api_url, json=payload, headers=headers)
+                        # Don't raise immediately, check status code manually to continue loop
+                        if resp.status_code not in [200, 201]:
+                             # Try next payload or instance
+                             continue
+                             
+                        data = resp.json()
+                        
+                        if data.get("status") in ["error", "redirect"]:
+                             continue
+
+                        # Success - Extract URL
+                        dl_url = data.get("url")
+                        if not dl_url and data.get("picker"):
+                            dl_url = data["picker"][0]["url"]
+                        
+                        if dl_url:
+                            break # Found URL with this payload!
+                    except Exception:
+                        continue # Try next payload
+
+                if dl_url:
+                    # Found a working URL from this instance!
+                    logger.info(f"✅ Found working Cobalt instance: {api_url}")
                     
-                    if dl_url:
-                        break # Found it!
-                except Exception as loop_e:
-                    logger.warning(f"Cobalt Req {i+1} Exception: {loop_e}")
-                    continue
+                    # Download File Stream
+                    try:
+                        logger.info("⬇️ Downloading stream from Cobalt...")
+                        async with client.stream("GET", dl_url) as dl_resp:
+                            dl_resp.raise_for_status()
+                            with open(filename, "wb") as f:
+                                async for chunk in dl_resp.aiter_bytes():
+                                    f.write(chunk)
+                        return True
+                    except Exception as dl_e:
+                        logger.error(f"Stream Download Failed: {dl_e}")
+                        # Try next instance if download fails
+                        continue 
 
-            if not dl_url:
-                logger.error("No URL found in Cobalt responses (both v10/v7 failed)")
-                return False
-
-            # 2. Download File Stream
-            logger.info("⬇️ Downloading stream from Cobalt...")
-            async with client.stream("GET", dl_url, follow_redirects=True) as dl_resp:
-                dl_resp.raise_for_status()
-                with open(filename, "wb") as f:
-                    async for chunk in dl_resp.aiter_bytes():
-                        f.write(chunk)
-            
-            return True
-
-    except Exception as e:
-        logger.error(f"Cobalt Fallback Failed: {e}")
+        logger.error("❌ All Cobalt instances failed.")
         return False
-
+    except Exception as e:
+        logger.error(f"Cobalt Fallback Logic Failed: {e}")
+        return False
 async def download_instagram(url, chat_id, bot, reply_to_message_id=None):
     """Download and send video using yt-dlp with caption extraction"""
     try:
