@@ -99,3 +99,10 @@ pip-log.txt
 pip-delete-this-directory.txt
 *.log
 bot.log
+
+# ─────────────────────────────────────────────────────────────────────────────
+# User added files
+# ─────────────────────────────────────────────────────────────────────────────
+user_data.json
+benchmark_models.py
+benchmark_report.md
