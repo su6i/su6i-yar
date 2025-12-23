@@ -1911,7 +1911,9 @@ async def download_instagram(url, chat_id, bot, reply_to_message_id=None):
         
         if process.returncode != 0:
             logger.error(f"Download Error: {stderr.decode()}")
-            # AUTO-FALLBACK DISABLED BY USER REQUEST due to server DNS issues
+            # COBALT FALLBACK DISABLED: No public API endpoints available
+            # All public instances are web interfaces, not JSON APIs
+            # To re-enable: self-host Cobalt and update instances list
             # logger.warning("⚠️ local yt-dlp failed, trying Cobalt API...")
             # success = await download_instagram_cobalt(url, filename)
             # if not success:
