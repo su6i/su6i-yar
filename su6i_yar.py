@@ -1764,19 +1764,25 @@ async def download_instagram_cobalt(url: str, filename: Path) -> bool:
     logger.info("🛡️ Falling back to Cobalt API...")
     try:
         # List of public instances (Official + Community)
-        # Source: https://instances.cobalt.tools
+        # Strategy: Prioritize known-good community instances
+        # Source: https://instances.cobalt.best & https://cobalt.directory
         instances = [
-            "https://api.cobalt.tools/api/json",      # Official (might block)
+            "https://cobalt.meowing.de",              # High reliability (verified Dec 2024)
             "https://cobalt.pub",                     # Community 1
             "https://api.cobalt.kwiatekmiki.pl",      # Community 2
             "https://cobalt.hyperr.net",              # Community 3
-            "https://api.server.cobalt.tools"         # Alternative Official
+            # "https://api.cobalt.tools/api/json",    # Official (BLOCKED - Auth Required)
+            # "https://api.server.cobalt.tools",      # Official Alt (Likely BLOCKED)
+            "https://cobalt.kuba2k2.com"             # Additional Community
         ]
         
+        # Enhanced headers to mimic browser
         headers = {
             "Accept": "application/json",
             "Content-Type": "application/json",
-            "User-Agent": "Mozilla/5.0 (compatible; Su6iYar/4.5)"
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Origin": "https://cobalt.tools",
+            "Referer": "https://cobalt.tools/"
         }
 
         async with httpx.AsyncClient(timeout=20, follow_redirects=True) as client:
@@ -1820,12 +1826,14 @@ async def download_instagram_cobalt(url: str, filename: Path) -> bool:
                         resp = await client.post(api_url, json=payload, headers=headers)
                         # Don't raise immediately, check status code manually to continue loop
                         if resp.status_code not in [200, 201]:
+                             logger.warning(f"  > Payload {i+1} Status {resp.status_code}: {resp.text[:100]}")
                              # Try next payload or instance
                              continue
                              
                         data = resp.json()
                         
                         if data.get("status") in ["error", "redirect"]:
+                             logger.warning(f"  > Payload {i+1} Error: {data.get('text')}")
                              continue
 
                         # Success - Extract URL
@@ -1835,7 +1843,8 @@ async def download_instagram_cobalt(url: str, filename: Path) -> bool:
                         
                         if dl_url:
                             break # Found URL with this payload!
-                    except Exception:
+                    except Exception as loop_e:
+                        logger.warning(f"  > Payload {i+1} Exception: {loop_e}")
                         continue # Try next payload
 
                 if dl_url:
