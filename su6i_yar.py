@@ -1618,6 +1618,33 @@ async def schedule_countdown_delete(context, chat_id: int, message_id: int, user
     except Exception:
         pass
 
+async def reply_with_countdown(update: Update, context, text: str, delay: int = 60, **kwargs):
+    """
+    Reply to message with countdown timer (only in groups).
+    Returns the reply message object.
+    """
+    msg = update.message
+    if not msg:
+        return None
+    
+    reply_msg = await msg.reply_text(text, **kwargs)
+    
+    # Only countdown in groups
+    if msg.chat_id < 0:
+        asyncio.create_task(
+            schedule_countdown_delete(
+                context=context,
+                chat_id=msg.chat_id,
+                message_id=reply_msg.message_id,
+                user_message_id=msg.message_id,
+                original_text=text,
+                total_seconds=delay,
+                parse_mode=kwargs.get('parse_mode', 'Markdown')
+            )
+        )
+    
+    return reply_msg
+
 async def reply_and_delete(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str, delay: int = 15, **kwargs):
     """
     Sends a reply and schedules its deletion if sent in a group.
@@ -2165,7 +2192,7 @@ async def cmd_status_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
     
     # Add user quota info
     full_status = get_status_text(user_id)
-    await reply_and_delete(update, context, full_status, delay=30, parse_mode='Markdown')
+    await reply_with_countdown(update, context, full_status, delay=30, parse_mode='Markdown')
 
 async def cmd_toggle_dl_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info("📥 Command /toggle_dl triggered")
@@ -2327,11 +2354,11 @@ async def global_message_handler(update: Update, context: ContextTypes.DEFAULT_T
         # Use monospace help for all languages
         help_mono = get_msg("help_msg_mono", user_id)
         if help_mono:
-            await reply_and_delete(update, context, help_mono, delay=60, parse_mode='Markdown')
+            await reply_with_countdown(update, context, help_mono, delay=60, parse_mode='Markdown')
         else:
             # Fallback to standard help if mono not available
             help_text = get_msg("help_msg", user_id)
-            await reply_and_delete(update, context, help_text, delay=60, parse_mode='Markdown')
+            await reply_with_countdown(update, context, help_text, delay=60, parse_mode='Markdown')
         return
 
     # Price Check
