@@ -1108,7 +1108,7 @@ MESSAGES = {
         ),
         "dl_usage_error": "⛔ لطفاً لینک اینستاگرام را بفرستید یا روی آن ریپلای کنید.",
         "asr_transcribing": "🎤 در حال رونویسی صوت...",
-        "asr_no_audio": "⛔ لطفاً به یک پیام صوتی ریپلای بزنید.",
+        "asr_no_audio": "⛔ لطفاً به یک پیام صوتی یا تصویری ریپلای بزنید.",
         "asr_error": "❌ خطا در رونویسی صوت. دوباره تلاش کنید."
     },
     "en": {
@@ -1259,7 +1259,7 @@ MESSAGES = {
         ),
         "dl_usage_error": "⛔ Please provide an Instagram link or reply to one.",
         "asr_transcribing": "🎤 Transcribing audio...",
-        "asr_no_audio": "⛔ Please reply to a voice message.",
+        "asr_no_audio": "⛔ Please reply to a voice or video message.",
         "asr_error": "❌ Error transcribing audio. Please try again."
     },
     "fr": {
@@ -1410,7 +1410,7 @@ MESSAGES = {
         ),
         "dl_usage_error": "⛔ Veuillez fournir un lien Instagram ou y répondre.",
         "asr_transcribing": "🎤 Transcription audio...",
-        "asr_no_audio": "⛔ Veuillez répondre à un message vocal.",
+        "asr_no_audio": "⛔ Veuillez répondre à un message vocal ou vidéo.",
         "asr_error": "❌ Erreur de transcription audio. Veuillez réessayer."
     },
     "ko": {
@@ -1558,7 +1558,7 @@ MESSAGES = {
         ),
         "dl_usage_error": "⛔ 인스타그램 링크를 보내거나 답장하세요.",
         "asr_transcribing": "🎤 음성 변환 중...",
-        "asr_no_audio": "⛔ 음성 메시지에 답장하세요.",
+        "asr_no_audio": "⛔ 음성 또는 비디오 메시지에 답장하세요.",
         "asr_error": "❌ 음성 변환 오류. 다시 시도하세요."
     }
 }
@@ -2665,11 +2665,11 @@ async def transcribe_audio(audio_file_path: str, target_lang: str = None) -> dic
         # Configure Gemini
         genai.configure(api_key=GEMINI_API_KEY)
         
-        # Upload audio file
-        audio_file = genai.upload_file(audio_file_path)
+        # Upload audio/video file
+        media_file = genai.upload_file(audio_file_path)
         
-        # Create model (using stable Gemini 2.5 Flash - best price/performance with audio support)
-        model = genai.GenerativeModel("gemini-2.5-flash")
+        # Create model (using Gemini 3 Pro - most powerful multimodal model with audio/video support)
+        model = genai.GenerativeModel("gemini-3-pro-preview")
         
         # Build prompt
         if target_lang:
@@ -2684,7 +2684,7 @@ async def transcribe_audio(audio_file_path: str, target_lang: str = None) -> dic
             prompt = "Transcribe this audio accurately. Detect the language automatically."
         
         # Generate response
-        response = model.generate_content([prompt, audio_file])
+        response = model.generate_content([prompt, media_file])
         
         # Parse response
         if target_lang and "---" in response.text:
@@ -2703,7 +2703,7 @@ async def transcribe_audio(audio_file_path: str, target_lang: str = None) -> dic
 
 async def cmd_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    Transcribe voice/audio message to text with optional translation.
+    Transcribe voice/audio/video message to text with optional translation.
     Usage: /text [language]
     Examples: /text, /text fa, /text en
     """
@@ -2711,8 +2711,8 @@ async def cmd_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.message
     user_id = update.effective_user.id
     
-    # Check if replying to voice/audio
-    if not msg.reply_to_message or not (msg.reply_to_message.voice or msg.reply_to_message.audio):
+    # Check if replying to voice/audio/video
+    if not msg.reply_to_message or not (msg.reply_to_message.voice or msg.reply_to_message.audio or msg.reply_to_message.video):
         await msg.reply_text(get_msg("asr_no_audio", user_id))
         return
     
@@ -2736,18 +2736,27 @@ async def cmd_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Show status
     status_msg = await msg.reply_text(get_msg("asr_transcribing", user_id))
     
-    # Download audio
-    audio = msg.reply_to_message.voice or msg.reply_to_message.audio
-    audio_file = await audio.get_file()
-    audio_path = f"audio_{user_id}_{int(time.time())}.ogg"
-    await audio_file.download_to_drive(audio_path)
+    # Download audio/video
+    media = msg.reply_to_message.voice or msg.reply_to_message.audio or msg.reply_to_message.video
+    media_file = await media.get_file()
+    
+    # Determine file extension
+    if msg.reply_to_message.video:
+        file_ext = "mp4"
+    elif msg.reply_to_message.voice:
+        file_ext = "ogg"
+    else:
+        file_ext = "mp3"
+    
+    media_path = f"media_{user_id}_{int(time.time())}.{file_ext}"
+    await media_file.download_to_drive(media_path)
     
     # Transcribe
-    result = await transcribe_audio(audio_path, target_lang)
+    result = await transcribe_audio(media_path, target_lang)
     
     # Cleanup
     try:
-        os.remove(audio_path)
+        os.remove(media_path)
     except:
         pass
     
