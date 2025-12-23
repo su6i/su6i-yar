@@ -4,7 +4,7 @@ A powerful, intelligent Telegram bot that downloads Instagram videos, verifies f
 
 **Rewritten from scratch for speed, stability, and ease of use.**
 
-![Version](https://img.shields.io/badge/Version-4.2.0-blue.svg)
+![Version](https://img.shields.io/badge/Version-4.4.0-blue.svg)
 ![Python](https://img.shields.io/badge/Python-3.9+-yellow.svg)
 ![License](https://img.shields.io/badge/License-MIT-green.svg)
 
@@ -14,6 +14,7 @@ A powerful, intelligent Telegram bot that downloads Instagram videos, verifies f
 *   Automatically detects Instagram links (Posts, Reels, TV).
 *   Downloads high-quality video using `yt-dlp`.
 *   **Auto-Captions:** Extracts original captions and attaches them to the video.
+*   **Manual Override:** `/dl` command to force download processing.
 *   Handles authentication via cookies to avoid blocking.
 
 ### 🧠 Smart AI Chain (8-Layer Defense)
@@ -41,6 +42,11 @@ A powerful, intelligent Telegram bot that downloads Instagram videos, verifies f
 + *   **Real-time Rates:** Fetches live USD, EUR, Gold 18k, and Global Ounce rates strictly from `tgju.org`.
 + *   **Gold Parity Analysis:** Automatically calculates the theoretical price of 18k gold based on global ounce/USD parity and shows the "Market Gap" (Bobble).
 + *   **Smart Caching:** Uses a 5-minute async cache to prevent rate-limiting and ensure ultra-fast response times.
+
+### 🔊 Audio & TTS
+*   **Multi-Language Voice:** `/voice` command to read or translate & read text.
+*   **Educational Audio:** `/learn` generates pronunciation for words and sample sentences.
+*   **TTS Support:** `fa`, `en`, `fr`, `ko` (powered by Edge-TTS).
 
 ### 🌍 Multi-Language Support
 *   Full support for **Persian (FA)** 🇮🇷, **English (EN)** 🇺🇸, **French (FR)** 🇫🇷, and **Korean (KO)** 🇰🇷.
@@ -195,6 +201,7 @@ sudo systemctl status su6i-yar
 | `/price`  | **Live Market:** Show currency and gold rates (alias: `/p`). |
 | `/help`  | Show instructions. |
 | `/detail` | Reply to analysis to get full scientific breakdown. |
+| `/dl` | Force download an Instagram link (reply or arg). |
 | `/stop`  | **(Admin Only)** Shutdown the bot. |
 
 ---

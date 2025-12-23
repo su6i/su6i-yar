@@ -973,7 +973,8 @@ MESSAGES = {
             "📚 **راهنمای کامل قابلیت‌های ربات**\n"
             "━━━━━━━━━━━━━━\n\n"
             "📥 **دانلودر اینستاگرام**\n"
-            "فقط کافیست لینک پست یا ریلز را بفرستید تا ربات به صورت خودکار آن را با بالاترین کیفیت برایتان دانلود کند.\n\n"
+            "فقط کافیست لینک پست یا ریلز را بفرستید تا ربات به صورت خودکار آن را با بالاترین کیفیت برایتان دانلود کند.\n"
+            "▫️ اگر دانلود خودکار خاموش بود: `/dl [لینک]` یا ریپلای `/dl`\n\n"
             "🧠 **راستی‌آزمایی هوشمند** (`/check`)\n"
             "برای بررسی درستیِ یک ادعا یا تحلیل متن توسط هوش مصنوعی و جستجوی گوگل:\n"
             "▫️ به یک پیام ریپلای کنید: `/check`\n"
@@ -1059,7 +1060,8 @@ MESSAGES = {
             "🌐 **انس جهانی:** `{ons}`$\n\n"
             "**طلای ۱۸ جهانی:**\n"
             "`{theoretical_tm}` تومان"
-        )
+        ),
+        "dl_usage_error": "⛔ لطفاً لینک اینستاگرام را بفرستید یا روی آن ریپلای کنید."
     },
     "en": {
         "welcome": (
@@ -1090,7 +1092,8 @@ MESSAGES = {
             "━━━━━━━━━━━━━━\n\n"
             "📥 **Instagram Downloader:**\n"
             "   • Send Post/Reels link\n"
-            "   • Auto-download in highest quality\n\n"
+            "   • Auto-download in highest quality\n"
+            "   • Force download: `/dl [link]`\n\n"
             "🧠 **Text Analysis (/check):**\n"
             "   • Reply to a message: /check\n"
             "   • Or directly: /check your text\n"
@@ -1171,7 +1174,8 @@ MESSAGES = {
             "Calculated Price (Ounce to 18k):\n"
             "`{theoretical}` Rial\n"
             "Market Gap: `{diff}` Rial"
-        )
+        ),
+        "dl_usage_error": "⛔ Please provide an Instagram link or reply to one."
     },
     "fr": {
         "welcome": (
@@ -1202,7 +1206,8 @@ MESSAGES = {
             "━━━━━━━━━━━━━━\n\n"
             "📥 **Téléchargeur Instagram:**\n"
             "   • Envoyez un lien Post/Reels\n"
-            "   • Téléchargement auto en HD\n\n"
+            "   • Téléchargement auto en HD\n"
+            "   • Téléchargement forcé: `/dl [lien]`\n\n"
             "🧠 **Analyse Texte (/check):**\n"
             "   • Répondez à un message: /check\n"
             "   • Ou directement: /check texte\n"
@@ -1283,7 +1288,8 @@ MESSAGES = {
             "Prix calculé (Once à 18k):\n"
             "`{theoretical}` Rial\n"
             "Écart du Marché: `{diff}` Rial"
-        )
+        ),
+        "dl_usage_error": "⛔ Veuillez fournir un lien Instagram ou y répondre."
     },
     "ko": {
         "welcome": (
@@ -1315,7 +1321,8 @@ MESSAGES = {
             "━━━━━━━━━━━━━━\n\n"
             "📥 **인스타그램 다운로더:**\n"
             "   • 포스트/릴스 링크 전송\n"
-            "   • 최고 화질 자동 다운로드\n\n"
+            "   • 최고 화질 자동 다운로드\n"
+            "   • 강제 다운로드: `/dl [링크]`\n\n"
             "🧠 **텍스트 분석 (/check):**\n"
             "   • 메시지에 답장: /check\n"
             "   • 또는 직접: /check 텍스트\n"
@@ -1392,7 +1399,8 @@ MESSAGES = {
             "계산된 가격 (온스 당 18k):\n"
             "`{theoretical}` 리알\n"
             "시장 차ی: `{diff}` 리알"
-        )
+        ),
+        "dl_usage_error": "⛔ 인스타그램 링크를 보내거나 답장해 주세요."
     }
 }
 
@@ -1816,7 +1824,7 @@ async def cmd_download_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     
     # 3. Validate
     if "instagram.com" not in target_link:
-        await msg.reply_text("⛔ لطفاً لینک اینستاگرام را بفرستید یا روی آن ریپلای کنید.")
+        await msg.reply_text(get_msg("dl_usage_error", user_id))
         return
 
     # 4. Force Download (Ignoring SETTINGS["download"])
