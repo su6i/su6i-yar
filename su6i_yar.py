@@ -1491,8 +1491,14 @@ async def reply_and_delete(update: Update, context: ContextTypes.DEFAULT_TYPE, t
     
     # Only auto-delete in groups (negative chat_id)
     if msg.chat_id < 0:
+        # Delete Bot's Reply
         context.job_queue.run_once(
             lambda ctx: ctx.bot.delete_message(chat_id=msg.chat_id, message_id=reply_msg.message_id),
+            delay
+        )
+        # Delete User's Command Message
+        context.job_queue.run_once(
+            lambda ctx: ctx.bot.delete_message(chat_id=msg.chat_id, message_id=msg.message_id),
             delay
         )
 
