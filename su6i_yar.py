@@ -2913,10 +2913,9 @@ def main():
     app.add_handler(CommandHandler("detail", cmd_detail_handler))
     app.add_handler(CommandHandler("voice", cmd_voice_handler))  # TTS Voice
     app.add_handler(CommandHandler("text", cmd_text_handler))  # ASR Transcription
-    app.add_handler(CommandHandler("t", cmd_text_handler))  # ASR Alias
     app.add_handler(CommandHandler("learn", cmd_learn_handler))
     app.add_handler(CommandHandler("l", cmd_learn_handler))
-    app.add_handler(CommandHandler("t", cmd_learn_handler))
+    app.add_handler(CommandHandler("t", cmd_learn_handler))  # /t is for /learn
     app.add_handler(CommandHandler("translate", cmd_learn_handler))
     app.add_handler(CommandHandler("edu", cmd_learn_handler))
     app.add_handler(CommandHandler("education", cmd_learn_handler))
