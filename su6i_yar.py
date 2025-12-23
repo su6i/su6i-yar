@@ -1590,9 +1590,15 @@ async def schedule_countdown_delete(context, chat_id: int, message_id: int, user
     """
     intervals = [50, 40, 30, 20, 10]  # Show countdown at these seconds remaining
     
+    elapsed = 0
     for remaining in intervals:
         if remaining < total_seconds:
-            await asyncio.sleep(total_seconds - remaining - (intervals[intervals.index(remaining) - 1] if intervals.index(remaining) > 0 else total_seconds))
+            # Calculate how long to sleep until this interval
+            sleep_time = (total_seconds - remaining) - elapsed
+            if sleep_time > 0:
+                await asyncio.sleep(sleep_time)
+                elapsed += sleep_time
+            
             try:
                 countdown_text = f"⏱️ {remaining}s\n\n{original_text}"
                 await context.bot.edit_message_text(
@@ -1601,7 +1607,7 @@ async def schedule_countdown_delete(context, chat_id: int, message_id: int, user
                     text=countdown_text,
                     parse_mode=parse_mode
                 )
-            except Exception:
+            except Exception as e:
                 pass  # Message might be already deleted or edited
     
     # Final sleep before deletion
