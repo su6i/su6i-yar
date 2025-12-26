@@ -101,16 +101,11 @@ pip-delete-this-directory.txt
 bot.log
 
 # ─────────────────────────────────────────────────────────────────────────────
-# User added files
+# User added files & Private Data
 # ─────────────────────────────────────────────────────────────────────────────
 user_data.json
 benchmark_models.py
 benchmark_report.md
-
-# Local utility scripts (contain server info)
 manual_cookie.py
 upload_cookie.py
 probe_cobalt.py
-
-# User data (personal information)
-user_data.json
