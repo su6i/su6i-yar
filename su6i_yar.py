@@ -1633,7 +1633,6 @@ async def schedule_countdown_delete(context, chat_id: int, message_id: int, user
     # Final sleep before deletion
     await asyncio.sleep(10)
     
-    # Delete both messages
     try:
         await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
     except Exception:
@@ -1641,6 +1640,14 @@ async def schedule_countdown_delete(context, chat_id: int, message_id: int, user
     
     try:
         await context.bot.delete_message(chat_id=chat_id, message_id=user_message_id)
+    except Exception:
+        pass
+
+async def safe_delete(message):
+    """Safely delete a message without crashing on BadRequest"""
+    if not message: return
+    try:
+        await message.delete()
     except Exception:
         pass
 
@@ -2359,11 +2366,11 @@ async def cmd_download_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     try:
         success = await download_instagram(target_link, msg.chat_id, context.bot, reply_to_message_id=reply_to_id)
         if success == "TOO_LARGE":
-            if not IS_DEV: await status_msg.delete()
+            if not IS_DEV: await safe_delete(status_msg)
             await reply_and_delete(update, context, get_msg("err_too_large", user_id), delay=15)
         elif success:
             # Video sent successfully, cleanup status
-            if not IS_DEV: await status_msg.delete()
+            if not IS_DEV: await safe_delete(status_msg)
             # Cleanup command msg if in group
             if msg.chat_id < 0:
                 context.job_queue.run_once(
@@ -2371,13 +2378,13 @@ async def cmd_download_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                     1 # Almost immediate
                 )
         else:
-            if not IS_DEV: await status_msg.delete()
+            if not IS_DEV: await safe_delete(status_msg)
             # Silent error to admin, generic fade-out to user
             await report_error_to_admin(context, user_id, "/dl", f"Download failed for {target_link}")
             await reply_and_delete(update, context, get_msg("err_dl", user_id), delay=10)
             
     except Exception as e:
-        if not IS_DEV: await status_msg.delete()
+        if not IS_DEV: await safe_delete(status_msg)
         await report_error_to_admin(context, user_id, "/dl", str(e))
         await reply_and_delete(update, context, get_msg("err_dl", user_id), delay=10)
 
@@ -2463,7 +2470,7 @@ async def global_message_handler(update: Update, context: ContextTypes.DEFAULT_T
         try:
             audio_buffer = await text_to_speech(detail_text, lang)
             await msg.reply_voice(voice=audio_buffer, caption="🔊 نسخه صوتی تحلیل")
-            await status_msg.delete()
+            await safe_delete(status_msg)
         except Exception as e:
             logger.error(f"TTS Error: {e}")
             await status_msg.edit_text(get_msg("voice_error", user_id))
@@ -2523,9 +2530,10 @@ async def global_message_handler(update: Update, context: ContextTypes.DEFAULT_T
         if success == "TOO_LARGE":
             await status_msg.edit_text(get_msg("err_too_large", user_id))
             if not IS_DEV: 
-                context.job_queue.run_once(lambda ctx: status_msg.delete(), 15)
+                async def del_msg(ctx): await safe_delete(status_msg)
+                context.job_queue.run_once(del_msg, 15)
         elif success:
-            if not IS_DEV: await status_msg.delete()
+            if not IS_DEV: await safe_delete(status_msg)
         else:
             await status_msg.edit_text(get_msg("err_dl", user_id))
         return
@@ -2857,14 +2865,14 @@ async def cmd_voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
         
         if 'status_msg' in locals():
-            if not IS_DEV: await status_msg.delete()
+            if not IS_DEV: await safe_delete(status_msg)
             
     except Exception as e:
         logger.error(f"Voice Error: {e}")
         await report_error_to_admin(context, user_id, "/voice", str(e))
         error_msg = get_msg("err_ai", user_id) if 'user_id' in locals() else "خطایی رخ داد."
         if 'status_msg' in locals():
-            if not IS_DEV: await status_msg.delete()
+            if not IS_DEV: await safe_delete(status_msg)
         
         await reply_and_delete(update, context, error_msg, delay=10)
 
