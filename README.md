@@ -4,24 +4,25 @@ A powerful, intelligent Telegram bot that downloads Instagram videos, verifies f
 
 **Rewritten from scratch for speed, stability, and ease of use.**
 
-![Version](https://img.shields.io/badge/Version-4.4.0-blue.svg)
-![Python](https://img.shields.io/badge/Python-3.9+-yellow.svg)
+![Version](https://img.shields.io/badge/Version-5.0.0-blue.svg)
+![Python](https://img.shields.io/badge/Python-3.12+-yellow.svg)
 ![License](https://img.shields.io/badge/License-MIT-green.svg)
 
 ## ✨ Key Features
 
-### 📥 Smart Downloader
-*   Automatically detects Instagram links (Posts, Reels, TV).
-*   Downloads high-quality video using `yt-dlp`.
+### 📥 Smart Downloader (Triple-Fallback)
+*   **Success Guarantee:** Uses a 3-stage strategy (Anonymous -> Safari Cookies -> Cobalt API) to bypass Instagram blocks.
+*   **Telegram 50MB Limit Fix:** Automatically detects large files and scales resolution (1080p → 720p → 480p) to ensure the video always fits Telegram's bot limit.
 *   **Auto-Captions:** Extracts original captions and attaches them to the video.
 *   **Manual Override:** `/dl` command to force download processing.
-*   Handles authentication via cookies to avoid blocking.
+*   **Optimized for Mac:** Seamlessly uses Safari browser cookies for authentication.
 
 ### 🧠 Smart AI Chain (8-Layer Defense)
-*   **Architecture:** Powered by **LangChain** for robust, self-healing analysis.
+*   **Primary Model:** Powered by **Gemini 3 Flash Preview** for cutting-edge speed and reasoning.
+*   **Architecture:** Guided by **LangChain** for robust, self-healing analysis.
 *   **Search Grounding:** Uses **Google Search** to verify facts in real-time.
-*   **Live Model Display:** Shows exact model name (e.g., `gemini-2.0-flash`) during analysis.
-*   **Fallback System:** Automatically switches models if quotas are full or APIs fail.
+*   **Advanced Parsing:** Intelligently handles multimodal/grounding responses to ensure clean, formatted output.
+*   **Fallback System:** Automatically switches models (Pro/Flash/DeepSeek) if quotas are full or APIs fail.
 
 ### 🎓 Educational Mode (/learn)
 *   **Multimodal Learning:** Provides 3 nuanced variations for any word/phrase.
@@ -96,9 +97,11 @@ pip install -r requirements.txt
 Create a `.env` file in the root directory:
 
 ```ini
-TELEGRAM_BOT_TOKEN=your_telegram_bot_token
+TELEGRAM_BOT_TOKEN=your_production_token
+TELEGRAM_BOT_TOKEN_DEV=your_development_token  # Optional for --dev mode
 SETTINGS={"admin_id": your_numeric_id, "public_mode": false}
 GEMINI_API_KEY=your_gemini_api_key
+DEEPSEEK_API_KEY=your_deepseek_api_key # Optional fallback
 ```
 
 ---
@@ -125,9 +128,14 @@ python3 su6i_yar.py
 
 > **Important:** The bot will only work while your computer is running. Close the terminal = bot stops.
 
-#### 🔄 Development Mode (Auto-Restart on Changes)
+#### 🔄 Development Mode (Persistence & Auto-Restart)
+
+Run the bot with the `--dev` flag to enable development features:
+- **Persistent Messages:** Status and error messages are NOT deleted, making debugging easier.
+- **Auto-Restart:** Instantly reloads the bot when you save code changes.
 
 ```bash
+# Easy start script (Requires nodemon or watchdog)
 ./run_dev.sh
 ```
 
