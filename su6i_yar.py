@@ -390,6 +390,7 @@ class FallbackErrorCallback(AsyncCallbackHandler):
 async def cmd_check_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info("✅ Command /check triggered")
     msg = update.message
+    if not msg: return
     user_id = update.effective_user.id
     lang = USER_LANG.get(user_id, "fa")
 
@@ -408,9 +409,13 @@ async def cmd_check_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Check if reply or arguments
     target_text = ""
+    reply_target_id = msg.message_id
+    
     if msg.reply_to_message:
         # Check both text and caption (for media messages)
         target_text = msg.reply_to_message.text or msg.reply_to_message.caption or ""
+        reply_target_id = msg.reply_to_message.message_id
+        
     if not target_text and context.args:
         target_text = " ".join(context.args)
     
@@ -420,8 +425,13 @@ async def cmd_check_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     status_msg = await msg.reply_text(
         get_msg("analyzing", user_id),
-        reply_to_message_id=msg.message_id
+        reply_to_message_id=reply_target_id
     )
+    
+    # Delete the command message itself if in a group
+    if msg.chat_id < 0:
+        await safe_delete(msg)
+
     response = await analyze_text_gemini(target_text, status_msg, lang, user_id=user_id)
     
     # Increment usage and get remaining
@@ -430,10 +440,10 @@ async def cmd_check_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await smart_reply(msg, status_msg, response, user_id, lang)
     
     # Show remaining requests (skip for admin)
-    # Show remaining requests (skip for admin)
     if user_id != SETTINGS["admin_id"]:
         limit = get_user_limit(user_id)
-        await reply_and_delete(update, context, f"📊 {remaining}/{limit} درخواست باقی‌مانده امروز", delay=15, reply_to_message_id=status_msg.message_id)
+        # Use simple message for quota to avoid cluttering, or just log it
+        await reply_and_delete(update, context, f"📊 {remaining}/{limit} {get_msg('limit_remaining_count', user_id)}", delay=15, reply_to_message_id=status_msg.message_id)
 
 # ==============================================================================
 # LOGIC: SMART CHAIN FACTORY (LANGCHAIN)
@@ -2587,16 +2597,22 @@ async def cmd_detail_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await msg.reply_text("⛔ هیچ تحلیل ذخیره‌شده‌ای موجود نیست. ابتدا یک متن را تحلیل کنید.")
         return
 
+    # Decide reply target
+    reply_target_id = msg.message_id
+    if msg.reply_to_message:
+        reply_target_id = msg.reply_to_message.message_id
+
     # Smart chunking: split by paragraphs, not mid-paragraph
     max_length = 3900  # Leave some margin
     
     if len(detail_text) <= max_length:
         # Fits in one message
         try:
-            await msg.reply_text(detail_text, parse_mode='Markdown')
+            await msg.reply_text(detail_text, parse_mode='Markdown', reply_to_message_id=reply_target_id)
         except Exception:
-            await msg.reply_text(detail_text, parse_mode=None)
+            await msg.reply_text(detail_text, parse_mode=None, reply_to_message_id=reply_target_id)
     else:
+        # ... (rest of chunking logic)
         # Need to chunk - split by paragraphs
         paragraphs = detail_text.split('\n\n')
         chunks = []
@@ -2629,7 +2645,11 @@ async def cmd_detail_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 if i == 0:
                     await msg.reply_text(f"{chunk}\n\n━━━━━━━━━━━━━━\n📄 بخش {i+1} از {len(chunks)}", parse_mode=None)
                 else:
-                    await msg.reply_text(f"📄 بخش {i+1} از {len(chunks)}\n━━━━━━━━━━━━━━\n\n{chunk}", parse_mode=None)
+                    await msg.reply_text(f"📊 بخش {i+1} از {len(chunks)}\n━━━━━━━━━━━━━━\n\n{chunk}", parse_mode=None, reply_to_message_id=reply_target_id)
+        
+    # Delete command in groups
+    if msg.chat_id < 0:
+        await safe_delete(msg)
 
 
 # TTS Voice Mapping
@@ -2774,8 +2794,10 @@ async def cmd_voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Priority 1: Check if replied to a message
     target_text = ""
+    reply_target_id = msg.message_id
     if msg.reply_to_message:
         target_text = msg.reply_to_message.text or msg.reply_to_message.caption or ""
+        reply_target_id = msg.reply_to_message.message_id
     
     # Priority 2: Check for direct text input
     if not target_text and context.args:
@@ -2788,10 +2810,16 @@ async def cmd_voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Priority 3: Check cache
     if not target_text:
         target_text = LAST_ANALYSIS_CACHE.get(user_id, "")
+        # If from cache, we might not have a good reply target, use command
+        reply_target_id = msg.message_id 
     
     if not target_text:
         await reply_and_delete(update, context, get_msg("voice_no_text", user_id), delay=10)
         return
+
+    # Delete command in groups
+    if msg.chat_id < 0:
+        await safe_delete(msg)
 
     # Decide target language and translation need
     if explicit_target:
@@ -2810,17 +2838,17 @@ async def cmd_voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         # 1. Translate if needed
         if need_translation:
-            original_msg_id = msg.reply_to_message.message_id if msg.reply_to_message else msg.message_id
-            status_msg = await msg.reply_text(
-                get_msg("voice_translating", user_id).format(lang=LANG_NAMES.get(target_lang, target_lang)),
-                reply_to_message_id=original_msg_id
+            status_msg = await context.bot.send_message(
+                chat_id=msg.chat_id,
+                text=get_msg("voice_translating", user_id).format(lang=LANG_NAMES.get(target_lang, target_lang)),
+                reply_to_message_id=reply_target_id
             )
             translated_text = await translate_text(target_text, target_lang)
             await status_msg.edit_text(get_msg("voice_generating", user_id))
             target_text = translated_text
-            voice_reply_to = original_msg_id
+            voice_reply_to = reply_target_id
         else:
-            voice_reply_to = msg.message_id
+            voice_reply_to = reply_target_id
             
         # 2. Convert to speech
         audio_buffer = await text_to_speech(target_text, target_lang)
