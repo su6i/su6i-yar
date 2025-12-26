@@ -70,6 +70,7 @@ debug/
 *.mkv
 *.avi
 *.tmp
+*.info.json
 downloads/
 instagram_videos_temp/
 screenshots/
