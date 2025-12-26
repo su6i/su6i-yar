@@ -694,10 +694,8 @@ async def cmd_learn_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                 # If this is the start of sending real content, remove the temporary status GIF
                 if i == 0 and status_msg:
-                    try: 
-                        await status_msg.delete()
-                        status_msg = None # Clear to avoid trying to delete again later
-                    except: pass
+                    await safe_delete(status_msg)
+                    status_msg = None # Clear to avoid trying to delete again later
 
                 if i > 0: await asyncio.sleep(3.5)
                     
@@ -794,10 +792,7 @@ async def cmd_learn_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     except: pass
 
             if not IS_DEV:
-                try:
-                    await status_msg.delete()
-                except:
-                    pass
+                await safe_delete(status_msg)
             
             # FINISHED: Remove from waiters and refresh positions for others
             if waiter_entry in LEARN_WAITERS:
@@ -2373,10 +2368,10 @@ async def cmd_download_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             if not IS_DEV: await safe_delete(status_msg)
             # Cleanup command msg if in group
             if msg.chat_id < 0:
-                context.job_queue.run_once(
-                    lambda ctx: ctx.bot.delete_message(chat_id=msg.chat_id, message_id=msg.message_id),
-                    1 # Almost immediate
-                )
+                async def del_cmd(ctx):
+                    try: await ctx.bot.delete_message(chat_id=msg.chat_id, message_id=msg.message_id)
+                    except: pass
+                context.job_queue.run_once(del_cmd, 1)
         else:
             if not IS_DEV: await safe_delete(status_msg)
             # Silent error to admin, generic fade-out to user
