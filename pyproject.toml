@@ -1,12 +1,20 @@
 [project]
-name = "bot-instagram-yt-dlp"
-version = "0.1.0"
-description = "Add your description here"
+name = "su6i-yar"
+version = "1.0.0"
+description = "Su6i Yar: Smart AI Assistant for Instagram Download, Fact-Checking, and Language Learning"
 readme = "README.md"
+authors = [
+    { name = "su6i", email = "su6i@users.noreply.github.com" }
+]
 requires-python = ">=3.12"
 dependencies = [
-    "browsercookie>=0.8.1",
-    "dotenv>=0.9.9",
-    "python-telegram-bot>=22.3",
-    "yt-dlp>=2025.7.21",
+    "python-telegram-bot>=21.0",
+    "yt-dlp>=2025.0.0",
+    "langchain>=0.1.0",
+    "langchain-google-genai>=1.0.0",
+    "langchain-openai>=0.1.0",
+    "httpx>=0.27.0",
+    "edge-tts>=6.1.0",
+    "python-dotenv>=1.0.0",
+    "watchdog>=4.0.0"
 ]
