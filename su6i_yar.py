@@ -11,6 +11,7 @@ warnings.filterwarnings("ignore", category=UserWarning, module="langchain_core._
 
 from pathlib import Path
 from dotenv import load_dotenv
+import argparse
 import io
 import json
 import uuid
@@ -80,9 +81,20 @@ logging.getLogger("google.genai").setLevel(logging.WARNING)
 logging.getLogger("google_genai._api_client").setLevel(logging.ERROR)
 
 
+# 2. Argument Parsing for Environment
+parser = argparse.ArgumentParser(description="Su6i Yar Bot")
+parser.add_argument("--dev", action="store_true", help="Run in development mode")
+args = parser.parse_args()
+IS_DEV = args.dev
+
 # 2. Environment Variables
 load_dotenv()
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+if args.dev:
+    logger.info("🛠️ Running in DEVELOPMENT MODE")
+    TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN_DEV") or os.getenv("TELEGRAM_BOT_TOKEN")
+else:
+    TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
@@ -415,7 +427,7 @@ async def cmd_check_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Increment usage and get remaining
     remaining = increment_daily_usage(user_id)
     
-    await smart_reply(msg, status_msg, response, user_id)
+    await smart_reply(msg, status_msg, response, user_id, lang)
     
     # Show remaining requests (skip for admin)
     # Show remaining requests (skip for admin)
@@ -781,8 +793,11 @@ async def cmd_learn_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         )
                     except: pass
 
-            try: await status_msg.delete()
-            except: pass
+            if not IS_DEV:
+                try:
+                    await status_msg.delete()
+                except:
+                    pass
             
             # FINISHED: Remove from waiters and refresh positions for others
             if waiter_entry in LEARN_WAITERS:
@@ -1054,6 +1069,7 @@ MESSAGES = {
         "downloading": "📥 در حال دانلود... لطفاً صبر کنید",
         "uploading": "📤 در حال آپلود به تلگرام...",
         "err_dl": "❌ خطا در دانلود. لینک را بررسی کنید",
+        "err_too_large": "🚫 فایل بزرگتر از ۵۰ مگابایت است و تلگرام اجازه ارسال آن را نمی‌دهد.",
         "err_api": "❌ خطا در ارتباط با سرور تحلیل. بعداً تلاش کنید",
         "voice_generating": "🔊 در حال ساخت فایل صوتی...",
         "voice_translating": "🌐 در حال ترجمه به {lang}...",
@@ -1201,6 +1217,7 @@ MESSAGES = {
         "downloading": "📥 Downloading... Please wait",
         "uploading": "📤 Uploading to Telegram...",
         "err_dl": "❌ Download failed. Check the link",
+        "err_too_large": "🚫 File is larger than 50MB. Telegram doesn't allow sending it via bot.",
         "err_api": "❌ AI API error. Try again later",
         "voice_generating": "🔊 Generating audio...",
         "voice_translating": "🌐 Translating to {lang}...",
@@ -1349,6 +1366,7 @@ MESSAGES = {
         "downloading": "📥 Téléchargement... Patientez",
         "uploading": "📤 Envoi vers Telegram...",
         "err_dl": "❌ Échec du téléchargement. Vérifiez le lien",
+        "err_too_large": "🚫 Le fichier dépasse 50 Mo. Telegram ne permet pas l'envoi via bot.",
         "err_api": "❌ Erreur API IA. Réessayez plus tard",
         "voice_generating": "🔊 Génération audio...",
         "voice_translating": "🌐 Traduction en {lang}...",
@@ -1495,6 +1513,7 @@ MESSAGES = {
         "downloading": "📥 다운로드 중... 잠시만 기다려주세요",
         "uploading": "📤 텔레그램에 업로드 중...",
         "err_dl": "❌ 다운로드 실패. 링크를 확인하세요",
+        "err_too_large": "🚫 파일이 50MB를 초과합니다. 텔레그램 봇은 50MB 이상의 파일을 보낼 수 없습니다.",
         "err_api": "❌ AI API 오류. 나중에 다시 시도하세요",
         "voice_generating": "🔊 오디오 생성 중...",
         "voice_translating": "🌐 {lang}에 번역 중...",
@@ -1660,6 +1679,11 @@ async def reply_and_delete(update: Update, context: ContextTypes.DEFAULT_TYPE, t
     
     reply_msg = await msg.reply_text(text, **kwargs)
     
+    # Disable auto-delete in DEV mode
+    if IS_DEV:
+        logger.info(f"🧪 [DEV] Skipping auto-deletion for msg at {reply_msg.message_id}")
+        return reply_msg
+
     # Only auto-delete in groups (negative chat_id)
     if msg.chat_id < 0:
         # Delete Bot's Reply
@@ -1863,7 +1887,7 @@ async def cmd_price_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # HELPERS
 # ==============================================================================
 
-async def smart_reply(msg, status_msg, response, user_id):
+async def smart_reply(msg, status_msg, response, user_id, lang="fa"):
     """Send AI response with formatted model name and /detail instruction"""
     if not response:
         await status_msg.edit_text(get_msg("err_api", user_id))
@@ -1891,6 +1915,12 @@ async def smart_reply(msg, status_msg, response, user_id):
     
     # 3. Parse Split (Summary vs Detail)
     full_content = response.content
+    
+    # Handle list-based content (Multimodal/Grounding parts from Gemini)
+    if isinstance(full_content, list):
+        logger.info(f"🧩 Response content is a list of {len(full_content)} parts. Extracting text...")
+        full_content = "".join([part.get("text", "") if isinstance(part, dict) else str(part) for part in full_content])
+    
     split_marker = "|||SPLIT|||"
     
     if split_marker in full_content:
@@ -1936,8 +1966,11 @@ async def smart_reply(msg, status_msg, response, user_id):
     else:
         # Normal case
         try:
+            logger.info(f"📤 [User {user_id}] Sending final {len(final_text)} chars response...")
             await status_msg.edit_text(final_text, parse_mode='Markdown')
-        except Exception:
+            logger.info(f"✅ [User {user_id}] Response sent successfully.")
+        except Exception as e:
+            logger.warning(f"⚠️ [User {user_id}] Markdown send failed, falling back to plain text: {e}")
             await status_msg.edit_text(final_text, parse_mode=None)
 
 # ==============================================================================
@@ -1952,12 +1985,11 @@ async def download_instagram_cobalt(url: str, filename: Path) -> bool:
         # Strategy: Prioritize known-good community instances
         # Source: https://instances.cobalt.best & https://cobalt.directory
         instances = [
-            "https://cobalt.meowing.de",              # High reliability (verified Dec 2024)
+            "https://coapi.kelig.me/api/json",         # v7 style
+            "https://cobalt.meowing.de",              # High reliability
             "https://cobalt.pub",                     # Community 1
             "https://api.cobalt.kwiatekmiki.pl",      # Community 2
             "https://cobalt.hyperr.net",              # Community 3
-            # "https://api.cobalt.tools/api/json",    # Official (BLOCKED - Auth Required)
-            # "https://api.server.cobalt.tools",      # Official Alt (Likely BLOCKED)
             "https://cobalt.kuba2k2.com"             # Additional Community
         ]
         
@@ -2008,29 +2040,27 @@ async def download_instagram_cobalt(url: str, filename: Path) -> bool:
                 dl_url = None
                 for i, payload in enumerate(payloads_to_try):
                     try:
+                        logger.info(f"🛰️ [Cobalt] Payload {i+1} trial for {api_url}...")
                         resp = await client.post(api_url, json=payload, headers=headers)
-                        # Don't raise immediately, check status code manually to continue loop
                         if resp.status_code not in [200, 201]:
-                             logger.warning(f"  > Payload {i+1} Status {resp.status_code}: {resp.text[:100]}")
-                             # Try next payload or instance
+                             logger.warning(f"  > [Cobalt] Payload {i+1} HTTP {resp.status_code} Failure: {resp.text}")
                              continue
                              
                         data = resp.json()
-                        
                         if data.get("status") in ["error", "redirect"]:
-                             logger.warning(f"  > Payload {i+1} Error: {data.get('text')}")
+                             logger.warning(f"  > [Cobalt] API level error: {data.get('text')}")
                              continue
 
-                        # Success - Extract URL
                         dl_url = data.get("url")
                         if not dl_url and data.get("picker"):
                             dl_url = data["picker"][0]["url"]
                         
                         if dl_url:
-                            break # Found URL with this payload!
+                            logger.info(f"🔗 [Cobalt] Successfully extracted stream URL: {dl_url[:50]}...")
+                            break 
                     except Exception as loop_e:
-                        logger.warning(f"  > Payload {i+1} Exception: {loop_e}")
-                        continue # Try next payload
+                        logger.error(f"💥 [Cobalt] Exception during payload {i+1} on {api_url}: {str(loop_e)}")
+                        continue 
 
                 if dl_url:
                     # Found a working URL from this instance!
@@ -2056,29 +2086,36 @@ async def download_instagram_cobalt(url: str, filename: Path) -> bool:
         logger.error(f"Cobalt Fallback Logic Failed: {e}")
         return False
 async def download_instagram(url, chat_id, bot, reply_to_message_id=None):
-    """Download and send video using yt-dlp with caption extraction"""
+    """Download and send video using yt-dlp with multi-stage fallback (Anonymous -> Cookies -> Cobalt)"""
+    logger.info(f"🚀 [Chat {chat_id}] Initialization of Instagram download for: {url}")
+    
+    # Clean URL (Remove tracking parameters for better compatibility)
+    if "?" in url:
+        original_url = url
+        url = url.split("?")[0]
+        logger.info(f"🧹 URL cleaned: '{original_url}' -> '{url}'")
+        
     try:
         # 1. Filename setup
         timestamp = int(asyncio.get_event_loop().time())
         filename = Path(f"insta_{timestamp}.mp4")
         info_file = Path(f"insta_{timestamp}.info.json")
+        logger.debug(f"📂 Temp files initialized: {filename}, {info_file}")
         
         # 2. Command - use absolute path if in venv
         import sys
-        
-        # Determine yt-dlp path relative to current python interpreter
-        # If running from venv/bin/python, yt-dlp should be in venv/bin/yt-dlp
         venv_bin = Path(sys.executable).parent
         yt_dlp_path = venv_bin / "yt-dlp"
-        
-        # Fallback to system command if venv binary doesn't exist
         executable = str(yt_dlp_path) if yt_dlp_path.exists() else "yt-dlp"
+        logger.info(f"🛠️ Using yt-dlp executable: {executable}")
         
         cmd = [
             executable,
-            "-f", "best[ext=mp4]",
+            "-f", "bestvideo[ext=mp4][height<=1080]+bestaudio[ext=m4a]/best[ext=mp4]/best",
             "-o", str(filename),
             "--write-info-json",
+            "--no-playlist",
+            # Remove --max-filesize to avoid silent skips with exit code 0
             url
         ]
         
@@ -2088,23 +2125,96 @@ async def download_instagram(url, chat_id, bot, reply_to_message_id=None):
             cmd.insert(1, str(cookie_file))
             cmd.insert(1, "--cookies")
 
-        # 4. Run Download
+        # 4. Run Download (1st Attempt: Anonymous)
+        logger.info(f"📥 Attempt 1: Downloading {url} anonymously...")
         process = await asyncio.create_subprocess_exec(
             *cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE
         )
         stdout, stderr = await process.communicate()
         
-        if process.returncode != 0:
-            logger.error(f"Download Error: {stderr.decode()}")
-            # COBALT FALLBACK DISABLED: No public API endpoints available
-            # All public instances are web interfaces, not JSON APIs
-            # To re-enable: self-host Cobalt and update instances list
-            # logger.warning("⚠️ local yt-dlp failed, trying Cobalt API...")
-            # success = await download_instagram_cobalt(url, filename)
-            # if not success:
+        # Treatment: Successful download MUST produce a file. 
+        # If exit code 0 but no file, consider it a failure.
+        if process.returncode != 0 or not filename.exists():
+            err_msg = stderr.decode()
+            out_msg = stdout.decode()
+            logger.warning(f"⚠️ Attempt 1 failed (Code {process.returncode}, File: {filename.exists()}): {err_msg[:300]}")
+            if out_msg: logger.debug(f"Attempt 1 stdout: {out_msg[:300]}")
+
+            # 4.5 Attempt 2: With Browser Cookies (Safari)
+            logger.info("📥 Attempt 2: Retrying with Safari cookies...")
+            cmd_with_cookies = cmd[:-1] + ["--cookies-from-browser", "safari", url]
+            process = await asyncio.create_subprocess_exec(
+                *cmd_with_cookies, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+            )
+            stdout, stderr = await process.communicate()
+            
+            if process.returncode != 0 or not filename.exists():
+                logger.warning(f"❌ Attempt 2 (Cookies) failed (Code {process.returncode}, File: {filename.exists()})")
+                logger.error(f"Full stderr from Attempt 2: {stderr.decode()}")
+                logger.warning("🧱 Both local yt-dlp attempts failed. Triggering Cobalt API fallback sequence...")
+                
+                success = await download_instagram_cobalt(url, filename)
+                if not success:
+                    logger.error(f"🛑 [Chat {chat_id}] All download methods exhausted for {url}")
+                    return False
+                logger.info(f"✨ [Chat {chat_id}] Recovery successful via Cobalt!")
+
+        # 6. Check File Size (Final Safety Check)
+        if filename.exists():
+            filesize = filename.stat().st_size
+            filesize_mb = filesize / 1024 / 1024
+            logger.info(f"📊 Final file downloaded. Size: {filesize_mb:.2f} MB")
+            
+            if filesize > 50 * 1024 * 1024:
+                logger.error(f"🚫 File size ({filesize_mb:.2f}MB) exceeds Telegram Bot API limit (50MB).")
+                
+                # Attempt 3: Try compressed resolution (720p or lower)
+                if "[height<=1080]" in str(cmd):
+                    logger.info("📉 Attempt 3: Retrying with lower resolution (720p)...")
+                    filename.unlink()
+                    cmd_720 = [executable, "-f", "bestvideo[ext=mp4][height<=720]+bestaudio[ext=m4a]/best[ext=mp4][height<=720]/best", "-o", str(filename), "--no-playlist", url]
+                    process = await asyncio.create_subprocess_exec(*cmd_720, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                    await process.communicate()
+                    
+                    if filename.exists():
+                        filesize = filename.stat().st_size
+                        filesize_mb = filesize / 1024 / 1024
+                        logger.info(f"📊 Compressed (720p) file size: {filesize_mb:.2f} MB")
+                        if filesize <= 50 * 1024 * 1024:
+                             logger.info("✅ 720p is within limits. Proceeding to send...")
+                        else:
+                            logger.info("📉 Attempt 4: Retrying with 480p...")
+                            filename.unlink()
+                            cmd_480 = [executable, "-f", "bestvideo[ext=mp4][height<=480]+bestaudio[ext=m4a]/best[ext=mp4][height<=480]/best", "-o", str(filename), "--no-playlist", url]
+                            process = await asyncio.create_subprocess_exec(*cmd_480, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                            await process.communicate()
+                            
+                            if filename.exists():
+                                filesize = filename.stat().st_size
+                                filesize_mb = filesize / 1024 / 1024
+                                logger.info(f"📊 Compressed (480p) file size: {filesize_mb:.2f} MB")
+                                if filesize <= 50 * 1024 * 1024:
+                                     logger.info("✅ 480p is within limits. Proceeding to send...")
+                                else:
+                                     logger.error("🚫 Even 480p is too large.")
+                                     filename.unlink()
+                                     if info_file.exists(): info_file.unlink()
+                                     return "TOO_LARGE"
+                            else:
+                                logger.error("❓ 480p download failed to produce a file.")
+                                return False
+                    else:
+                        logger.error("❓ 720p download failed to produce a file.")
+                        return False
+                
+                else:
+                    # Still too big or already tried 720
+                    filename.unlink()
+                    if info_file.exists(): info_file.unlink()
+                    return "TOO_LARGE"
+        else:
+            logger.error(f"❓ Download appeared successful but file '{filename}' is missing on disk.")
             return False
-            # If cobalt success, we won't have the info.json from yt-dlp, 
-            # so original_caption will be empty, which is fine.
 
         # 5. Extract caption from info.json
         original_caption = ""
@@ -2247,9 +2357,12 @@ async def cmd_download_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     # 5. Execute Download
     try:
         success = await download_instagram(target_link, msg.chat_id, context.bot, reply_to_message_id=reply_to_id)
-        if success:
+        if success == "TOO_LARGE":
+            if not IS_DEV: await status_msg.delete()
+            await reply_and_delete(update, context, get_msg("err_too_large", user_id), delay=15)
+        elif success:
             # Video sent successfully, cleanup status
-            await status_msg.delete()
+            if not IS_DEV: await status_msg.delete()
             # Cleanup command msg if in group
             if msg.chat_id < 0:
                 context.job_queue.run_once(
@@ -2257,13 +2370,13 @@ async def cmd_download_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                     1 # Almost immediate
                 )
         else:
-            await status_msg.delete()
+            if not IS_DEV: await status_msg.delete()
             # Silent error to admin, generic fade-out to user
             await report_error_to_admin(context, user_id, "/dl", f"Download failed for {target_link}")
             await reply_and_delete(update, context, get_msg("err_dl", user_id), delay=10)
             
     except Exception as e:
-        await status_msg.delete()
+        if not IS_DEV: await status_msg.delete()
         await report_error_to_admin(context, user_id, "/dl", str(e))
         await reply_and_delete(update, context, get_msg("err_dl", user_id), delay=10)
 
@@ -2406,8 +2519,12 @@ async def global_message_handler(update: Update, context: ContextTypes.DEFAULT_T
         )
         
         success = await download_instagram(text, msg.chat_id, context.bot, msg.message_id)
-        if success:
-            await status_msg.delete()
+        if success == "TOO_LARGE":
+            await status_msg.edit_text(get_msg("err_too_large", user_id))
+            if not IS_DEV: 
+                context.job_queue.run_once(lambda ctx: status_msg.delete(), 15)
+        elif success:
+            if not IS_DEV: await status_msg.delete()
         else:
             await status_msg.edit_text(get_msg("err_dl", user_id))
         return
@@ -2437,7 +2554,7 @@ async def global_message_handler(update: Update, context: ContextTypes.DEFAULT_T
         # Increment usage and get remaining
         remaining = increment_daily_usage(user_id)
         
-        await smart_reply(msg, status_msg, response, user_id)
+        await smart_reply(msg, status_msg, response, user_id, lang)
         
         # Show remaining requests (skip for admin)
         if user_id != SETTINGS["admin_id"]:
@@ -2739,14 +2856,14 @@ async def cmd_voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
         
         if 'status_msg' in locals():
-            await status_msg.delete()
+            if not IS_DEV: await status_msg.delete()
             
     except Exception as e:
         logger.error(f"Voice Error: {e}")
         await report_error_to_admin(context, user_id, "/voice", str(e))
         error_msg = get_msg("err_ai", user_id) if 'user_id' in locals() else "خطایی رخ داد."
         if 'status_msg' in locals():
-            await status_msg.delete()
+            if not IS_DEV: await status_msg.delete()
         
         await reply_and_delete(update, context, error_msg, delay=10)
 
