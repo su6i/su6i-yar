@@ -24,6 +24,7 @@ A powerful, intelligent Telegram bot that downloads Instagram videos, verifies f
 *   **Architecture:** Guided by **LangChain** for robust, self-healing analysis.
 *   **Search Grounding:** Uses **Google Search** to verify facts in real-time.
 *   **Advanced Parsing:** Intelligently handles multimodal/grounding responses to ensure clean, formatted output.
+*   **Live Model Display:** Shows exact model name (e.g., `gemini-3-flash-preview`) during analysis.
 *   **Fallback System:** Automatically switches models (Pro/Flash/DeepSeek) if quotas are full or APIs fail.
 
 ### 🎓 Educational Mode (/learn)
