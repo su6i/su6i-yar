@@ -15,7 +15,9 @@ A powerful, intelligent Telegram bot that downloads Instagram videos, verifies f
 *   **Telegram 50MB Limit Fix:** Automatically detects large files and scales resolution (1080p → 720p → 480p) to ensure the video always fits Telegram's bot limit.
 *   **Auto-Captions:** Extracts original captions and attaches them to the video.
 *   **Manual Override:** `/dl` command to force download processing.
-*   **Optimized for Mac:** Seamlessly uses Safari browser cookies for authentication.
+*   **Hybrid Authentication:**
+    *   **Local (Mac):** Seamlessly uses Safari browser cookies for personal/dev use.
+    *   **Server (VPS):** Supports standard `cookies.txt` management via the included `upload_cookie.py` script.
 
 ### 🧠 Smart AI Chain (8-Layer Defense)
 *   **Primary Model:** Powered by **Gemini 3 Flash Preview** for cutting-edge speed and reasoning.
