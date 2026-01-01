@@ -2098,6 +2098,44 @@ async def download_instagram_cobalt(url: str, filename: Path) -> bool:
     except Exception as e:
         logger.error(f"Cobalt Fallback Logic Failed: {e}")
         return False
+async def convert_to_mac_compatible(input_path: Path) -> bool:
+    """Re-encode video to H.264/AAC with yuv420p for Mac compatibility"""
+    output_path = input_path.with_name(f"fixed_{input_path.name}")
+    logger.info(f"🔄 Converting {input_path.name} for Mac compatibility...")
+    
+    cmd = [
+        "ffmpeg", "-y",
+        "-i", str(input_path),
+        "-c:v", "libx264",
+        "-pix_fmt", "yuv420p",
+        "-preset", "faster",
+        "-c:a", "aac",
+        "-b:a", "128k",
+        "-movflags", "+faststart",
+        str(output_path)
+    ]
+    
+    try:
+        process = await asyncio.create_subprocess_exec(
+            *cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        )
+        stdout, stderr = await process.communicate()
+        
+        if process.returncode == 0 and output_path.exists():
+            logger.info(f"✅ Conversion successful: {output_path.name}")
+            # Replace original with fixed version
+            input_path.unlink()
+            output_path.rename(input_path)
+            return True
+        else:
+            logger.error(f"❌ ffmpeg failed (Code {process.returncode}): {stderr.decode()[:200]}")
+            if output_path.exists(): output_path.unlink()
+            return False
+    except Exception as e:
+        logger.error(f"💥 ffmpeg Exception: {e}")
+        if output_path.exists(): output_path.unlink()
+        return False
+
 async def download_instagram(url, chat_id, bot, reply_to_message_id=None):
     """Download and send video using yt-dlp with multi-stage fallback (Anonymous -> Cookies -> Cobalt)"""
     logger.info(f"🚀 [Chat {chat_id}] Initialization of Instagram download for: {url}")
@@ -2245,6 +2283,10 @@ async def download_instagram(url, chat_id, bot, reply_to_message_id=None):
         header = f"📥 <b>Su6i Yar</b> | @su6i_yar_bot"
         caption, overflow_text = smart_split(original_caption, header=header, max_len=1024)
         
+        # 6.5 Ensure Mac compatibility before sending
+        if filename.exists():
+            await convert_to_mac_compatible(filename)
+
         # 7. Send to User
         if filename.exists():
             try:
