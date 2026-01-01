@@ -2694,19 +2694,37 @@ async def cmd_detail_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await safe_delete(msg)
 
 
-# TTS Voice Mapping
+# TTS Voice Mapping (Standardized for edge-tts)
 TTS_VOICES = {
-    "fa": "fa-IR-FaridNeural",   # Persian - Male
-    "en": "en-US-GuyNeural",     # English - Male
-    "fr": "fr-FR-HenriNeural",   # French - Male
-    "ko": "ko-KR-InJoonNeural"   # Korean - Male
+    "fa": "fa-IR-FaridNeural",   # Persian
+    "en": "en-US-GuyNeural",     # English
+    "fr": "fr-FR-HenriNeural",   # French
+    "ko": "ko-KR-InJoonNeural",  # Korean
+    "ar": "ar-SA-HamedNeural",   # Arabic
+    "de": "de-DE-ConradNeural",  # German
+    "es": "es-ES-AlvaroNeural",  # Spanish
+    "it": "it-IT-DiegoNeural",   # Italian
+    "ja": "ja-JP-KeitaNeural",   # Japanese
+    "zh": "zh-CN-YunxiNeural",   # Chinese
+    "ru": "ru-RU-DmitryNeural",  # Russian
+    "tr": "tr-TR-AhmetNeural",   # Turkish
+    "pt": "pt-PT-RaquelNeural",  # Portuguese
+    "hi": "hi-IN-MadhurNeural",  # Hindi
 }
 
 async def text_to_speech(text: str, lang: str = "fa") -> io.BytesIO:
     """Convert text to speech using edge-tts. Returns audio as BytesIO."""
-    # Ensure lang is 2-letter
+    # Ensure lang is standardized key
     lang_key = lang[:2].lower()
-    voice = TTS_VOICES.get(lang_key, TTS_VOICES["en"]) # Fallback to English if unknown
+    
+    # Try exact match, then try finding a voice for the ISO code dynamically
+    voice = TTS_VOICES.get(lang_key)
+    
+    # If not in our internal map, try to construct a fallback or use English
+    if not voice:
+        # Most edge-tts voices follow [lang]-[COUNTRY]-[Name]Neural
+        # But constructing them is brittle, so we prioritize the map and then English.
+        voice = TTS_VOICES.get("en")
     
     # Heuristic: If text contains Persian/Arabic chars AND target lang is Persian, 
     # or if no specific voice for requested lang, ensure we use Persian if text looks like it.
@@ -2779,11 +2797,24 @@ LANG_ALIASES = {
     "fa": "fa", "farsi": "fa", "persian": "fa", "فارسی": "fa",
     "en": "en", "english": "en", "انگلیسی": "en",
     "fr": "fr", "french": "fr", "français": "fr", "فرانسوی": "fr",
-    "ko": "ko", "kr": "ko", "korean": "ko", "한국어": "ko", "کره‌ای": "ko"
+    "ko": "ko", "kr": "ko", "korean": "ko", "한국어": "ko", "کره‌ای": "ko",
+    "ar": "ar", "arabic": "ar", "عربی": "ar",
+    "de": "de", "german": "de", "آلمانی": "de",
+    "es": "es", "spanish": "es", "اسپانیایی": "es",
+    "it": "it", "italian": "it", "ایتالیایی": "it",
+    "ja": "ja", "japanese": "ja", "ژاپنی": "ja",
+    "zh": "zh", "chinese": "zh", "چینی": "ja",
+    "ru": "ru", "russian": "ru", "روسی": "ru",
+    "tr": "tr", "turkish": "tr", "ترکی": "tr",
+    "pt": "pt", "portuguese": "pt", "پرتغالی": "pt",
+    "hi": "hi", "hindi": "hi", "هندی": "hi"
 }
 
 LANG_NAMES = {
-    "fa": "فارسی", "en": "انگلیسی", "fr": "فرانسوی", "ko": "کره‌ای"
+    "fa": "فارسی", "en": "انگلیسی", "fr": "فرانسوی", "ko": "کره‌ای",
+    "ar": "عربی", "de": "آلمانی", "es": "اسپانیایی", "it": "ایتالیایی",
+    "ja": "ژاپنی", "zh": "چینی", "ru": "روسی", "tr": "ترکی",
+    "pt": "پرتغالی", "hi": "هندی"
 }
 
 LANG_FLAGS = {
