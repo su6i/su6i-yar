@@ -182,6 +182,18 @@ def get_user_limit(user_id: int) -> int:
     # Non-whitelisted users get free trial limit
     return SETTINGS["free_trial_limit"]
 
+def extract_text(response) -> str:
+    """Safely extract text from LangChain response, handling both string and list content."""
+    if not response or not hasattr(response, 'content'):
+        return ""
+    
+    content = response.content
+    if isinstance(content, list):
+        # Handle list-based content (Multimodal/Grounding parts from Gemini)
+        return "".join([part.get("text", "") if isinstance(part, dict) else str(part) for part in content]).strip()
+    
+    return str(content).strip()
+
 def smart_split(text, header="", max_len=1024, overflow_prefix="... ادامه در پیام بعدی"):
     """
     Split text into two parts: a caption (max_len) and overflow_text.
@@ -243,7 +255,8 @@ async def detect_language(text: str) -> str:
         # Use a very short, fast prompt
         chain = get_smart_chain(grounding=False)
         response = await chain.ainvoke(f"Return only the 2-letter ISO code for this text's language: {text[:100]}")
-        code = response.content.strip().lower()[:2]
+        content = extract_text(response)
+        code = content.lower()[:2]
         return LANG_ALIASES.get(code, code) if code in LANG_ALIASES else code
     except:
         return "en"
@@ -645,7 +658,7 @@ async def cmd_learn_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             
             response = await chain.ainvoke([HumanMessage(content=educational_prompt)])
-            content = response.content.strip()
+            content = extract_text(response)
             
             # Clean JSON
             if "```json" in content: content = content.split("```json")[1].split("```")[0].strip()
@@ -1927,12 +1940,7 @@ async def smart_reply(msg, status_msg, response, user_id, lang="fa"):
     footer = get_msg("analysis_footer_note", user_id)
     
     # 3. Parse Split (Summary vs Detail)
-    full_content = response.content
-    
-    # Handle list-based content (Multimodal/Grounding parts from Gemini)
-    if isinstance(full_content, list):
-        logger.info(f"🧩 Response content is a list of {len(full_content)} parts. Extracting text...")
-        full_content = "".join([part.get("text", "") if isinstance(part, dict) else str(part) for part in full_content])
+    full_content = extract_text(response)
     
     split_marker = "|||SPLIT|||"
     
@@ -2707,7 +2715,6 @@ TTS_VOICES = {
     "ja": "ja-JP-KeitaNeural",   # Japanese
     "zh": "zh-CN-YunxiNeural",   # Chinese
     "ru": "ru-RU-DmitryNeural",  # Russian
-    "tr": "tr-TR-AhmetNeural",   # Turkish
     "pt": "pt-PT-RaquelNeural",  # Portuguese
     "hi": "hi-IN-MadhurNeural",  # Hindi
 }
@@ -2829,7 +2836,7 @@ async def translate_text(text: str, target_lang: str) -> str:
         chain = get_smart_chain(grounding=False)
         prompt = f"Translate the following text to {lang_name}. Only output the translation, no explanations:\n\n{text}"
         response = await chain.ainvoke([HumanMessage(content=prompt)])
-        return response.content.strip()
+        return extract_text(response)
     except Exception as e:
         logger.error(f"Translation error: {e}")
         return text  # Return original if translation fails
@@ -2840,7 +2847,7 @@ async def generate_visual_prompt(text: str) -> str:
         chain = get_smart_chain(grounding=False)
         prompt = f"Generate a short, descriptive English visual prompt (single sentence, no style words) representing the core meaning of this text: '{text}'"
         response = await chain.ainvoke([HumanMessage(content=prompt)])
-        return response.content.strip().replace('"', '').replace("'", "")
+        return extract_text(response).replace('"', '').replace("'", "")
     except Exception as e:
         logger.error(f"Visual prompt generation error: {e}")
         return "abstract conceptual representation"  # Safe default
