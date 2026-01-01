@@ -2708,10 +2708,11 @@ async def text_to_speech(text: str, lang: str = "fa") -> io.BytesIO:
     lang_key = lang[:2].lower()
     voice = TTS_VOICES.get(lang_key, TTS_VOICES["en"]) # Fallback to English if unknown
     
-    # Heuristic: If text contains Persian/Arabic chars, FORCE Persian voice
-    # This regex is more comprehensive for all Persian characters
-    if re.search(r'[\u0600-\u06FF\uFB50-\uFDFF\uFE70-\uFEFF]', text):
-        voice = TTS_VOICES["fa"]
+    # Heuristic: If text contains Persian/Arabic chars AND target lang is Persian, 
+    # or if no specific voice for requested lang, ensure we use Persian if text looks like it.
+    if lang_key == "fa" or lang_key not in TTS_VOICES:
+        if re.search(r'[\u0600-\u06FF\uFB50-\uFDFF\uFE70-\uFEFF]', text):
+            voice = TTS_VOICES["fa"]
     
     # Clean text for TTS (remove markdown)
     clean_text = re.sub(r'\*\*|▫️|━+|✅|❌|⚠️|🧠|📄|💡', '', text)
