@@ -231,6 +231,9 @@ sudo systemctl status su6i-yar
 
 ---
 
+## 🤝 Contributing
+Contributions are welcome! Please check the issues page or submit a Pull Request.
+
 ## 📜 License
 
 This project is open-source and available under the MIT License.
