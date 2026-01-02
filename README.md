@@ -103,16 +103,18 @@ cd su6i-yar
 pip install -r requirements.txt
 ```
 
-### 3. Configuration (.env)
+### 3. Configuration
+Run the automated setup script to generate your config:
 
-Create a `.env` file in the root directory:
+```bash
+python3 setup_env.py
+```
 
+Or manually create a `.env` file:
 ```ini
-TELEGRAM_BOT_TOKEN=your_production_token
-TELEGRAM_BOT_TOKEN_DEV=your_development_token  # Optional for --dev mode
-SETTINGS={"admin_id": your_numeric_id, "public_mode": false}
-GEMINI_API_KEY=your_gemini_api_key
-DEEPSEEK_API_KEY=your_deepseek_api_key # Optional fallback
+TELEGRAM_BOT_TOKEN=your_token
+GEMINI_API_KEY=your_key
+SETTINGS={"admin_id": 123456, "public_mode": false}
 ```
 
 ---
