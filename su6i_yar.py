@@ -649,7 +649,7 @@ async def cmd_learn_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"      \"meaning\": \"[Explanations ONLY in {explanation_lang}]\",\n"
                 f"      \"sentence\": \"[{target_lang} sentence]\",\n"
                 f"      \"translation\": \"[Translation ONLY in {explanation_lang}]\",\n"
-                f"      \"prompt\": \"A highly detailed English visual description for an AI image generator...\",\n"
+                f"      \"prompt\": \"A highly detailed English visual description for an AI image generator. IMPORTANT: This description MUST be based on the EXACT context and scene described in the 'sentence' and 'meaning' fields. DO NOT just describe the word. Create a vivid, high-quality cinematic scene representing the concept.\",\n"
                 f"      \"keywords\": \"3-4 simple English keywords representing the scene for image search\"\n"
                 f"    }},\n"
                 f"    ... (exactly 3 variant objects)\n"
@@ -749,28 +749,28 @@ async def cmd_learn_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         image_bytes = await asyncio.to_thread(dl)
                         if image_bytes and len(image_bytes) > 5000: break # Success
                         
-                        # If pollination fails on last attempt, try Unsplash
+                        # If pollination fails on last attempt, try Lorem Flickr
                         if attempt == max_retries:
-                            logger.info(f"🛡️ Pollinations failed. Trying Unsplash Fallback for slide {i+1}...")
+                            logger.info(f"🛡️ Pollinations failed. Trying Lorem Flickr Fallback for slide {i+1}...")
                             clean_keywords = urllib.parse.quote(keywords.replace(",", " "))
-                            unsplash_url = f"https://source.unsplash.com/featured/1024x1024/?{clean_keywords}"
+                            flickr_url = f"https://loremflickr.com/1024/1024/{clean_keywords}/all"
                             
-                            def dl_unsplash():
-                                req = urllib.request.Request(unsplash_url, headers={'User-Agent': 'Mozilla/5.0'})
+                            def dl_flickr():
+                                req = urllib.request.Request(flickr_url, headers={'User-Agent': 'Mozilla/5.0'})
                                 with urllib.request.urlopen(req, timeout=30) as r: return r.read()
                             
-                            image_bytes = await asyncio.to_thread(dl_unsplash)
+                            image_bytes = await asyncio.to_thread(dl_flickr)
                             if image_bytes and len(image_bytes) > 5000: break
 
                     except Exception as e:
                         logger.warning(f"Image {i} attempt {attempt+1} failed: {e}")
-                        # Fallback to Unsplash immediately if it's a connection error from Pollinations
+                        # Fallback to Flickr immediately if it's a connection error from Pollinations
                         if "pollinations.ai" in str(e):
                             try:
-                                logger.info(f"🛡️ Immediate Fallback to Unsplash for slide {i+1}...")
+                                logger.info(f"🛡️ Immediate Fallback to Lorem Flickr for slide {i+1}...")
                                 clean_keywords = urllib.parse.quote(keywords.replace(",", " "))
-                                unsplash_url = f"https://source.unsplash.com/featured/1024x1024/?{clean_keywords}"
-                                image_bytes = await asyncio.to_thread(lambda: urllib.request.urlopen(unsplash_url, timeout=30).read())
+                                flickr_url = f"https://loremflickr.com/1024/1024/{clean_keywords}/all"
+                                image_bytes = await asyncio.to_thread(lambda: urllib.request.urlopen(flickr_url, timeout=30).read())
                                 if image_bytes and len(image_bytes) > 5000: break
                             except: pass
 
