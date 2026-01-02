@@ -92,30 +92,18 @@ A powerful, intelligent Telegram bot that downloads Instagram videos, verifies f
 
 ### 2. Setup
 
-Clone the repository and install dependencies:
+### 2. Setup
+Run the automated installer to set up dependencies and configuration in one step:
 
 ```bash
-# Clone
-git clone https://github.com/su6i/su6i-yar.git
-cd su6i-yar
-
-# Install Dependencies
-pip install -r requirements.txt
+chmod +x install.sh
+./install.sh
 ```
 
-### 3. Configuration
-Run the automated setup script to generate your config:
+Follow the on-screen prompts to enter your API keys.
 
-```bash
-python3 setup_env.py
-```
+---
 
-Or manually create a `.env` file:
-```ini
-TELEGRAM_BOT_TOKEN=your_token
-GEMINI_API_KEY=your_key
-SETTINGS={"admin_id": 123456, "public_mode": false}
-```
 
 ---
 
