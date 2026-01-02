@@ -98,6 +98,7 @@ else:
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
+PEXELS_API_KEY = os.getenv("PEXELS_API_KEY")
 
 # 3. Global Settings
 SETTINGS = {
@@ -541,6 +542,45 @@ async def refresh_learn_queue():
         except Exception:
             pass
 
+async def fetch_pexels_image(query: str) -> Optional[bytes]:
+    """Fetch a high-quality image from Pexels API search fallback"""
+    if not PEXELS_API_KEY:
+        return None
+    
+    try:
+        # Use simple keywords for better relevance
+        logger.info(f"🌌 Searching Pexels for: {query}...")
+        encoded_query = urllib.parse.quote(query)
+        url = f"https://api.pexels.com/v1/search?query={encoded_query}&per_page=1"
+        
+        def call_pexels():
+            req = urllib.request.Request(url)
+            req.add_header("Authorization", PEXELS_API_KEY)
+            with urllib.request.urlopen(req, timeout=15) as r:
+                return json.loads(r.read())
+        
+        data = await asyncio.to_thread(call_pexels)
+        photos = data.get("photos", [])
+        if not photos:
+            logger.warning("🌌 Pexels: No photos found.")
+            return None
+        
+        image_url = photos[0].get("src", {}).get("large")
+        if not image_url:
+            return None
+            
+        def dl_pexels():
+            req = urllib.request.Request(image_url, headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req, timeout=30) as r:
+                return r.read()
+                
+        img_bytes = await asyncio.to_thread(dl_pexels)
+        return img_bytes if img_bytes and len(img_bytes) > 5000 else None
+        
+    except Exception as e:
+        logger.warning(f"🌌 Pexels API failed: {e}")
+        return None
+
 async def cmd_learn_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Educational tutor: 3 variations with images, definitions, and sentence audio."""
     msg = update.effective_message
@@ -749,29 +789,20 @@ async def cmd_learn_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         image_bytes = await asyncio.to_thread(dl)
                         if image_bytes and len(image_bytes) > 5000: break # Success
                         
-                        # If pollination fails on last attempt, try Lorem Flickr
+                        # If pollination fails on last attempt, try Pexels
                         if attempt == max_retries:
-                            logger.info(f"🛡️ Pollinations failed. Trying Lorem Flickr Fallback for slide {i+1}...")
-                            clean_keywords = urllib.parse.quote(keywords.replace(",", " "))
-                            flickr_url = f"https://loremflickr.com/1024/1024/{clean_keywords}/all"
-                            
-                            def dl_flickr():
-                                req = urllib.request.Request(flickr_url, headers={'User-Agent': 'Mozilla/5.0'})
-                                with urllib.request.urlopen(req, timeout=30) as r: return r.read()
-                            
-                            image_bytes = await asyncio.to_thread(dl_flickr)
-                            if image_bytes and len(image_bytes) > 5000: break
+                            logger.info(f"🛡️ Pollinations failed. Trying Pexels Fallback for slide {i+1}...")
+                            image_bytes = await fetch_pexels_image(keywords)
+                            if image_bytes: break
 
                     except Exception as e:
                         logger.warning(f"Image {i} attempt {attempt+1} failed: {e}")
-                        # Fallback to Flickr immediately if it's a connection error from Pollinations
+                        # Fallback to Pexels immediately if it's a connection error from Pollinations
                         if "pollinations.ai" in str(e):
                             try:
-                                logger.info(f"🛡️ Immediate Fallback to Lorem Flickr for slide {i+1}...")
-                                clean_keywords = urllib.parse.quote(keywords.replace(",", " "))
-                                flickr_url = f"https://loremflickr.com/1024/1024/{clean_keywords}/all"
-                                image_bytes = await asyncio.to_thread(lambda: urllib.request.urlopen(flickr_url, timeout=30).read())
-                                if image_bytes and len(image_bytes) > 5000: break
+                                logger.info(f"🛡️ Immediate Fallback to Pexels for slide {i+1}...")
+                                image_bytes = await fetch_pexels_image(keywords)
+                                if image_bytes: break
                             except: pass
 
                         if attempt == max_retries:
