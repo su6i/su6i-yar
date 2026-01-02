@@ -3,6 +3,7 @@ import re
 import sys
 import asyncio
 import logging
+from typing import Optional
 import subprocess
 import signal
 import warnings
