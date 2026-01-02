@@ -98,7 +98,7 @@ else:
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
-PEXELS_API_KEY = os.getenv("PEXELS_API_KEY")
+PEXELS_API_KEY = os.getenv("PEXELS_API_KEY", "").strip()
 
 # 3. Global Settings
 SETTINGS = {
@@ -556,6 +556,7 @@ async def fetch_pexels_image(query: str) -> Optional[bytes]:
         def call_pexels():
             req = urllib.request.Request(url)
             req.add_header("Authorization", PEXELS_API_KEY)
+            req.add_header("User-Agent", "Mozilla/5.0")
             with urllib.request.urlopen(req, timeout=15) as r:
                 return json.loads(r.read())
         
