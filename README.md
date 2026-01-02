@@ -100,7 +100,13 @@ chmod +x install.sh
 ./install.sh
 ```
 
-Follow the on-screen prompts to enter your API keys.
+Follow the on-screen prompts to enter your API keys. You will need:
+
+| Variable | Description | Where to find it |
+| :--- | :--- | :--- |
+| **`TELEGRAM_BOT_TOKEN`** | The API token for your bot. | Start a chat with [@BotFather](https://t.me/BotFather) and send `/newbot`. |
+| **`GEMINI_API_KEY`** | Google AI Key for intelligence. | Get it from [Google AI Studio](https://aistudio.google.com/). |
+| **`admin_id`** | Your unique numerical Telegram ID. | Send a message to [@userinfobot](https://t.me/userinfobot) to see your ID. |
 
 ---
 
