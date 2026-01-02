@@ -649,7 +649,8 @@ async def cmd_learn_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"      \"meaning\": \"[Explanations ONLY in {explanation_lang}]\",\n"
                 f"      \"sentence\": \"[{target_lang} sentence]\",\n"
                 f"      \"translation\": \"[Translation ONLY in {explanation_lang}]\",\n"
-                f"      \"prompt\": \"A highly detailed English visual description for an AI image generator. IMPORTANT: This description MUST be based on the EXACT context and scene described in the 'sentence' and 'meaning' fields. DO NOT just describe the word. Create a vivid, high-quality cinematic scene representing the concept.\"\n"
+                f"      \"prompt\": \"A highly detailed English visual description for an AI image generator...\",\n"
+                f"      \"keywords\": \"3-4 simple English keywords representing the scene for image search\"\n"
                 f"    }},\n"
                 f"    ... (exactly 3 variant objects)\n"
                 f"  ]\n"
@@ -728,8 +729,9 @@ async def cmd_learn_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 sentence = var.get("sentence", "")
                 translation = var.get("translation", "")
                 img_prompt = var.get("prompt", target_text)
+                keywords = var.get("keywords", target_text)
                 
-                # --- Per-Slide Image Download ---
+                # --- Per-Slide Image Download (Pollinations -> Unsplash Fallback) ---
                 image_bytes = None
                 max_retries = 3 # Increased retries
                 for attempt in range(max_retries + 1):
@@ -745,9 +747,33 @@ async def cmd_learn_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             with urllib.request.urlopen(req, timeout=90) as r: return r.read()
                         
                         image_bytes = await asyncio.to_thread(dl)
-                        if image_bytes and len(image_bytes) > 5000: break # Ensure it's a real image
+                        if image_bytes and len(image_bytes) > 5000: break # Success
+                        
+                        # If pollination fails on last attempt, try Unsplash
+                        if attempt == max_retries:
+                            logger.info(f"🛡️ Pollinations failed. Trying Unsplash Fallback for slide {i+1}...")
+                            clean_keywords = urllib.parse.quote(keywords.replace(",", " "))
+                            unsplash_url = f"https://source.unsplash.com/featured/1024x1024/?{clean_keywords}"
+                            
+                            def dl_unsplash():
+                                req = urllib.request.Request(unsplash_url, headers={'User-Agent': 'Mozilla/5.0'})
+                                with urllib.request.urlopen(req, timeout=30) as r: return r.read()
+                            
+                            image_bytes = await asyncio.to_thread(dl_unsplash)
+                            if image_bytes and len(image_bytes) > 5000: break
+
                     except Exception as e:
                         logger.warning(f"Image {i} attempt {attempt+1} failed: {e}")
+                        # Fallback to Unsplash immediately if it's a connection error from Pollinations
+                        if "pollinations.ai" in str(e):
+                            try:
+                                logger.info(f"🛡️ Immediate Fallback to Unsplash for slide {i+1}...")
+                                clean_keywords = urllib.parse.quote(keywords.replace(",", " "))
+                                unsplash_url = f"https://source.unsplash.com/featured/1024x1024/?{clean_keywords}"
+                                image_bytes = await asyncio.to_thread(lambda: urllib.request.urlopen(unsplash_url, timeout=30).read())
+                                if image_bytes and len(image_bytes) > 5000: break
+                            except: pass
+
                         if attempt == max_retries:
                             logger.error(f"Image {i} permanently failed after {max_retries+1} attempts.")
 
@@ -766,16 +792,38 @@ async def cmd_learn_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                     current_slide_msg = None
                     if image_bytes:
-                        photo_buffer = io.BytesIO(image_bytes)
-                        photo_buffer.name = f"learn_{i}.jpg"
-                        current_slide_msg = await context.bot.send_photo(
-                            chat_id=msg.chat_id,
-                            photo=photo_buffer,
-                            caption=caption,
-                            parse_mode='Markdown',
-                            reply_to_message_id=original_msg_id, # Anchor to the specific request
-                            read_timeout=150
-                        )
+                        # Basic image validation (check for JPEG/PNG magic numbers)
+                        is_valid_image = image_bytes.startswith(b'\xff\xd8') or image_bytes.startswith(b'\x89PNG')
+                        
+                        if is_valid_image:
+                            try:
+                                photo_buffer = io.BytesIO(image_bytes)
+                                photo_buffer.name = f"learn_{i}.jpg"
+                                current_slide_msg = await context.bot.send_photo(
+                                    chat_id=msg.chat_id,
+                                    photo=photo_buffer,
+                                    caption=caption,
+                                    parse_mode='Markdown',
+                                    reply_to_message_id=original_msg_id,
+                                    read_timeout=150
+                                )
+                            except Exception as photo_e:
+                                logger.warning(f"📸 Photo send failed, falling back to message: {photo_e}")
+                                # Fallback if Telegram rejects the valid-looking photo
+                                current_slide_msg = await context.bot.send_message(
+                                    chat_id=msg.chat_id,
+                                    text=caption,
+                                    parse_mode='Markdown',
+                                    reply_to_message_id=original_msg_id
+                                )
+                        else:
+                            logger.warning(f"🚫 Downloaded bytes for slide {i+1} are not a valid image. Sending text only.")
+                            current_slide_msg = await context.bot.send_message(
+                                chat_id=msg.chat_id,
+                                text=caption,
+                                parse_mode='Markdown',
+                                reply_to_message_id=original_msg_id
+                            )
                     else:
                         current_slide_msg = await context.bot.send_message(
                             chat_id=msg.chat_id,
@@ -2810,7 +2858,7 @@ LANG_ALIASES = {
     "es": "es", "spanish": "es", "اسپانیایی": "es",
     "it": "it", "italian": "it", "ایتالیایی": "it",
     "ja": "ja", "japanese": "ja", "ژاپنی": "ja",
-    "zh": "zh", "chinese": "zh", "چینی": "ja",
+    "zh": "zh", "chinese": "zh", "چینی": "zh",
     "ru": "ru", "russian": "ru", "روسی": "ru",
     "tr": "tr", "turkish": "tr", "ترکی": "tr",
     "pt": "pt", "portuguese": "pt", "پرتغالی": "pt",
