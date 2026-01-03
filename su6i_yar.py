@@ -673,8 +673,10 @@ async def cmd_learn_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"4. 'translation': MUST be the translation of the 'sentence' (field #2) ONLY into '{explanation_lang}'.\n\n"
                 f"IMPORTANT: Even if the input '{target_text}' is in '{explanation_lang}' or any other language, you MUST provide ALL explanations (meaning/translation) in '{explanation_lang}'.\n\n"
                 f"GRAMMAR RULES (CRITICAL):\n"
-                f"- For ALL nouns in '{target_lang}', you MUST provide the word in EXACTLY THREE formats separated by slashes: Indefinite Singular / Definite Singular / Plural (e.g., 'un livre / le livre / des livres' for French, or 'a book / the book / books' for English).\n"
-                f"- This 'Triple Format' MUST be used as the 'word' field in the JSON.\n"
+                f"- Use 'Triple Format' (Indefinite / Definite / Plural) ONLY for languages with articles (e.g., English, French, German).\n"
+                f"- For others (e.g., Persian, Korean, Japanese), provide the word in its MOST NATURAL dictionary form. DO NOT force 3 forms if they don't exist.\n"
+                f"- CRITICAL: The 'meaning' field MUST be in '{explanation_lang}'. If providing definitions for Korean/Japanese terms, the definition MUST be in '{explanation_lang}' (e.g., Persian).\n"
+                f"- If '{target_lang}' is the same as '{explanation_lang}', the 'translation' field should be empty or null to avoid redundancy.\n"
                 f"- Include phonetics for the '{target_lang}' word.\n\n"
                 f"Return ONLY valid JSON in this structure:\n"
                 f"{{\n"
@@ -796,6 +798,20 @@ async def cmd_learn_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             logger.info(f"🛡️ Pollinations failed. Trying Pexels Fallback for slide {i+1}...")
                             image_bytes = await fetch_pexels_image(keywords)
                             if image_bytes: break
+                            
+                            # FINAL FALLBACK: Try Pollinations again but with simple keywords (less chance of 414 URI Too Long)
+                            logger.info(f"🛡️ Pexels failed. Trying Final Pollinations Fallback with keywords: {keywords}")
+                            try:
+                                encoded_kw = urllib.parse.quote(keywords)
+                                seed_kw = int(asyncio.get_event_loop().time()) + 999
+                                url_kw = f"https://pollinations.ai/p/{encoded_kw}?width=1024&height=1024&seed={seed_kw}&nologo=true"
+                                def dl_kw():
+                                    req = urllib.request.Request(url_kw, headers={'User-Agent': 'Mozilla/5.0'})
+                                    with urllib.request.urlopen(req, timeout=60) as r: return r.read()
+                                image_bytes = await asyncio.to_thread(dl_kw)
+                                if image_bytes and len(image_bytes) > 5000: break
+                            except Exception as e_kw:
+                                logger.warning(f"Final fallback failed: {e_kw}")
 
                     except Exception as e:
                         logger.warning(f"Image {i} attempt {attempt+1} failed: {e}")
@@ -814,12 +830,17 @@ async def cmd_learn_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     target_flag = LANG_FLAGS.get(target_lang, "🌐")
                     user_flag = LANG_FLAGS.get(user_lang, "🇮🇷")
                     
+                    translation_line = f"{user_flag} {translation}\n\n"
+                    # Hide translation if redundant (same language or identical text)
+                    if user_lang == target_lang or (translation and sentence and translation.strip() == sentence.strip()):
+                        translation_line = "\n"
+
                     caption = (
                         f"💡 **{word}** {phonetic}\n"
                         f"📝 {meaning}\n\n"
                         f"{get_msg('learn_example_sentence', user_id)}\n"
                         f"{target_flag} `{sentence}`\n"
-                        f"{user_flag} {translation}\n\n"
+                        f"{translation_line}"
                         f"━━━━━━━━━━━━━━\n{get_msg('learn_slide_footer', user_id).format(index=i+1)}"
                     )
 
