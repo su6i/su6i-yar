@@ -2604,6 +2604,19 @@ async def global_message_handler(update: Update, context: ContextTypes.DEFAULT_T
 
     logger.info(f"📨 Message received: '{text}' from {user.id} ({lang})")
 
+    # --- 0. AUTO-FUN INTERCEPTOR (Admin Only) ---
+    # Convert global SETTINGS admin_id to int safely
+    admin_id_chk = int(SETTINGS.get("admin_id", 0)) or int(os.getenv("ADMIN_ID") or 0)
+    
+    if user_id == admin_id_chk and msg.chat.type == 'private':
+        # Check if text contains a URL
+        if "http" in text:
+             # Fast check before calling handler
+             if extract_link_from_text(msg.entities, text):
+                 logger.info(f"⚡ Auto-Fun Triggered for Admin Link: {text[:20]}...")
+                 await cmd_fun_handler(update, context)
+                 return
+
     # --- 1. MENU COMMANDS (Check by Emoji/Start) --- 
     
     # Status
@@ -3398,13 +3411,17 @@ async def cmd_fun_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"👤 /fun called by: {user_id} (Admin: {admin_id})")
 
     # Security Check
+    # Security Check
+    is_explicit = (msg.text and msg.text.startswith("/fun")) or (msg.caption and msg.caption.startswith("/fun"))
+    
     if user_id != admin_id:
-        logger.warning(f"⛔ Unauthorized access attempt by {user_id}")
-        await update.effective_message.reply_text(
-            f"⛔ عدم دسترسی!\nآیدی شما: `{user_id}`\nآیدی ادمین تعریف شده: `{admin_id}`",
-            reply_to_message_id=update.effective_message.message_id,
-            parse_mode="Markdown"
-        )
+        if is_explicit:
+            logger.warning(f"⛔ Unauthorized access attempt by {user_id}")
+            await update.effective_message.reply_text(
+                f"⛔ عدم دسترسی!\nآیدی شما: `{user_id}`\nآیدی ادمین تعریف شده: `{admin_id}`",
+                reply_to_message_id=update.effective_message.message_id,
+                parse_mode="Markdown"
+            )
         return 
         
     msg = update.effective_message
@@ -3413,45 +3430,41 @@ async def cmd_fun_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     target_url = None
     target_file = None
     
+    # 0. Check Current Message for Media (Auto-Mode)
+    if msg.video: target_file = msg.video
+    elif msg.animation: target_file = msg.animation
+    elif msg.document and msg.document.mime_type and msg.document.mime_type.startswith("video/"):
+        target_file = msg.document
+
     # 1. Check Arguments (Direct URL)
-    if context.args:
+    if not target_file and context.args:
         target_url = context.args[0]
         
-    # 2. Check Reply
-    elif msg.reply_to_message:
+    # 2. Check Reply (If no media/url found yet)
+    if not target_file and not target_url and msg.reply_to_message:
         reply = msg.reply_to_message
         
-        # A) Check for Video/Animation/Document (File)
-        if reply.video:
-            target_file = reply.video
-        elif reply.animation:
-            target_file = reply.animation
+        # A) Check Reply for Media
+        if reply.video: target_file = reply.video
+        elif reply.animation: target_file = reply.animation
         elif reply.document and reply.document.mime_type and reply.document.mime_type.startswith("video/"):
             target_file = reply.document
             
-        # B) Check for Text Links (Entities)
+        # B) Check Reply for Text Links
         if not target_file:
-            # Check text links (Hyperlinks & Raw URLs)
-            entities = reply.caption_entities if reply.caption else reply.entities
-            text_content = reply.caption if reply.caption else reply.text
-            
-            if entities:
-                for entity in entities:
-                    if entity.type == 'text_link': # Hyperlink
-                        target_url = entity.url
-                        break
-                    elif entity.type == 'url': # Raw Link
-                        target_url = text_content[entity.offset:entity.offset + entity.length]
-                        break
-            
-            # Fallback: Regex Search in text if no entities found
-            if not target_url and text_content:
-                found = re.search(r'(https?://\S+)', text_content)
-                if found:
-                    target_url = found.group(1)
+            text_content = reply.caption or reply.text or ""
+            target_url = extract_link_from_text(reply.caption_entities or reply.entities, text_content)
+
+    # 3. Check Current Message for Text Links (Auto-Mode)
+    if not target_file and not target_url:
+        text_content = msg.caption or msg.text or ""
+        target_url = extract_link_from_text(msg.caption_entities or msg.entities, text_content)
 
     if not target_url and not target_file:
-        await msg.reply_text("❌ نه لینک پیدا کردم نه فایل ویدیویی!", reply_to_message_id=msg.message_id)
+        # If manual command (/fun), show error. If auto-mode, ignore?
+        # Assuming explicit call for now or filtered auto-call.
+        if msg.text and msg.text.startswith("/fun"):
+             await msg.reply_text("❌ خطا: نه لینک پیدا کردم نه فایل!", reply_to_message_id=msg.message_id)
         return
 
     status_msg = await msg.reply_text("📥 در حال پردازش برای Just For Fun...", reply_to_message_id=msg.message_id)
@@ -3467,11 +3480,8 @@ async def cmd_fun_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await new_file.download_to_drive(file_name)
             
             # Send
-            caption = reply.caption or ""
-            if caption:
-                clean_cap, _ = smart_split(caption, header=custom_header, max_len=1024)
-            else:
-                clean_cap = custom_header
+            caption = (msg.caption or (msg.reply_to_message and msg.reply_to_message.caption)) or ""
+            clean_cap, _ = smart_split(caption, header=custom_header, max_len=1024)
                 
             with open(file_name, "rb") as f:
                 await context.bot.send_video(
@@ -3481,9 +3491,15 @@ async def cmd_fun_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     parse_mode="HTML"
                 )
             
-            # Cleanup
-            os.remove(file_name)
-            await status_msg.edit_text(f"✅ فایل با موفقیت پست شد: {target_channel}")
+            # Cleanup File
+            if os.path.exists(file_name):
+                os.remove(file_name)
+                
+            # SUCCESS
+            await status_msg.edit_text(f"✅ فایل پست شد: {target_channel}")
+            
+            # DELETE ORIGINAL MESSAGE (User Request)
+            await safe_delete(msg)
             return
 
         # --- CASE 2: URL HANDLING ---
@@ -3497,13 +3513,32 @@ async def cmd_fun_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             
             if success:
-                await status_msg.edit_text(f"✅ لینک با موفقیت پست شد: {target_channel}")
+                await status_msg.edit_text(f"✅ لینک پست شد: {target_channel}")
+                # DELETE ORIGINAL MESSAGE (User Request)
+                await safe_delete(msg)
             else:
                 await status_msg.edit_text("❌ دانلود لینک ناموفق بود.")
             
     except Exception as e:
         logger.error(f"Fun Command Error: {e}")
         await status_msg.edit_text(f"❌ خطا: {e}")
+
+def extract_link_from_text(entities, text_content):
+    """Helper to find URL in entities or regex"""
+    if not text_content: return None
+    
+    if entities:
+        for entity in entities:
+            if entity.type == 'text_link': # Hyperlink
+                return entity.url
+            elif entity.type == 'url': # Raw Link
+                return text_content[entity.offset:entity.offset + entity.length]
+    
+    # Fallback: Regex Search
+    found = re.search(r'(https?://\S+)', text_content)
+    if found:
+        return found.group(1)
+    return None
 
 
 def main():
@@ -3547,6 +3582,9 @@ def main():
     app.add_handler(CommandHandler("fun", cmd_fun_handler))
     
     app.add_handler(CommandHandler("stop", cmd_stop_bot_handler))
+    
+    # Auto-Fun for Media (Video/Animation) - Admin Private
+    app.add_handler(MessageHandler(filters.ChatType.PRIVATE & (filters.VIDEO | filters.ANIMATION | filters.Document.VIDEO), cmd_fun_handler))
     
     # All Messages (Text)
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), global_message_handler))
