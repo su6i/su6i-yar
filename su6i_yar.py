@@ -2589,8 +2589,7 @@ async def cmd_stop_bot_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     logger.info("🛑 KILLING PROCESS WITH SIGKILL (9)")
     os.kill(os.getpid(), signal.SIGKILL)
 
-    except Exception as e:
-        logger.error(f"Global Handler Error: {e}")
+
 
 async def channel_post_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Auto-process posts in @just_for_fun_persian"""
