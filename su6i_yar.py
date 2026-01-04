@@ -3595,6 +3595,7 @@ async def cmd_fun_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if target_file:
             # Download
             new_file = await target_file.get_file()
+            file_name = f"fun_{target_file.file_id}.mp4"
             file_name_path = Path(file_name)
             await new_file.download_to_drive(file_name_path)
             
