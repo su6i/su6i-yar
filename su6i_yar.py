@@ -3419,7 +3419,8 @@ async def cmd_voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def cmd_fun_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Restricted command to repost videos to @just_for_fun_persian"""
-    user_id = update.effective_user.id
+    user_id = update.effective_user.id if update.effective_user else 0
+    msg = update.effective_message
     
     # Try global SETTINGS first, then Env
     admin_id = int(SETTINGS.get("admin_id", 0))
@@ -3429,18 +3430,17 @@ async def cmd_fun_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"👤 /fun called by: {user_id} (Admin: {admin_id})")
 
     # Security Check
-    # Security Check
     is_explicit = (msg.text and msg.text.startswith("/fun")) or (msg.caption and msg.caption.startswith("/fun"))
     
     # Special: Allow Channel Posts from target channel (Auto-Mode)
-    is_target_channel = update.effective_chat.username == "just_for_fun_persian"
+    is_target_channel = (update.effective_chat.username == "just_for_fun_persian") if update.effective_chat else False
     
     if user_id != admin_id and not is_target_channel:
         if is_explicit:
             logger.warning(f"⛔ Unauthorized access attempt by {user_id}")
-            await update.effective_message.reply_text(
+            await msg.reply_text(
                 f"⛔ عدم دسترسی!\nآیدی شما: `{user_id}`\nآیدی ادمین تعریف شده: `{admin_id}`",
-                reply_to_message_id=update.effective_message.message_id,
+                reply_to_message_id=msg.message_id,
                 parse_mode="Markdown"
             )
         return 
@@ -3563,6 +3563,9 @@ def extract_link_from_text(entities, text_content):
 
 
 def main():
+    # Quiet httpx noise
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+
     # The TELEGRAM_TOKEN check is now handled globally at the top of the file.
     # if not TELEGRAM_TOKEN:
     #     print("❌ Error: TELEGRAM_BOT_TOKEN not found in .env")
