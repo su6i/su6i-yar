@@ -2242,15 +2242,61 @@ async def download_instagram_cobalt(url: str, filename: Path) -> bool:
     except Exception as e:
         logger.error(f"Cobalt Fallback Logic Failed: {e}")
         return False
-async def convert_to_mac_compatible(input_path: Path) -> bool:
-    """Re-encode video to H.264/AAC with yuv420p for Mac compatibility"""
-    output_path = input_path.with_name(f"fixed_{input_path.name}")
-    logger.info(f"🔄 Converting {input_path.name} for Mac compatibility...")
+
+async def get_video_metadata(file_path: Path) -> dict:
+    """Extract width, height, duration from video file using ffprobe."""
+    try:
+        cmd = [
+            "ffprobe", 
+            "-v", "error", 
+            "-select_streams", "v:0", 
+            "-show_entries", "stream=width,height,duration", 
+            "-of", "json", 
+            str(file_path)
+        ]
+        process = await asyncio.create_subprocess_exec(
+            *cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        )
+        stdout, stderr = await process.communicate()
+        
+        if process.returncode != 0:
+            logger.error(f"❌ ffprobe failed: {stderr.decode()}")
+            return None
+            
+        data = json.loads(stdout)
+        if "streams" in data and len(data["streams"]) > 0:
+            stream = data["streams"][0]
+            return {
+                "width": int(stream.get("width", 0)),
+                "height": int(stream.get("height", 0)),
+                "duration": float(stream.get("duration", 0))
+            }
+        return None
+    except Exception as e:
+        logger.error(f"💥 Metadata Extraction Failed: {e}")
+        return None
+
+async def compress_video(input_path: Path) -> bool:
+    """Smart compress video to 720p (Shortest Edge) + H.264/AAC for Telegram."""
+    output_path = input_path.with_name(f"compressed_{input_path.name}")
+    logger.info(f"🔄 Compressing {input_path.name} to 720p...")
+    
+    # Scale filter: "if width > height ? scale=-2:720 : scale=720:-2"
+    # This ensures the shortest edge becomes 720p.
+    # We use 'trunc(iw/2)*2' logic usually but '720' is already even.
+    # The complex filter ensures we target 720p based on orientation.
+    scale_filter = "scale='if(gt(iw,ih),-2,720)':'if(gt(iw,ih),720,-2)'"
     
     cmd = [
         "ffmpeg", "-y",
         "-i", str(input_path),
-        "-c", "copy",
+        "-c:v", "libx264",
+        "-crf", "26",
+        "-preset", "faster",
+        "-vf", scale_filter,
+        "-c:a", "aac",
+        "-b:a", "128k",
+        "-pix_fmt", "yuv420p",
         "-movflags", "+faststart",
         str(output_path)
     ]
@@ -2262,13 +2308,16 @@ async def convert_to_mac_compatible(input_path: Path) -> bool:
         stdout, stderr = await process.communicate()
         
         if process.returncode == 0 and output_path.exists():
-            logger.info(f"✅ Conversion successful: {output_path.name}")
-            # Replace original with fixed version
+            input_size = input_path.stat().st_size / (1024*1024)
+            output_size = output_path.stat().st_size / (1024*1024)
+            logger.info(f"✅ Compression successful: {input_size:.1f}MB -> {output_size:.1f}MB")
+            
+            # Replace original with compressed version
             input_path.unlink()
             output_path.rename(input_path)
             return True
         else:
-            logger.error(f"❌ ffmpeg failed (Code {process.returncode}): {stderr.decode()[:200]}")
+            logger.error(f"❌ ffmpeg compression failed: {stderr.decode()[:200]}")
             if output_path.exists(): output_path.unlink()
             return False
     except Exception as e:
@@ -2425,22 +2474,29 @@ async def download_instagram(url, chat_id, bot, reply_to_message_id=None, custom
         
         # 6.5 Ensure Mac compatibility before sending
         if filename.exists():
-            await convert_to_mac_compatible(filename)
+            if await compress_video(filename):
+                logger.info(f"✅ Mac compatibility fixed for {filename}")
+            
+            # EXTRACT METADATA
+            meta = await get_video_metadata(filename)
+            duration = meta.get("duration", 0) if meta else 0
+            width = meta.get("width", 0) if meta else 0
+            height = meta.get("height", 0) if meta else 0
 
-        # 7. Send to User
-        if filename.exists():
+            # 6. Send to Telegram
+            logger.info(f"📤 Sending video to {chat_id}...")
             try:
-                with open(filename, "rb") as video_file:
-                    video_msg = await bot.send_video(
-                        chat_id=chat_id,
-                        video=video_file,
-                        caption=caption,
-                        parse_mode='HTML',
-                        reply_to_message_id=reply_to_message_id,
-                        supports_streaming=True,
-                        read_timeout=150,
-                        write_timeout=150
-                    )
+                video_msg = await bot.send_video(
+                    chat_id=chat_id,
+                    video=open(filename, "rb"), # Use open() directly
+                    caption=caption, # Use 'caption' instead of 'clean_cap'
+                    parse_mode="HTML",
+                    reply_to_message_id=reply_to_message_id,
+                    duration=int(duration),
+                    width=width,
+                    height=height,
+                    supports_streaming=True
+                )
                 
                 # Send overflow text as reply to video (multiple parts if needed)
                 if overflow_text:
@@ -3501,19 +3557,32 @@ async def cmd_fun_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if target_file:
             # Download
             new_file = await target_file.get_file()
-            file_name = f"fun_{target_file.file_id}.mp4"
-            await new_file.download_to_drive(file_name)
+            file_name_path = Path(file_name)
+            await new_file.download_to_drive(file_name_path)
+            
+            # Smart Compression
+            await compress_video(file_name_path)
+            
+            # Metadata
+            meta = await get_video_metadata(file_name_path)
+            duration = meta.get("duration", 0) if meta else 0
+            width = meta.get("width", 0) if meta else 0
+            height = meta.get("height", 0) if meta else 0
             
             # Send
             caption = (msg.caption or (msg.reply_to_message and msg.reply_to_message.caption)) or ""
             clean_cap, _ = smart_split(caption, header=custom_header, max_len=1024)
                 
-            with open(file_name, "rb") as f:
+            with open(file_name_path, "rb") as f:
                 await context.bot.send_video(
                     chat_id=target_channel,
                     video=f,
                     caption=clean_cap,
-                    parse_mode="HTML"
+                    parse_mode="HTML",
+                    duration=int(duration),
+                    width=width,
+                    height=height,
+                    supports_streaming=True
                 )
             
             # Cleanup File
