@@ -3593,6 +3593,21 @@ async def cmd_fun_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         # --- CASE 1: FILE HANDLING ---
         if target_file:
+            # 20MB Limit Check for Bot API
+            file_size_mb = target_file.file_size / (1024 * 1024)
+            if file_size_mb > 19.5:
+                err_text = (
+                    f"⛔️ <b>خطای محدودیت تلگرام</b> ({file_size_mb:.1f}MB)\n\n"
+                    "تلگرام اجازه دانلود فایل‌های بالای <b>۲۰ مگابایت</b> را به ربات‌ها نمی‌دهد، "
+                    "بنابراین نمی‌توانم این فایل را پردازش و فشرده کنم.\n\n"
+                    "✅ <b>راهکار:</b>\n"
+                    "۱. لینک همین ویدیو (اینستاگرام/یوتیوب) را بفرستید (محدودیت ندارد).\n"
+                    "۲. یا فایل را خودتان فشرده کنید (زیر ۲۰ مگابایت) و مجدد ارسال کنید."
+                )
+                if status_msg: await status_msg.edit_text(err_text, parse_mode="HTML")
+                else: await msg.reply_text(err_text, reply_to_message_id=msg.message_id, parse_mode="HTML") 
+                return
+
             # Download
             new_file = await target_file.get_file()
             file_name = f"fun_{target_file.file_id}.mp4"
