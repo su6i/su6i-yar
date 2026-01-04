@@ -3389,7 +3389,11 @@ async def cmd_voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def cmd_fun_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Restricted command to repost videos to @just_for_fun_persian"""
     user_id = update.effective_user.id
-    admin_id = int(os.getenv("ADMIN_ID") or 0)
+    
+    # Try global SETTINGS first, then Env
+    admin_id = int(SETTINGS.get("admin_id", 0))
+    if admin_id == 0:
+        admin_id = int(os.getenv("ADMIN_ID") or 0)
     
     logger.info(f"👤 /fun called by: {user_id} (Admin: {admin_id})")
 
@@ -3397,7 +3401,7 @@ async def cmd_fun_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user_id != admin_id:
         logger.warning(f"⛔ Unauthorized access attempt by {user_id}")
         await update.effective_message.reply_text(
-            "⛔ شما دسترسی استفاده از این دستور را ندارید.",
+            f"⛔ عدم دسترسی!\nآیدی شما: `{user_id}`\nآیدی ادمین تعریف شده: `{admin_id}`",
             reply_to_message_id=update.effective_message.message_id,
             parse_mode="Markdown"
         )
