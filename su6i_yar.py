@@ -1017,6 +1017,10 @@ async def analyze_text_gemini(text, status_msg=None, lang_code="fa", user_id=Non
         prompt_text = (
             f"You are a professional Fact-Check Assistant. Answer STRICTLY in **{target_lang}** language.\n\n"
             f"Analyze the following text and provide your response in {target_lang}.\n\n"
+
+            "PRELIMINARY CHECK:\n"
+            "If the input text is purely conversational (e.g. 'Hello', 'How are you'), a joke, an insult, or clearly NOT a scientific/health/news claim to analyze, output ONLY this token and nothing else:\n"
+            "|||IRRELEVANT|||\n\n"
             "CRITICAL FORMATTING RULES:\n"
             "1. Your response MUST be split into TWO parts using: |||SPLIT|||\n"
             "2. Use ✅ emoji ONLY for TRUE/VERIFIED claims\n"
@@ -1422,7 +1426,9 @@ MESSAGES = {
             "`{theoretical}` Rial\n"
             "Market Gap: `{diff}` Rial"
         ),
-        "dl_usage_error": "⛔ Please provide an Instagram link or reply to one."
+        ),
+        "dl_usage_error": "⛔ Please provide an Instagram link or reply to one.",
+        "irrelevant_msg": "😐 Behave yourself! This bot is designed for scientific fact-checking, not for joking around."
     },
     "fr": {
         "welcome": (
@@ -1571,7 +1577,8 @@ MESSAGES = {
             "`{theoretical}` Rial\n"
             "Écart du Marché: `{diff}` Rial"
         ),
-        "dl_usage_error": "⛔ Veuillez fournir un lien Instagram ou y répondre."
+        "dl_usage_error": "⛔ Veuillez fournir un lien Instagram ou y répondre.",
+        "irrelevant_msg": "😐 Sois sérieux ! Ce robot est conçu pour la vérification scientifique, pas pour jouer."
     },
     "ko": {
         "welcome": (
@@ -1718,7 +1725,8 @@ MESSAGES = {
             "`{theoretical}` 리알\n"
             "시장 차이: `{diff}` 리알"
         ),
-        "dl_usage_error": "⛔ 인스타그램 링크를 보내거나 답장하세요."
+        "dl_usage_error": "⛔ 인스타그램 링크를 보내거나 답장하세요.",
+        "irrelevant_msg": "😐 진지하게 하세요! 이 봇은 과학적 사실 확인을 위해 설계되었지 장난치려고 만든 게 아닙니다."
     }
 }
 
@@ -2078,6 +2086,16 @@ async def smart_reply(msg, status_msg, response, user_id, lang="fa"):
     # 3. Parse Split (Summary vs Detail)
     full_content = extract_text(response)
     
+    # 3. Parse Split (Summary vs Detail)
+    full_content = extract_text(response)
+    
+    # GUARDRAIL CHECK: Irrelevant Input
+    if "|||IRRELEVANT|||" in full_content:
+        # Fallback to localized "Stop fooling around" message
+        refusal_msg = get_msg("irrelevant_msg", user_id)
+        await status_msg.edit_text(refusal_msg)
+        return
+
     split_marker = "|||SPLIT|||"
     
     if split_marker in full_content:
