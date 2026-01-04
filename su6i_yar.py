@@ -3604,8 +3604,13 @@ async def cmd_fun_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     "۱. لینک همین ویدیو (اینستاگرام/یوتیوب) را بفرستید (محدودیت ندارد).\n"
                     "۲. یا فایل را خودتان فشرده کنید (زیر ۲۰ مگابایت) و مجدد ارسال کنید."
                 )
-                if status_msg: await status_msg.edit_text(err_text, parse_mode="HTML")
-                else: await msg.reply_text(err_text, reply_to_message_id=msg.message_id, parse_mode="HTML") 
+                if status_msg: 
+                    await status_msg.edit_text(err_text, parse_mode="HTML")
+                elif is_target_channel:
+                    # Original message deleted, send new message to channel without reply
+                    await context.bot.send_message(chat_id=msg.chat_id, text=err_text, parse_mode="HTML")
+                else: 
+                    await msg.reply_text(err_text, reply_to_message_id=msg.message_id, parse_mode="HTML") 
                 return
 
             # Download
