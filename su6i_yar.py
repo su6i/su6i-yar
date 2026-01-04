@@ -2277,29 +2277,55 @@ async def get_video_metadata(file_path: Path) -> dict:
         return None
 
 async def compress_video(input_path: Path) -> bool:
-    """Smart compress video to 720p (Shortest Edge) + H.264/AAC for Telegram."""
+    """
+    Smart Compression Logic:
+    1. If Size > 10MB AND Resolution > 720p: Compress (Scale to 720p + Re-encode).
+    2. Else: Remux only (Copy Codec) to fix Mac compatibility without reducing quality/size.
+    """
     output_path = input_path.with_name(f"compressed_{input_path.name}")
-    logger.info(f"🔄 Compressing {input_path.name} to 720p...")
     
-    # Scale filter: "if width > height ? scale=-2:720 : scale=720:-2"
-    # This ensures the shortest edge becomes 720p.
-    # We use 'trunc(iw/2)*2' logic usually but '720' is already even.
-    # The complex filter ensures we target 720p based on orientation.
-    scale_filter = "scale='if(gt(iw,ih),-2,720)':'if(gt(iw,ih),720,-2)'"
+    # 1. Check File Size
+    input_size_mb = input_path.stat().st_size / (1024 * 1024)
     
-    cmd = [
-        "ffmpeg", "-y",
-        "-i", str(input_path),
-        "-c:v", "libx264",
-        "-crf", "26",
-        "-preset", "faster",
-        "-vf", scale_filter,
-        "-c:a", "aac",
-        "-b:a", "128k",
-        "-pix_fmt", "yuv420p",
-        "-movflags", "+faststart",
-        str(output_path)
-    ]
+    # 2. Check Resolution
+    meta = await get_video_metadata(input_path)
+    if not meta:
+        logger.warning(f"⚠️ Could not read metadata for {input_path.name}, defaulting to Remux.")
+        should_compress = False
+    else:
+        width = meta.get("width", 0)
+        height = meta.get("height", 0)
+        min_dim = min(width, height)
+        # Condition: Huge File (>10MB) AND High Res (>720p)
+        should_compress = (input_size_mb > 10) and (min_dim > 720)
+
+    if should_compress:
+        logger.info(f"📉 Compressing {input_path.name} (Size: {input_size_mb:.1f}MB, Res: {width}x{height})...")
+        # Logic: Scale shortest edge to 720p
+        scale_filter = "scale='if(gt(iw,ih),-2,720)':'if(gt(iw,ih),720,-2)'"
+        cmd = [
+            "ffmpeg", "-y",
+            "-i", str(input_path),
+            "-c:v", "libx264",
+            "-crf", "26",
+            "-preset", "faster",
+            "-vf", scale_filter,
+            "-c:a", "aac",
+            "-b:a", "128k",
+            "-pix_fmt", "yuv420p",
+            "-movflags", "+faststart",
+            str(output_path)
+        ]
+    else:
+        logger.info(f"⚡️ Remuxing {input_path.name} (Size: {input_size_mb:.1f}MB - No Compression Needed)...")
+        # Logic: Copy Video/Audio strings (No Re-encoding), just fix container
+        cmd = [
+            "ffmpeg", "-y",
+            "-i", str(input_path),
+            "-c", "copy",
+            "-movflags", "+faststart",
+            str(output_path)
+        ]
     
     try:
         process = await asyncio.create_subprocess_exec(
@@ -2308,16 +2334,15 @@ async def compress_video(input_path: Path) -> bool:
         stdout, stderr = await process.communicate()
         
         if process.returncode == 0 and output_path.exists():
-            input_size = input_path.stat().st_size / (1024*1024)
-            output_size = output_path.stat().st_size / (1024*1024)
-            logger.info(f"✅ Compression successful: {input_size:.1f}MB -> {output_size:.1f}MB")
+            final_size = output_path.stat().st_size / (1024*1024)
+            logger.info(f"✅ Process successful: {input_size_mb:.1f}MB -> {final_size:.1f}MB")
             
-            # Replace original with compressed version
+            # Replace original
             input_path.unlink()
             output_path.rename(input_path)
             return True
         else:
-            logger.error(f"❌ ffmpeg compression failed: {stderr.decode()[:200]}")
+            logger.error(f"❌ ffmpeg failed: {stderr.decode()[:200]}")
             if output_path.exists(): output_path.unlink()
             return False
     except Exception as e:
