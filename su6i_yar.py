@@ -3051,7 +3051,7 @@ def clean_text_strict(text: str) -> str:
     # Newlines are NOT pauses. Use ". . ." or ", , ,"
     # Pattern: Start of line, optional emoji/bullet, short text (max 60 chars), colon.
     # Replacement:  . . . Text . . . 
-    # This handles: "وضعیت کلی:", "▫️ ادعای متن:", "🔊 نسخه صوتی:", etc.
+    # This handles keys such as "General Status", "Claim", "Audio Version", etc.
     text = re.sub(r'(\n|^)\s*([^\n]{1,60}?):\s*', r'\1 . . . \2 . . . ', text)
     
     # Replace remaining colons (inline) with dot for pause
@@ -3333,7 +3333,7 @@ async def cmd_voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             try:
                 audio_amir = await text_to_speech(target_text, "fa") # Default uses Datacula logic
                 if audio_amir:
-                    # caption_amir = smart_split(target_text, header="🗣️ <b>مدل ۱: Datacula (امیر)</b> - آنلاین\n", max_len=1024)[0]
+
                     caption_amir = "🗣️ <b>مدل ۱: Datacula (امیر)</b> - آنلاین"
                     await context.bot.send_voice(chat_id=msg.chat_id, voice=audio_amir, caption=caption_amir, parse_mode='HTML')
             except Exception as e:
@@ -3343,7 +3343,7 @@ async def cmd_voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             try:
                 audio_mana = await text_to_speech_sherpa(target_text)
                 if audio_mana:
-                    # caption_mana = smart_split(target_text, header="🗣️ <b>مدل ۲: Piper (مانا)</b> - لوکال (سریع)\n", max_len=1024)[0]
+
                     caption_mana = "🗣️ <b>مدل ۲: Piper (مانا)</b> - لوکال (سریع)"
                     await context.bot.send_voice(chat_id=msg.chat_id, voice=audio_mana, caption=caption_mana, parse_mode='HTML')
             except Exception as e:
@@ -3359,7 +3359,7 @@ async def cmd_voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         audio_edge.write(chunk["data"])
                 audio_edge.seek(0)
                 
-                # caption_edge = smart_split(target_text, header="🗣️ <b>مدل ۳: EdgeTTS (فرید)</b> - مایکروسافت\n", max_len=1024)[0]
+
                 caption_edge = "🗣️ <b>مدل ۳: EdgeTTS (فرید)</b> - مایکروسافت"
                 await context.bot.send_voice(chat_id=msg.chat_id, voice=audio_edge, caption=caption_edge, parse_mode='HTML')
             except Exception as e:
