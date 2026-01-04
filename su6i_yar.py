@@ -1426,7 +1426,7 @@ MESSAGES = {
             "`{theoretical}` Rial\n"
             "Market Gap: `{diff}` Rial"
         ),
-        ),
+
         "dl_usage_error": "⛔ Please provide an Instagram link or reply to one.",
         "irrelevant_msg": "😐 Behave yourself! This bot is designed for scientific fact-checking, not for joking around."
     },
