@@ -105,4 +105,16 @@ EOF
 echo ""
 echo "✅ Configuration saved to .env"
 echo "------------------------------"
+
+# 4. Auto-Restart Service (Server Mode)
+if command -v systemctl >/dev/null 2>&1; then
+    SERVICE_NAME="su6i-yar"
+    if systemctl list-units --full -all | grep -Fq "$SERVICE_NAME.service"; then
+        echo "🔄 Detected Systemd Service: $SERVICE_NAME"
+        echo "   Restarting service to apply changes..."
+        sudo systemctl restart $SERVICE_NAME
+        echo "✅ Service Restarted!"
+    fi
+fi
+
 echo "🎉 Setup Complete! Run: './run_dev.sh' or 'python3 su6i_yar.py'"
