@@ -2325,6 +2325,34 @@ async def compress_video(input_path: Path) -> bool:
         if output_path.exists(): output_path.unlink()
         return False
 
+        if output_path.exists(): output_path.unlink()
+        return False
+
+async def generate_thumbnail(video_path: Path) -> Optional[Path]:
+    """Generate a JPG thumbnail from video at t=1s to avoid black start frames."""
+    thumb_path = video_path.with_suffix(".jpg")
+    try:
+        # Extract frame at 1s (or 0s if short)
+        cmd = [
+            "ffmpeg", "-y",
+            "-i", str(video_path),
+            "-ss", "00:00:01",
+            "-vframes", "1",
+            "-q:v", "5",
+            str(thumb_path)
+        ]
+        process = await asyncio.create_subprocess_exec(
+            *cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        )
+        await process.communicate()
+        
+        if thumb_path.exists():
+            return thumb_path
+        return None
+    except Exception as e:
+        logger.error(f"Thumbnail generation failed: {e}")
+        return None
+
 async def download_instagram(url, chat_id, bot, reply_to_message_id=None, custom_caption_header=None):
     """Download and send video using yt-dlp with multi-stage fallback (Anonymous -> Cookies -> Cobalt)"""
     logger.info(f"🚀 [Chat {chat_id}] Initialization of Instagram download for: {url}")
@@ -2483,9 +2511,15 @@ async def download_instagram(url, chat_id, bot, reply_to_message_id=None, custom
             width = meta.get("width", 0) if meta else 0
             height = meta.get("height", 0) if meta else 0
 
+            # GENERATE THUMBNAIL (Fixes Black Screen)
+            thumb_path = await generate_thumbnail(filename)
+
             # 6. Send to Telegram
             logger.info(f"📤 Sending video to {chat_id}...")
             try:
+                # Open thumb if exists
+                thumb_file = open(thumb_path, "rb") if thumb_path else None
+                
                 video_msg = await bot.send_video(
                     chat_id=chat_id,
                     video=open(filename, "rb"), # Use open() directly
@@ -2495,8 +2529,12 @@ async def download_instagram(url, chat_id, bot, reply_to_message_id=None, custom
                     duration=int(duration),
                     width=width,
                     height=height,
+                    thumbnail=thumb_file,
                     supports_streaming=True
                 )
+                
+                if thumb_file: thumb_file.close()
+                if thumb_path and thumb_path.exists(): thumb_path.unlink()
                 
                 # Send overflow text as reply to video (multiple parts if needed)
                 if overflow_text:
@@ -3569,11 +3607,15 @@ async def cmd_fun_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             width = meta.get("width", 0) if meta else 0
             height = meta.get("height", 0) if meta else 0
             
+            # Thumbnail
+            thumb_path = await generate_thumbnail(file_name_path)
+            
             # Send
             caption = (msg.caption or (msg.reply_to_message and msg.reply_to_message.caption)) or ""
             clean_cap, _ = smart_split(caption, header=custom_header, max_len=1024)
                 
             with open(file_name_path, "rb") as f:
+                thumb_file = open(thumb_path, "rb") if thumb_path else None
                 await context.bot.send_video(
                     chat_id=target_channel,
                     video=f,
@@ -3582,8 +3624,11 @@ async def cmd_fun_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     duration=int(duration),
                     width=width,
                     height=height,
+                    thumbnail=thumb_file,
                     supports_streaming=True
                 )
+                if thumb_file: thumb_file.close()
+                if thumb_path and thumb_path.exists(): thumb_path.unlink()
             
             # Cleanup File
             if os.path.exists(file_name):
