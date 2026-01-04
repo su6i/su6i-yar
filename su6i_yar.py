@@ -2252,6 +2252,7 @@ async def convert_to_mac_compatible(input_path: Path) -> bool:
         "-i", str(input_path),
         "-c:v", "libx264",
         "-pix_fmt", "yuv420p",
+        "-vf", "scale='trunc(iw/2)*2:trunc(ih/2)*2'",
         "-preset", "faster",
         "-c:a", "aac",
         "-b:a", "128k",
