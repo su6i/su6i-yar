@@ -110,8 +110,17 @@ benchmark_report.md
 manual_cookie.py
 upload_cookie.py
 probe_cobalt.py
+
+# Temporary Test Files (Audio)
+*.wav
+*.mp3
+
+# Jupyter Notebooks (Allow specific ones if needed)
 !Piper_TTS_Test.ipynb
 !Sherpa_TTS_Test.ipynb
 !Amir_Voice_Test.ipynb
-datacula_test.wav
-edge_test.mp3
+
+# TTS Models (Large Files)
+models/*.onnx
+models/*.json
+models/tokens.txt
