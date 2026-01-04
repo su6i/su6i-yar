@@ -2589,6 +2589,36 @@ async def cmd_stop_bot_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     logger.info("🛑 KILLING PROCESS WITH SIGKILL (9)")
     os.kill(os.getpid(), signal.SIGKILL)
 
+    except Exception as e:
+        logger.error(f"Global Handler Error: {e}")
+
+async def channel_post_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Auto-process posts in @just_for_fun_persian"""
+    msg = update.channel_post
+    if not msg: return
+    
+    chat_username = msg.chat.username
+    target_username = "just_for_fun_persian"
+    
+    # 1. Verify Channel
+    if chat_username != target_username:
+        return
+        
+    # 2. Loop Protection: Check if message is from Bot itself (via header signature)
+    # Since channel posts don't have 'from_user', we check the content/caption for our signature.
+    text_content = msg.caption or msg.text or ""
+    if "🎥 Just For Fun | @just_for_fun_persian" in text_content:
+        logger.info("⚡ Ignoring own channel post (Loop Protection).")
+        return
+
+    # 3. Check for Media/Link
+    has_media = msg.video or msg.animation or (msg.document and msg.document.mime_type and msg.document.mime_type.startswith("video/"))
+    has_link = "http" in text_content
+    
+    if has_media or has_link:
+        logger.info(f"⚡ Auto-Fun Triggered for Channel Post in @{chat_username}")
+        await cmd_fun_handler(update, context)
+
 async def global_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """MASTER HANDLER: Processes ALL text messages"""
     msg = update.message
@@ -2604,18 +2634,7 @@ async def global_message_handler(update: Update, context: ContextTypes.DEFAULT_T
 
     logger.info(f"📨 Message received: '{text}' from {user.id} ({lang})")
 
-    # --- 0. AUTO-FUN INTERCEPTOR (Admin Only) ---
-    # Convert global SETTINGS admin_id to int safely
-    admin_id_chk = int(SETTINGS.get("admin_id", 0)) or int(os.getenv("ADMIN_ID") or 0)
-    
-    if user_id == admin_id_chk and msg.chat.type == 'private':
-        # Check if text contains a URL
-        if "http" in text:
-             # Fast check before calling handler
-             if extract_link_from_text(msg.entities, text):
-                 logger.info(f"⚡ Auto-Fun Triggered for Admin Link: {text[:20]}...")
-                 await cmd_fun_handler(update, context)
-                 return
+    logger.info(f"📨 Message received: '{text}' from {user.id} ({lang})")
 
     # --- 1. MENU COMMANDS (Check by Emoji/Start) --- 
     
@@ -3414,7 +3433,10 @@ async def cmd_fun_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Security Check
     is_explicit = (msg.text and msg.text.startswith("/fun")) or (msg.caption and msg.caption.startswith("/fun"))
     
-    if user_id != admin_id:
+    # Special: Allow Channel Posts from target channel (Auto-Mode)
+    is_target_channel = update.effective_chat.username == "just_for_fun_persian"
+    
+    if user_id != admin_id and not is_target_channel:
         if is_explicit:
             logger.warning(f"⛔ Unauthorized access attempt by {user_id}")
             await update.effective_message.reply_text(
@@ -3582,10 +3604,10 @@ def main():
     app.add_handler(CommandHandler("fun", cmd_fun_handler))
     
     app.add_handler(CommandHandler("stop", cmd_stop_bot_handler))
-    
-    # Auto-Fun for Media (Video/Animation) - Admin Private
-    app.add_handler(MessageHandler(filters.ChatType.PRIVATE & (filters.VIDEO | filters.ANIMATION | filters.Document.VIDEO), cmd_fun_handler))
-    
+        
+    # Channel Post Handler (For Auto-Fun in @just_for_fun_persian)
+    app.add_handler(MessageHandler(filters.ChatType.CHANNEL, channel_post_handler))
+
     # All Messages (Text)
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), global_message_handler))
 
