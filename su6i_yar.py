@@ -23,6 +23,21 @@ import html
 import httpx
 from bs4 import BeautifulSoup
 import time
+import wave
+import struct
+
+# Third-party imports
+try:
+    import numpy as np  # For Audio processing
+except ImportError:
+    np = None
+
+# Optional: Sherpa-ONNX for Local TTS
+try:
+    import sherpa_onnx
+    SHERPA_AVAILABLE = True
+except ImportError:
+    SHERPA_AVAILABLE = False
 
 # Telegram Imports
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove, InlineKeyboardButton, InlineKeyboardMarkup, constants
@@ -88,6 +103,24 @@ parser.add_argument("--dev", action="store_true", help="Run in development mode"
 args = parser.parse_args()
 IS_DEV = args.dev
 
+# Re-configure Logging based on Dev Mode
+if IS_DEV:
+    logger.setLevel(logging.DEBUG)
+    logging.getLogger("httpx").setLevel(logging.DEBUG)
+    logging.getLogger("google_genai").setLevel(logging.DEBUG)
+    
+    # Verbose Formatter for Dev
+    dev_formatter = logging.Formatter(
+        "%(asctime)s | %(levelname)s | %(name)s | %(filename)s:%(lineno)d | %(message)s",
+        datefmt="%H:%M:%S"
+    )
+    console_handler.setFormatter(dev_formatter)
+    logger.info("🐞 DEBUG MODE ENABLED: Verbose logging active.")
+else:
+    # Standard cleaner formatter for Production
+    console_handler.setFormatter(ColoredFormatter())
+    logger.info("🚀 PRODUCTION MODE")
+
 # 2. Environment Variables
 load_dotenv()
 if args.dev:
@@ -96,10 +129,11 @@ if args.dev:
 else:
     TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID") or os.getenv("ADMIN_ID")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
 PEXELS_API_KEY = os.getenv("PEXELS_API_KEY", "").strip()
+ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY", "").strip()
 
 # 3. Global Settings
 SETTINGS = {
@@ -2246,7 +2280,7 @@ async def convert_to_mac_compatible(input_path: Path) -> bool:
         if output_path.exists(): output_path.unlink()
         return False
 
-async def download_instagram(url, chat_id, bot, reply_to_message_id=None):
+async def download_instagram(url, chat_id, bot, reply_to_message_id=None, custom_caption_header=None):
     """Download and send video using yt-dlp with multi-stage fallback (Anonymous -> Cookies -> Cobalt)"""
     logger.info(f"🚀 [Chat {chat_id}] Initialization of Instagram download for: {url}")
     
@@ -2390,7 +2424,7 @@ async def download_instagram(url, chat_id, bot, reply_to_message_id=None):
                 logger.warning(f"Could not read caption: {e}")
 
         # 6. Build caption with smart_split
-        header = f"📥 <b>Su6i Yar</b> | @su6i_yar_bot"
+        header = custom_caption_header if custom_caption_header else f"📥 <b>Su6i Yar</b> | @su6i_yar_bot"
         caption, overflow_text = smart_split(original_caption, header=header, max_len=1024)
         
         # 6.5 Ensure Mac compatibility before sending
@@ -2821,46 +2855,271 @@ TTS_VOICES = {
     "hi": "hi-IN-MadhurNeural",  # Hindi
 }
 
+
+DATACULA_API_URL = "https://tts.datacula.com/api/tts"
+
+# Global Sherpa Engine Cache
+SHERPA_ENGINE = None
+
+def init_sherpa_engine():
+    """Initialize Sherpa-ONNX TTS Engine (Mana Model)"""
+    global SHERPA_ENGINE
+    if not SHERPA_AVAILABLE:
+        print("⚠️ Sherpa-ONNX not installed. Local TTS disabled.")
+        return
+
+    model_path = "models/fa_IR-mana-medium-fixed.onnx"
+    tokens_path = "tokens.txt"
+    espeak_data = "/opt/homebrew/share/espeak-ng-data"
+    
+    if not os.path.exists(model_path):
+        print(f"⚠️ Sherpa Model not found: {model_path}")
+        return
+
+    try:
+        print("🚀 Initializing Sherpa-ONNX (Mana)...")
+        config = sherpa_onnx.OfflineTtsConfig(
+            model=sherpa_onnx.OfflineTtsModelConfig(
+                vits=sherpa_onnx.OfflineTtsVitsModelConfig(
+                    model=model_path,
+                    tokens=tokens_path,
+                    data_dir=espeak_data,
+                    noise_scale=0.667,
+                    length_scale=1.0,
+                    noise_scale_w=0.8,
+                ),
+                provider="cpu",
+                num_threads=1,
+                debug=False
+            )
+        )
+        SHERPA_ENGINE = sherpa_onnx.OfflineTts(config)
+        print("✅ Sherpa-ONNX Engine Ready!")
+    except Exception as e:
+        print(f"❌ Sherpa Init Failed: {e}")
+
+# Call init immediately or lazily? Let's call lazily or at module level if fast.
+# VITS load is fast (~1s).
+if SHERPA_AVAILABLE:
+    init_sherpa_engine()
+
+
+# Global Sherpa Engine Cache
+SHERPA_ENGINE = None
+
+def init_sherpa_engine():
+    """Initialize Sherpa-ONNX TTS Engine (Mana Model)"""
+    global SHERPA_ENGINE
+    if not SHERPA_AVAILABLE:
+        print("⚠️ Sherpa-ONNX not installed. Local TTS disabled.")
+        return
+
+    model_path = "models/fa_IR-mana-medium-fixed.onnx"
+    tokens_path = "models/tokens.txt"
+    espeak_data = "/opt/homebrew/share/espeak-ng-data"
+    
+    if not os.path.exists(model_path):
+        print(f"⚠️ Sherpa Model not found: {model_path}")
+        return
+
+    try:
+        print("🚀 Initializing Sherpa-ONNX (Mana)...")
+        config = sherpa_onnx.OfflineTtsConfig(
+            model=sherpa_onnx.OfflineTtsModelConfig(
+                vits=sherpa_onnx.OfflineTtsVitsModelConfig(
+                    model=model_path,
+                    tokens=tokens_path,
+                    data_dir=espeak_data,
+                    noise_scale=0.667,
+                    length_scale=1.0,
+                    noise_scale_w=0.8,
+                ),
+                provider="cpu",
+                num_threads=1,
+                debug=False
+            )
+        )
+        SHERPA_ENGINE = sherpa_onnx.OfflineTts(config)
+        print("✅ Sherpa-ONNX Engine Ready!")
+    except Exception as e:
+        print(f"❌ Sherpa Init Failed: {e}")
+
+# Call init immediately if available
+if SHERPA_AVAILABLE:
+    init_sherpa_engine()
+
+
+
+async def text_to_speech_sherpa(text: str) -> Optional[io.BytesIO]:
+    """Generate TTS using local Sherpa-ONNX engine (Mana)."""
+    if not SHERPA_ENGINE or not np:
+        return None
+        
+    try:
+        # Apply strict cleaning (Pauses, Diacritics, etc.)
+        clean_text = clean_text_strict(text)
+        print(f"Sherpa Text: {clean_text[:50]}...")
+        audio = SHERPA_ENGINE.generate(clean_text, sid=0, speed=1.0)
+        
+        # Convert samples (float32) to int16 PCM wav
+        samples = np.array(audio.samples)
+        samples = np.clip(samples, -1.0, 1.0)
+        samples = (samples * 32767).astype(np.int16)
+        
+        buffer = io.BytesIO()
+        with wave.open(buffer, "wb") as f:
+            f.setnchannels(1)
+            f.setsampwidth(2) # 16-bit
+            f.setframerate(audio.sample_rate)
+            f.writeframes(samples.tobytes())
+            
+        buffer.seek(0)
+        return buffer
+    except Exception as e:
+        print(f"❌ Sherpa Generation Failed: {e}")
+        return None
+
+def clean_text_strict(text: str) -> str:
+    """
+    Strict cleaning for Persian TTS as requested:
+    - Replace meaningful emojis with text (e.g., ✅ -> تأیید شده).
+    - Keep only letters (Persian/English), spaces, and basic punctuation.
+    - Remove numbers, other emojis, and styling symbols.
+    - Ensure titles/headers are on separate lines.
+    """
+    # 0. Semantic Emoji Mapping (Convert visual status to spoken text)
+    emoji_map = {
+        "✅": "تأیید شده",
+        "❌": "رد شده",
+        "⛔": "غیرمجاز",
+        "⚠️": "هشدار",
+        "🧠": "تحلیل",
+        "💡": "نتیجه",
+        "📄": "منبع",
+        "🔍": "بررسی",
+        "📊": "آمار",
+        "📈": "روند",
+        "📉": "روند نزولی",
+        "🆔": "شناسه",
+        "👤": "کاربر",
+        "🟢": "فعال",
+        "🔴": "غیرفعال",
+    }
+    
+    for emoji_char, text_replacement in emoji_map.items():
+        text = text.replace(emoji_char, f" {text_replacement} ")
+
+    # 0.5. Explicit Removals (User Requests)
+    
+    # 1. Handle Titles/Headers (Markdown bold) -> Add period for pause
+    text = re.sub(r'\*\*(.*?)\*\*', r' . . . \1 . . . ', text)
+
+    # 2. PAUSE STRATEGY (User Request):
+    # Detect Headers/Titles ending in colon (:) -> Surround with explicitly punctuation pauses.
+    # Newlines are NOT pauses. Use ". . ." or ", , ,"
+    # Pattern: Start of line, optional emoji/bullet, short text (max 60 chars), colon.
+    # Replacement:  . . . Text . . . 
+    # This handles: "وضعیت کلی:", "▫️ ادعای متن:", "🔊 نسخه صوتی:", etc.
+    text = re.sub(r'(\n|^)\s*([^\n]{1,60}?):\s*', r'\1 . . . \2 . . . ', text)
+    
+    # Replace remaining colons (inline) with dot for pause
+    text = text.replace(":", " . ")
+
+    # 2.5 Allow Arabic/Persian Diacritics (Harakat) explicitly
+    # 064B-0652: Fathah, Dammah, Kasrah, etc.
+    allowed_diacritics = {chr(i) for i in range(0x064B, 0x0653)}
+
+    clean_chars = []
+    for char in text:
+        # Keep letters, spaces, newlines, basic punctuation, AND diacritics
+        if char.isalpha() or char.isspace() or char in ".،?!؟," or char in allowed_diacritics:
+            clean_chars.append(char)
+        else:
+            clean_chars.append(" ")
+            
+    text = "".join(clean_chars)
+    
+    # 3. Final Polish
+    # Collapse multiple spaces but PRESERVE newlines (important for the user's strategy)
+    text = re.sub(r'[ \t]+', ' ', text) 
+    # Collapse excessive newlines to avoid long silence loops
+    text = re.sub(r'\n{2,}', '\n\n', text)
+    
+    return text.strip()
+
 async def text_to_speech(text: str, lang: str = "fa") -> io.BytesIO:
-    """Convert text to speech using edge-tts. Returns audio as BytesIO."""
-    # Ensure lang is standardized key
+    """
+    Convert text to speech.
+    Primary: Datacula (Amir) for Persian.
+    Fallback: EdgeTTS (Dilara/Farid) for Persian or others.
+    """
+    import httpx
+    
+    # Standardize lang
     lang_key = lang[:2].lower()
     
-    # Try exact match, then try finding a voice for the ISO code dynamically
-    voice = TTS_VOICES.get(lang_key)
+    # Determine Logic (Is it Persian?)
+    is_persian_request = (lang_key == "fa") or (lang_key not in TTS_VOICES and re.search(r'[\u0600-\u06FF]', text))
     
-    # If not in our internal map, try to construct a fallback or use English
-    if not voice:
-        # Most edge-tts voices follow [lang]-[COUNTRY]-[Name]Neural
-        # But constructing them is brittle, so we prioritize the map and then English.
-        voice = TTS_VOICES.get("en")
+    # Clean text STRICTLY for TTS
+    clean_text = clean_text_strict(text)
     
-    # Heuristic: If text contains Persian/Arabic chars AND target lang is Persian, 
-    # or if no specific voice for requested lang, ensure we use Persian if text looks like it.
-    if lang_key == "fa" or lang_key not in TTS_VOICES:
-        if re.search(r'[\u0600-\u06FF\uFB50-\uFDFF\uFE70-\uFEFF]', text):
-            voice = TTS_VOICES["fa"]
+    # DEBUG: Log cleaning results to console
+    print(f"\n--- TTS DEBUG ---\nORIGINAL: {text[:50]}...\nCLEANED:  {clean_text[:50]}...\n-----------------\n")
     
-    # Clean text for TTS (remove markdown)
-    clean_text = re.sub(r'\*\*|▫️|━+|✅|❌|⚠️|🧠|📄|💡', '', text)
-    clean_text = re.sub(r'\[.*?\]', '', clean_text)  # Remove markdown links
-    # Replace slashes with a double pause (two commas + pauses) for natural dictation
-    clean_text = clean_text.replace(" / ", ", ... , ... ")
-    clean_text = clean_text.strip()
+    if not clean_text.strip():
+        clean_text = text # Fallback if empty
     
-    # Limit length for TTS (avoid very long audio)
+    # Limit length
     if len(clean_text) > 2000:
         clean_text = clean_text[:2000] + "..."
-    
-    communicate = edge_tts.Communicate(clean_text, voice)
+
     audio_buffer = io.BytesIO()
     
-    async for chunk in communicate.stream():
-        if chunk["type"] == "audio":
-            audio_buffer.write(chunk["data"])
+    # --- STRATEGY 1: DATACULA (Persian Only) ---
+    if is_persian_request:
+        try:
+            # logger.info(f"🎙️ Using Datacula (Amir) for Persian TTS...")
+            params = {
+                "text": clean_text,
+                "model_name": "امیر" # Confirmed Persian ID
+            }
+            # Timeout is important as it's a queued free API (20s)
+            async with httpx.AsyncClient(timeout=20) as client:
+                response = await client.get(DATACULA_API_URL, params=params)
+            
+            if response.status_code == 200 and len(response.content) > 1000:
+                audio_buffer.write(response.content)
+                audio_buffer.seek(0)
+                return audio_buffer
+            else:
+                print(f"⚠️ Datacula Failed: {response.status_code}")
+                # Fall through to EdgeTTS
+        except Exception as e:
+            print(f"⚠️ Datacula Error: {e}")
+            # Fall through to EdgeTTS
+
+    # --- STRATEGY 2: EDGE TTS (Fallback/Default) ---
+    # Choose Cyrus (Farid) or Dilara? User liked Amir which is Male. So fallback to Farid (Male).
+    voice = TTS_VOICES.get(lang_key)
+    if is_persian_request:
+        voice = "fa-IR-FaridNeural" # Male fallback to match Amir
     
-    audio_buffer.seek(0)
-    return audio_buffer
+    if not voice:
+        # Fallback to English if unknown char
+        voice = TTS_VOICES.get("en", "en-US-ChristopherNeural")
+
+    try:
+        communicate = edge_tts.Communicate(clean_text, voice)
+        async for chunk in communicate.stream():
+            if chunk["type"] == "audio":
+                audio_buffer.write(chunk["data"])
+        
+        audio_buffer.seek(0)
+        return audio_buffer
+    except Exception as e:
+        print(f"❌ EdgeTTS Failed: {e}")
+        return None
 
 async def merge_bilingual_audio(target_audio: io.BytesIO, trans_audio: io.BytesIO) -> io.BytesIO:
     """Merge two audio streams with a silence gap using ffmpeg."""
@@ -3005,6 +3264,7 @@ async def cmd_voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await safe_delete(msg)
 
     # Decide target language and translation need
+    # Decide target language and translation need
     if explicit_target:
         # User explicitly asked for a specific language -> Translate if needed
         target_lang = explicit_target
@@ -3033,6 +3293,49 @@ async def cmd_voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             voice_reply_to = reply_target_id
             
+        # --- MULTI-MODEL COMPARISON (PERSIAN ONLY) ---
+        if target_lang == "fa":
+            await context.bot.send_message(chat_id=msg.chat_id, text="🧪 <b>تست مقایسه موتورهای صوتی (۳ مدل)</b>", parse_mode="HTML", reply_to_message_id=voice_reply_to)
+            
+            # 1. Datacula (Amir)
+            try:
+                audio_amir = await text_to_speech(target_text, "fa") # Default uses Datacula logic
+                if audio_amir:
+                    # caption_amir = smart_split(target_text, header="🗣️ <b>مدل ۱: Datacula (امیر)</b> - آنلاین\n", max_len=1024)[0]
+                    caption_amir = "🗣️ <b>مدل ۱: Datacula (امیر)</b> - آنلاین"
+                    await context.bot.send_voice(chat_id=msg.chat_id, voice=audio_amir, caption=caption_amir, parse_mode='HTML')
+            except Exception as e:
+                print(f"Datacula Fail: {e}")
+
+            # 2. Piper (Mana) - Sherpa
+            try:
+                audio_mana = await text_to_speech_sherpa(target_text)
+                if audio_mana:
+                    # caption_mana = smart_split(target_text, header="🗣️ <b>مدل ۲: Piper (مانا)</b> - لوکال (سریع)\n", max_len=1024)[0]
+                    caption_mana = "🗣️ <b>مدل ۲: Piper (مانا)</b> - لوکال (سریع)"
+                    await context.bot.send_voice(chat_id=msg.chat_id, voice=audio_mana, caption=caption_mana, parse_mode='HTML')
+            except Exception as e:
+                print(f"Sherpa Fail: {e}")
+
+            # 3. EdgeTTS (Farid) - Force Fallback Logic
+            try:
+                # Manually invoke EdgeTTS for comparison
+                audio_edge = io.BytesIO()
+                communicate = edge_tts.Communicate(clean_text_strict(target_text), "fa-IR-FaridNeural")
+                async for chunk in communicate.stream():
+                    if chunk["type"] == "audio":
+                        audio_edge.write(chunk["data"])
+                audio_edge.seek(0)
+                
+                # caption_edge = smart_split(target_text, header="🗣️ <b>مدل ۳: EdgeTTS (فرید)</b> - مایکروسافت\n", max_len=1024)[0]
+                caption_edge = "🗣️ <b>مدل ۳: EdgeTTS (فرید)</b> - مایکروسافت"
+                await context.bot.send_voice(chat_id=msg.chat_id, voice=audio_edge, caption=caption_edge, parse_mode='HTML')
+            except Exception as e:
+                print(f"EdgeTTS Fail: {e}")
+                
+            return # Exit after sending comparison
+
+        # --- STANDARD SINGLE VOICE (NON-PERSIAN) ---
         # 2. Convert to speech
         audio_buffer = await text_to_speech(target_text, target_lang)
         
@@ -3083,10 +3386,127 @@ async def cmd_voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await reply_and_delete(update, context, error_msg, delay=10)
 
 
-def main():
-    if not TELEGRAM_TOKEN:
-        print("❌ Error: TELEGRAM_BOT_TOKEN not found in .env")
+async def cmd_fun_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Restricted command to repost videos to @just_for_fun_persian"""
+    user_id = update.effective_user.id
+    admin_id = int(os.getenv("ADMIN_ID") or 0)
+    
+    logger.info(f"👤 /fun called by: {user_id} (Admin: {admin_id})")
+
+    # Security Check
+    if user_id != admin_id:
+        logger.warning(f"⛔ Unauthorized access attempt by {user_id}")
+        await update.effective_message.reply_text(
+            "⛔ شما دسترسی استفاده از این دستور را ندارید.",
+            reply_to_message_id=update.effective_message.message_id,
+            parse_mode="Markdown"
+        )
+        return 
+        
+    msg = update.effective_message
+    
+    # --- LOGIC: URL vs FILE ---
+    target_url = None
+    target_file = None
+    
+    # 1. Check Arguments (Direct URL)
+    if context.args:
+        target_url = context.args[0]
+        
+    # 2. Check Reply
+    elif msg.reply_to_message:
+        reply = msg.reply_to_message
+        
+        # A) Check for Video/Animation/Document (File)
+        if reply.video:
+            target_file = reply.video
+        elif reply.animation:
+            target_file = reply.animation
+        elif reply.document and reply.document.mime_type and reply.document.mime_type.startswith("video/"):
+            target_file = reply.document
+            
+        # B) Check for Text Links (Entities)
+        if not target_file:
+            # Check text links (Hyperlinks & Raw URLs)
+            entities = reply.caption_entities if reply.caption else reply.entities
+            text_content = reply.caption if reply.caption else reply.text
+            
+            if entities:
+                for entity in entities:
+                    if entity.type == 'text_link': # Hyperlink
+                        target_url = entity.url
+                        break
+                    elif entity.type == 'url': # Raw Link
+                        target_url = text_content[entity.offset:entity.offset + entity.length]
+                        break
+            
+            # Fallback: Regex Search in text if no entities found
+            if not target_url and text_content:
+                found = re.search(r'(https?://\S+)', text_content)
+                if found:
+                    target_url = found.group(1)
+
+    if not target_url and not target_file:
+        await msg.reply_text("❌ نه لینک پیدا کردم نه فایل ویدیویی!", reply_to_message_id=msg.message_id)
         return
+
+    status_msg = await msg.reply_text("📥 در حال پردازش برای Just For Fun...", reply_to_message_id=msg.message_id)
+    target_channel = "@just_for_fun_persian"
+    custom_header = "🎥 <b>Just For Fun</b> | @just_for_fun_persian"
+
+    try:
+        # --- CASE 1: FILE HANDLING ---
+        if target_file:
+            # Download
+            new_file = await target_file.get_file()
+            file_name = f"fun_{target_file.file_id}.mp4"
+            await new_file.download_to_drive(file_name)
+            
+            # Send
+            caption = reply.caption or ""
+            if caption:
+                clean_cap, _ = smart_split(caption, header=custom_header, max_len=1024)
+            else:
+                clean_cap = custom_header
+                
+            with open(file_name, "rb") as f:
+                await context.bot.send_video(
+                    chat_id=target_channel,
+                    video=f,
+                    caption=clean_cap,
+                    parse_mode="HTML"
+                )
+            
+            # Cleanup
+            os.remove(file_name)
+            await status_msg.edit_text(f"✅ فایل با موفقیت پست شد: {target_channel}")
+            return
+
+        # --- CASE 2: URL HANDLING ---
+        elif target_url:
+            success = await download_instagram(
+                target_url, 
+                target_channel, 
+                context.bot, 
+                reply_to_message_id=None,
+                custom_caption_header=custom_header
+            )
+            
+            if success:
+                await status_msg.edit_text(f"✅ لینک با موفقیت پست شد: {target_channel}")
+            else:
+                await status_msg.edit_text("❌ دانلود لینک ناموفق بود.")
+            
+    except Exception as e:
+        logger.error(f"Fun Command Error: {e}")
+        await status_msg.edit_text(f"❌ خطا: {e}")
+
+
+def main():
+    # The TELEGRAM_TOKEN check is now handled globally at the top of the file.
+    # if not TELEGRAM_TOKEN:
+    #     print("❌ Error: TELEGRAM_BOT_TOKEN not found in .env")
+    #     return
 
     print("🚀 Starting SmartBot Core...")
     from telegram.ext import JobQueue
@@ -3118,6 +3538,10 @@ def main():
     app.add_handler(CommandHandler("translate", cmd_learn_handler))
     app.add_handler(CommandHandler("edu", cmd_learn_handler))
     app.add_handler(CommandHandler("education", cmd_learn_handler))
+    
+    # Fun Command (Admin Only)
+    app.add_handler(CommandHandler("fun", cmd_fun_handler))
+    
     app.add_handler(CommandHandler("stop", cmd_stop_bot_handler))
     
     # All Messages (Text)

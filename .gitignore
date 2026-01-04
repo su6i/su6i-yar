@@ -110,3 +110,8 @@ benchmark_report.md
 manual_cookie.py
 upload_cookie.py
 probe_cobalt.py
+!Piper_TTS_Test.ipynb
+!Sherpa_TTS_Test.ipynb
+!Amir_Voice_Test.ipynb
+datacula_test.wav
+edge_test.mp3
