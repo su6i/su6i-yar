@@ -3615,7 +3615,7 @@ def main():
 
     print("✅ Bot is Polling...")
     app.run_polling(
-        allowed_updates=["message", "callback_query"],  # Only listen to needed updates
+        allowed_updates=["message", "callback_query", "channel_post", "edited_channel_post"],  # Only listen to needed updates
         drop_pending_updates=True,  # Ignore old messages on restart
         close_loop=False  # Allow graceful shutdown
     )
