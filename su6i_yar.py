@@ -3488,9 +3488,17 @@ async def cmd_fun_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
              await msg.reply_text("❌ خطا: نه لینک پیدا کردم نه فایل!", reply_to_message_id=msg.message_id)
         return
 
-    status_msg = await msg.reply_text("📥 در حال پردازش برای Just For Fun...", reply_to_message_id=msg.message_id)
     target_channel = "@just_for_fun_persian"
     custom_header = "🎥 <b>Just For Fun</b> | @just_for_fun_persian"
+    status_msg = None
+
+    # Silent Mode for Channel Posts
+    if is_target_channel:
+        # Delete original IMMEDIATELY (User Request)
+        # We save the file/url reference first (already done above)
+        await safe_delete(msg)
+    else:
+        status_msg = await msg.reply_text("📥 در حال پردازش برای Just For Fun...", reply_to_message_id=msg.message_id)
 
     try:
         # --- CASE 1: FILE HANDLING ---
@@ -3517,10 +3525,10 @@ async def cmd_fun_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 os.remove(file_name)
                 
             # SUCCESS
-            await status_msg.edit_text(f"✅ فایل پست شد: {target_channel}")
-            
-            # DELETE ORIGINAL MESSAGE (User Request)
-            await safe_delete(msg)
+            if status_msg:
+                await status_msg.edit_text(f"✅ فایل پست شد: {target_channel}")
+                # DELETE ORIGINAL MESSAGE (User Request) - Only if not already deleted
+                if not is_target_channel: await safe_delete(msg)
             return
 
         # --- CASE 2: URL HANDLING ---
@@ -3534,15 +3542,16 @@ async def cmd_fun_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             
             if success:
-                await status_msg.edit_text(f"✅ لینک پست شد: {target_channel}")
-                # DELETE ORIGINAL MESSAGE (User Request)
-                await safe_delete(msg)
+                if status_msg:
+                    await status_msg.edit_text(f"✅ لینک پست شد: {target_channel}")
+                    # DELETE ORIGINAL MESSAGE (User Request)
+                    if not is_target_channel: await safe_delete(msg)
             else:
-                await status_msg.edit_text("❌ دانلود لینک ناموفق بود.")
+                if status_msg: await status_msg.edit_text("❌ دانلود لینک ناموفق بود.")
             
     except Exception as e:
         logger.error(f"Fun Command Error: {e}")
-        await status_msg.edit_text(f"❌ خطا: {e}")
+        if status_msg: await status_msg.edit_text(f"❌ خطا: {e}")
 
 def extract_link_from_text(entities, text_content):
     """Helper to find URL in entities or regex"""
