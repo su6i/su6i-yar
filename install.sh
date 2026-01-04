@@ -66,7 +66,8 @@ for k, v in meta_map.items():
 onnx.save(model, output_path)
 PYEOF
     
-    python3 fix_metadata.py
+    # Use venv python to ensure 'onnx' library is available
+    ./venv/bin/python fix_metadata.py
     rm fix_metadata.py
 fi
 
@@ -80,7 +81,7 @@ with open("$TOKENS_FILE", "w") as f:
     for s, ids in data.get("phoneme_id_map", {}).items():
         if ids: f.write(f"{s} {ids[0]}\n")
 PYEOF
-    python3 generate_tokens.py
+    ./venv/bin/python generate_tokens.py
     rm generate_tokens.py
 fi
 echo "✅ Models Ready."
@@ -89,21 +90,51 @@ echo "✅ Models Ready."
 echo ""
 echo "🔧 Configuration (.env)"
 echo "-----------------------"
-echo "We need to set up your API keys."
+
+ENV_FILE=".env"
+if [ ! -f "$ENV_FILE" ]; then
+    touch "$ENV_FILE"
+fi
+
+# Function to check and prompt for a specific key
+check_and_prompt() {
+    local key=$1
+    local prompt_text=$2
+    
+    # Check if key exists and is not empty in .env
+    if grep -q "^${key}=" "$ENV_FILE"; then
+        echo "✅ Found $key"
+    else
+        echo "⚠️  Missing $key"
+        read -p "$prompt_text: " user_value
+        
+        # Determine strict formatting for SETTINGS json
+        if [ "$key" == "SETTINGS" ]; then
+             echo "${key}=${user_value}" >> "$ENV_FILE"
+        else
+             echo "${key}=${user_value}" >> "$ENV_FILE"
+        fi
+        echo "   Saved $key to $ENV_FILE"
+    fi
+}
+
+check_and_prompt "TELEGRAM_BOT_TOKEN" "1. Enter TELEGRAM_BOT_TOKEN"
+check_and_prompt "GEMINI_API_KEY" "2. Enter GEMINI_API_KEY"
+
+# Special handling for SETTINGS to preserve JSON structure if missing
+if grep -q "^SETTINGS=" "$ENV_FILE"; then
+    echo "✅ Found SETTINGS"
+else
+    echo "⚠️  Missing SETTINGS"
+    read -p "3. Enter Your Numeric Admin ID (e.g. 12345678): " admin_id
+    # Default to 0 if empty
+    safe_admin_id=${admin_id:-0}
+    echo "SETTINGS={\"admin_id\": $safe_admin_id, \"public_mode\": false}" >> "$ENV_FILE"
+    echo "   Saved SETTINGS to $ENV_FILE"
+fi
+
 echo ""
-
-read -p "1. Enter TELEGRAM_BOT_TOKEN: " token
-read -p "2. Enter GEMINI_API_KEY: " gemini
-read -p "3. Enter Your Numeric Admin ID (e.g. 12345678): " admin_id
-
-cat <<EOF > .env
-TELEGRAM_BOT_TOKEN=$token
-GEMINI_API_KEY=$gemini
-SETTINGS={"admin_id": ${admin_id:-0}, "public_mode": false}
-EOF
-
-echo ""
-echo "✅ Configuration saved to .env"
+echo "✅ Configuration Check Complete."
 echo "------------------------------"
 
 # 4. Auto-Restart Service (Server Mode)
