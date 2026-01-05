@@ -2271,7 +2271,7 @@ async def get_video_metadata(file_path: Path) -> dict:
             "ffprobe", 
             "-v", "error", 
             "-select_streams", "v:0", 
-            "-show_entries", "stream=width,height,duration,pix_fmt", 
+            "-show_entries", "stream=width,height,duration,component_name,pix_fmt,codec_name", 
             "-of", "json", 
             str(file_path)
         ]
@@ -2291,7 +2291,8 @@ async def get_video_metadata(file_path: Path) -> dict:
                 "width": int(stream.get("width", 0)),
                 "height": int(stream.get("height", 0)),
                 "duration": float(stream.get("duration", 0)),
-                "pix_fmt": stream.get("pix_fmt", "")
+                "pix_fmt": stream.get("pix_fmt", ""),
+                "codec_name": stream.get("codec_name", "")
             }
         return None
     except Exception as e:
@@ -2318,20 +2319,23 @@ async def compress_video(input_path: Path) -> bool:
         width = meta.get("width", 0)
         height = meta.get("height", 0)
         pix_fmt = meta.get("pix_fmt", "")
+        codec = meta.get("codec_name", "")
         min_dim = min(width, height)
         
         # Condition 1: High Res/Size -> Compress
         high_res_huge = (input_size_mb > 10) and (min_dim > 720)
         
-        # Condition 2: Incompatible Format (Apple needs yuv420p)
-        # If pix_fmt is missing or weird (yuv444p, yuv422p, etc.), force re-encode
-        is_bad_format = pix_fmt not in ["yuv420p", "yuvj420p"]
+        # Condition 2: Incompatible Format/Codec
+        # Apple/Telegram needs h264 + yuv420p for 100% guarantee.
+        is_bad_pix = pix_fmt not in ["yuv420p"] # Strict: Only yuv420p
+        is_bad_codec = codec != "h264" # Strict: Only h264
         
-        should_compress = high_res_huge or is_bad_format
+        should_compress = high_res_huge or is_bad_pix or is_bad_codec
 
     if should_compress:
-        current_reason = "High Res/Size" if (input_size_mb > 10 and min_dim > 720) else "Format Fix"
-        logger.info(f"📉 Compressing {input_path.name} (Reason: {current_reason}, Size: {input_size_mb:.1f}MB, Fmt: {pix_fmt})...")
+        current_reason = "High Res/Size" if high_res_huge else f"Format Fix ({codec}/{pix_fmt})"
+        logger.info(f"📉 Compressing {input_path.name} Reason: {current_reason}...")
+
         # Logic: Scale shortest edge to 720p ONLY if high res. Else keep orig res but fix format.
         
         vf_filters = []
