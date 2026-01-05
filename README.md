@@ -3,12 +3,8 @@
   <h1>🤖 Su6i Yar - Smart AI Assistant</h1>
 
   <br>
-  ![Version](https://img.shields.io/badge/Version-5.0.0-blue.svg)
-  ![Python](https://img.shields.io/badge/Python-3.12+-yellow.svg)
-  ![License](https://img.shields.io/badge/License-MIT-green.svg)
-  <a href="https://www.linkedin.com/in/su6i/" style="vertical-align: bottom;">
-    <img src="assets/linkedin_su6i.svg" height="20" alt="LinkedIn">
-  </a>
+  
+  ![Version](https://img.shields.io/badge/Version-5.0.0-blue.svg) ![Python](https://img.shields.io/badge/Python-3.12+-yellow.svg) ![License](https://img.shields.io/badge/License-MIT-green.svg) <a href="https://www.linkedin.com/in/su6i/" style="vertical-align: bottom;"><img src="assets/linkedin_su6i.svg" height="20" alt="LinkedIn"></a>
 </div>
 
 A powerful, intelligent Telegram bot that downloads Instagram videos, verifies factual claims, and provides multimodal educational content using Google Gemini AI.
