@@ -152,7 +152,6 @@ if [ ! -f "$MODEL_DIR/lexicon.txt" ]; then
 import json
 
 # Persian Character to IPA Map (Standard VITS/Espeak approximation)
-# NOTE: Tie-bar (͡) is REMOVED because it's not in the model's token set.
 persian_phoneme_map = {
     "آ": "ʔɒː", "ا": "ʔ", "ب": "b", "پ": "p", "ت": "t",
     "ث": "s", "ج": "dʒ", "چ": "tʃ", "ح": "h", "خ": "x",
@@ -165,7 +164,9 @@ persian_phoneme_map = {
 
 with open("$MODEL_DIR/lexicon.txt", "w", encoding="utf-8") as f:
     for char, phoneme in persian_phoneme_map.items():
-        f.write(f"{char} {phoneme}\n")
+        # IMPORTANT: Phonemes must be space-separated for Sherpa (e.g. "ʔ ɒ ː")
+        spaced_phoneme = " ".join(list(phoneme))
+        f.write(f"{char} {spaced_phoneme}\n")
 PYEOF
     ./venv/bin/python generate_lexicon.py
     rm generate_lexicon.py
