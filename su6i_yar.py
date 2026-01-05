@@ -2271,7 +2271,7 @@ async def get_video_metadata(file_path: Path) -> dict:
             "ffprobe", 
             "-v", "error", 
             "-select_streams", "v:0", 
-            "-show_entries", "stream=width,height,duration", 
+            "-show_entries", "stream=width,height,duration,pix_fmt", 
             "-of", "json", 
             str(file_path)
         ]
@@ -2290,7 +2290,8 @@ async def get_video_metadata(file_path: Path) -> dict:
             return {
                 "width": int(stream.get("width", 0)),
                 "height": int(stream.get("height", 0)),
-                "duration": float(stream.get("duration", 0))
+                "duration": float(stream.get("duration", 0)),
+                "pix_fmt": stream.get("pix_fmt", "")
             }
         return None
     except Exception as e:
@@ -2316,21 +2317,39 @@ async def compress_video(input_path: Path) -> bool:
     else:
         width = meta.get("width", 0)
         height = meta.get("height", 0)
+        pix_fmt = meta.get("pix_fmt", "")
         min_dim = min(width, height)
-        # Condition: Huge File (>10MB) AND High Res (>720p)
-        should_compress = (input_size_mb > 10) and (min_dim > 720)
+        
+        # Condition 1: High Res/Size -> Compress
+        high_res_huge = (input_size_mb > 10) and (min_dim > 720)
+        
+        # Condition 2: Incompatible Format (Apple needs yuv420p)
+        # If pix_fmt is missing or weird (yuv444p, yuv422p, etc.), force re-encode
+        is_bad_format = pix_fmt not in ["yuv420p", "yuvj420p"]
+        
+        should_compress = high_res_huge or is_bad_format
 
     if should_compress:
-        logger.info(f"📉 Compressing {input_path.name} (Size: {input_size_mb:.1f}MB, Res: {width}x{height})...")
-        # Logic: Scale shortest edge to 720p
-        scale_filter = "scale='if(gt(iw,ih),-2,720)':'if(gt(iw,ih),720,-2)'"
+        current_reason = "High Res/Size" if (input_size_mb > 10 and min_dim > 720) else "Format Fix"
+        logger.info(f"📉 Compressing {input_path.name} (Reason: {current_reason}, Size: {input_size_mb:.1f}MB, Fmt: {pix_fmt})...")
+        # Logic: Scale shortest edge to 720p ONLY if high res. Else keep orig res but fix format.
+        
+        vf_filters = []
+        if min_dim > 720 and (input_size_mb > 10):
+             vf_filters.append("scale='if(gt(iw,ih),-2,720)':'if(gt(iw,ih),720,-2)'")
+        
+        # Ensure yuv420p is enforced
+        vf_filters.append("format=yuv420p")
+        
+        vf_string = ",".join(vf_filters)
         cmd = [
             "ffmpeg", "-y",
             "-i", str(input_path),
             "-c:v", "libx264",
             "-crf", "26",
             "-preset", "faster",
-            "-vf", scale_filter,
+            "-preset", "faster",
+            "-vf", vf_string,
             "-c:a", "aac",
             "-b:a", "128k",
             "-pix_fmt", "yuv420p",
