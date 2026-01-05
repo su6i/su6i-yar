@@ -3043,6 +3043,7 @@ def init_sherpa_engine():
 
     model_path = "models/fa_IR-mana-medium-fixed.onnx"
     tokens_path = "models/tokens.txt"
+    lexicon_path = "models/lexicon.txt"
     
     # Check common paths for espeak-ng-data
     espeak_candidates = [
@@ -3075,6 +3076,7 @@ def init_sherpa_engine():
                 vits=sherpa_onnx.OfflineTtsVitsModelConfig(
                     model=model_path,
                     tokens=tokens_path,
+                    lexicon=lexicon_path,
                     data_dir=espeak_data,
                     noise_scale=0.667,
                     length_scale=1.0,
@@ -3090,11 +3092,10 @@ def init_sherpa_engine():
     except Exception as e:
         logger.error(f"❌ Sherpa Init Failed: {e}")
 
-# Call init immediately if available
-if SHERPA_AVAILABLE:
-    init_sherpa_engine()
-else:
-    print("⚠️ Sherpa-ONNX module not found. Model 2 (Local TTS) is DISABLED. Run 'pip install -r requirements.txt'")
+# Auto-init removed. Initialization is now handled in run_bot() or explicitly.
+# if SHERPA_AVAILABLE:
+#     init_sherpa_engine()
+
 
 
 

@@ -144,6 +144,12 @@ PYEOF
     ./venv/bin/python generate_tokens.py
     rm generate_tokens.py
 fi
+
+# Generate Lexicon (Empty for VITS/Espeak usage, but file must exist)
+if [ ! -f "$MODEL_DIR/lexicon.txt" ]; then
+    echo "📝 Creating empty lexicon.txt..."
+    touch "$MODEL_DIR/lexicon.txt"
+fi
 echo "✅ Models Ready."
 
 # 3. Configuration
