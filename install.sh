@@ -14,7 +14,27 @@ source venv/bin/activate
 # 2. Dependencies
 echo "📥 Installing Dependencies..."
 pip install -r requirements.txt
-echo "✅ Dependencies Installed."
+echo "✅ Python Dependencies Installed."
+
+# 2.1 System Dependencies Check (espeak-ng)
+if ! command -v espeak-ng &> /dev/null; then
+    echo "⚠️  [WARNING] 'espeak-ng' is NOT installed!"
+    echo "   Sherpa-ONNX (Model 2) requires it for Persian TTS."
+    
+    if [[ "$OSTYPE" == "linux-gnu"* ]] && command -v apt-get &> /dev/null; then
+        echo "🔄 Attempting to install 'espeak-ng' locally (requires sudo)..."
+        if sudo apt-get install -y espeak-ng; then
+            echo "✅ 'espeak-ng' installed successfully!"
+        else
+            echo "❌ Automatic installation failed."
+            echo "   👉 Please run manually: sudo apt install espeak-ng"
+        fi
+    else
+         echo "   👉 Please install 'espeak-ng' manually for your OS."
+         echo "      (Linux: sudo apt install espeak-ng | Mac: brew install espeak-ng)"
+    fi
+    echo ""
+fi
 
 # 3. Download & Setup Helper Models (Sherpa-ONNX)
 echo ""
