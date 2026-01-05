@@ -3084,7 +3084,7 @@ def init_sherpa_engine():
                 ),
                 provider="cpu",
                 num_threads=1,
-                debug=True (Logging enabled)
+                debug=True
             )
         )
         SHERPA_ENGINE = sherpa_onnx.OfflineTts(config)
