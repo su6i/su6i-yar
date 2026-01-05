@@ -74,31 +74,61 @@ fi
 # Force regeneration to ensure 'n_speakers' and other metadata is up to date
 if [ -f "$MODEL_FILE" ]; then
     echo "🛠️ Applying Metadata Fix..."
-    rm -f "$FIXED_MODEL_FILE"
+    
+    # Try to remove old file, handle permissions if needed
+    if [ -f "$FIXED_MODEL_FILE" ]; then
+        rm -f "$FIXED_MODEL_FILE" || sudo rm -f "$FIXED_MODEL_FILE"
+    fi
+    
+    if [ -f "$FIXED_MODEL_FILE" ]; then
+         echo "❌ Error: Could not delete old fixed model (Permission Denied?)."
+         echo "   Try running: sudo rm $FIXED_MODEL_FILE"
+         exit 1
+    fi
     
     cat <<PYEOF > fix_metadata.py
 import onnx, json
-model_path, config_path, output_path = "$MODEL_FILE", "$CONFIG_FILE", "$FIXED_MODEL_FILE"
-with open(config_path, "r", encoding="utf-8") as f: config = json.load(f)
-model = onnx.load(model_path)
-meta_map = {
-    "tokens": " ".join([f"{k} {v[0]}" for k, v in config.get("phoneme_id_map", {}).items() if v]),
-    "config": json.dumps(config),
-    "language": "fa-IR", "voice": "mana", "has_espeak": "1",
-    "sample_rate": str(config.get("audio", {}).get("sample_rate", 22050)),
-    "num_channels": "1", "model_type": "vits",
-    "n_speakers": "1",
-    "comment": "Fixed by Su6i Yar Installer",
-    "version": "1"
-}
-for k, v in meta_map.items():
-    meta = model.metadata_props.add(); meta.key = k; meta.value = v
-onnx.save(model, output_path)
+import sys
+
+try:
+    model_path, config_path, output_path = "$MODEL_FILE", "$CONFIG_FILE", "$FIXED_MODEL_FILE"
+    with open(config_path, "r", encoding="utf-8") as f: config = json.load(f)
+    model = onnx.load(model_path)
+    meta_map = {
+        "tokens": " ".join([f"{k} {v[0]}" for k, v in config.get("phoneme_id_map", {}).items() if v]),
+        "config": json.dumps(config),
+        "language": "fa-IR", "voice": "mana", "has_espeak": "1",
+        "sample_rate": str(config.get("audio", {}).get("sample_rate", 22050)),
+        "num_channels": "1", "model_type": "vits",
+        "n_speakers": "1",
+        "comment": "Fixed by Su6i Yar Installer v2",
+        "version": "1"
+    }
+    for k, v in meta_map.items():
+        meta = model.metadata_props.add(); meta.key = k; meta.value = v
+    onnx.save(model, output_path)
+    print("   -> fix_metadata.py executed successfully")
+except Exception as e:
+    print(f"   -> Error in Python script: {e}")
+    sys.exit(1)
 PYEOF
     
     # Use venv python to ensure 'onnx' library is available
-    ./venv/bin/python fix_metadata.py
+    if ./venv/bin/python fix_metadata.py; then
+        echo "   -> Metadata patched."
+    else
+        echo "❌ Python script failed to fix metadata!"
+        exit 1
+    fi
     rm fix_metadata.py
+    
+    if [ ! -f "$FIXED_MODEL_FILE" ]; then
+        echo "❌ Output file $FIXED_MODEL_FILE was NOT created!"
+        exit 1
+    fi
+else
+    echo "❌ Error: Original model file $MODEL_FILE not found!"
+    exit 1
 fi
 
 # Generate Tokens
