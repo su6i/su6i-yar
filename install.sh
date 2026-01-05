@@ -97,7 +97,7 @@ try:
     meta_map = {
         "tokens": " ".join([f"{k} {v[0]}" for k, v in config.get("phoneme_id_map", {}).items() if v]),
         "config": json.dumps(config),
-        "language": "fa-IR", "voice": "mana", "has_espeak": "1",
+        "language": "fa-IR", "voice": "mana", "has_espeak": "0",
         "sample_rate": str(config.get("audio", {}).get("sample_rate", 22050)),
         "num_channels": "1", "model_type": "vits",
         "n_speakers": "1",
