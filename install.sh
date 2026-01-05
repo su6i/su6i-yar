@@ -48,14 +48,14 @@ echo "🧩 Checking for Sherpa-ONNX Persian Models..."
 MODEL_DIR="models"
 mkdir -p "$MODEL_DIR"
 
-# URLs (Option 1: Arash - More stable)
-MODEL_URL="https://huggingface.co/rhasspy/piper-voices/resolve/main/fa/arash/low/fa-arash-low.onnx"
-CONFIG_URL="https://huggingface.co/rhasspy/piper-voices/resolve/main/fa/arash/low/fa-arash-low.onnx.json"
+# URLs (Option 1: Amir - Standard & Stable)
+MODEL_URL="https://huggingface.co/rhasspy/piper-voices/resolve/main/fa/fa_IR/amir/medium/fa_IR-amir-medium.onnx"
+CONFIG_URL="https://huggingface.co/rhasspy/piper-voices/resolve/main/fa/fa_IR/amir/medium/fa_IR-amir-medium.onnx.json"
 
 # Files
-MODEL_FILE="$MODEL_DIR/fa-arash-low.onnx"
-CONFIG_FILE="$MODEL_DIR/fa-arash-low.onnx.json"
-FIXED_MODEL_FILE="$MODEL_DIR/fa-arash-low-fixed.onnx"
+MODEL_FILE="$MODEL_DIR/fa-amir-medium.onnx"
+CONFIG_FILE="$MODEL_DIR/fa-amir-medium.onnx.json"
+FIXED_MODEL_FILE="$MODEL_DIR/fa-amir-medium-fixed.onnx"
 TOKENS_FILE="$MODEL_DIR/tokens.txt"
 
 # Download Config
@@ -97,7 +97,7 @@ try:
     meta_map = {
         "tokens": " ".join([f"{k} {v[0]}" for k, v in config.get("phoneme_id_map", {}).items() if v]),
         "config": json.dumps(config),
-        "language": "fa-IR", "voice": "arash", "has_espeak": "0",
+        "language": "fa-IR", "voice": "amir", "has_espeak": "0",
         "sample_rate": str(config.get("audio", {}).get("sample_rate", 22050)),
         "num_channels": "1", "model_type": "vits",
         "n_speakers": "1",
