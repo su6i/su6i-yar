@@ -13,17 +13,8 @@ else
     echo "⚠️  Virtual environment not found! Running with system python..."
 fi
 
-# Run TTS Test
-python3 tests/test_tts_local.py
+# Run Tests
+echo "⚠️ No local tests confgured (Sherpa removed)."
+# python3 tests/test_tts_local.py
 
-# Capture Exit Code
-EXIT_CODE=$?
-
-echo ""
-if [ $EXIT_CODE -eq 0 ]; then
-    echo "✅ ALL SYSTEMS GO! You can restart the service."
-else
-    echo "❌ TESTS FAILED. Please check the logs above."
-fi
-
-exit $EXIT_CODE
+EXIT_CODE=0

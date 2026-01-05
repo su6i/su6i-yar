@@ -27,17 +27,11 @@ import wave
 import struct
 
 # Third-party imports
-try:
-    import numpy as np  # For Audio processing
-except ImportError:
-    np = None
+# Third-party imports (numpy removed)
+np = None
 
-# Optional: Sherpa-ONNX for Local TTS
-try:
-    import sherpa_onnx
-    SHERPA_AVAILABLE = True
-except ImportError:
-    SHERPA_AVAILABLE = False
+# Optional: Sherpa-ONNX removed
+SHERPA_AVAILABLE = False
 
 # Telegram Imports
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove, InlineKeyboardButton, InlineKeyboardMarkup, constants
@@ -3029,115 +3023,7 @@ TTS_VOICES = {
 }
 
 
-DATACULA_API_URL = "https://tts.datacula.com/api/tts"
-
-# Global Sherpa Engine Cache
-SHERPA_ENGINE = None
-
-def init_sherpa_engine():
-    """Initialize Sherpa-ONNX TTS Engine (Mana Model)"""
-    global SHERPA_ENGINE
-    if not SHERPA_AVAILABLE:
-        logger.warning("⚠️ Sherpa-ONNX not installed. Local TTS disabled.")
-        return
-
-    model_path = "models/fa-amir-medium-fixed.onnx"
-    tokens_path = "models/tokens.txt"
-    lexicon_path = "models/lexicon.txt"
-    
-    # Check common paths for espeak-ng-data
-    espeak_candidates = [
-        "/opt/homebrew/share/espeak-ng-data", # Mac (Apple Silicon)
-        "/usr/local/share/espeak-ng-data",    # Mac (Intel) / Linux
-        "/usr/share/espeak-ng-data",          # Linux (Standard)
-        "/usr/lib/x86_64-linux-gnu/espeak-ng-data" # Linux (Debian/Ubuntu)
-    ]
-    
-    espeak_data = None
-    for path in espeak_candidates:
-        if os.path.exists(path):
-            espeak_data = path
-            break
-            
-    if not espeak_data:
-        logger.warning("⚠️ espeak-ng-data not found! Install espeak-ng.")
-        # Don't return, let it try (Sherpa might crash or handle it), or return?
-        # Better to return to avoid crash.
-        return
-    
-    if not os.path.exists(model_path):
-        logger.warning(f"⚠️ Sherpa Model not found: {model_path}")
-        return
-
-    try:
-        logger.info("🚀 Initializing Sherpa-ONNX (Mana)...")
-        config = sherpa_onnx.OfflineTtsConfig(
-            model=sherpa_onnx.OfflineTtsModelConfig(
-                vits=sherpa_onnx.OfflineTtsVitsModelConfig(
-                    model=model_path,
-                    tokens=tokens_path,
-                    lexicon=lexicon_path,
-                    data_dir=espeak_data,
-                    noise_scale=0.667,
-                    length_scale=1.0,
-                    noise_scale_w=0.8,
-                ),
-                provider="cpu",
-                num_threads=1,
-                debug=True
-            )
-        )
-        SHERPA_ENGINE = sherpa_onnx.OfflineTts(config)
-        logger.info("✅ Sherpa-ONNX Engine Ready!")
-    except Exception as e:
-        logger.error(f"❌ Sherpa Init Failed: {e}")
-
-# Auto-init removed. Initialization is now handled in run_bot() or explicitly.
-# if SHERPA_AVAILABLE:
-#     init_sherpa_engine()
-
-
-
-
-async def text_to_speech_sherpa(text: str) -> Optional[io.BytesIO]:
-    """Generate TTS using local Sherpa-ONNX engine (Mana)."""
-    if not SHERPA_ENGINE or not np:
-        logger.warning("⚠️ Sherpa Engine not loaded (None). Skipping Model 2.")
-        return None
-        
-    try:
-        # Apply strict cleaning (Pauses, Diacritics, etc.)
-        clean_text = clean_text_strict(text)
-        
-        # CRITICAL FIX for "Not a model using characters" / SegFault on OOV:
-        # Since we are using a custom character-based lexicon (no espeak),
-        # we MUST split the input text into individual characters so Sherpa treats
-        # each character as a verbal unit (word) matching our lexicon entries.
-        # e.g. "سلام" -> "س ل ا م"
-        expanded_text = " ".join(list(clean_text))
-        
-        logger.debug(f"Sherpa Raw: {clean_text[:50]}...")
-        logger.debug(f"Sherpa Expanded: {expanded_text[:50]}...")
-        
-        audio = SHERPA_ENGINE.generate(expanded_text, sid=0, speed=1.0)
-        
-        # Convert samples (float32) to int16 PCM wav
-        samples = np.array(audio.samples)
-        samples = np.clip(samples, -1.0, 1.0)
-        samples = (samples * 32767).astype(np.int16)
-        
-        buffer = io.BytesIO()
-        with wave.open(buffer, "wb") as f:
-            f.setnchannels(1)
-            f.setsampwidth(2) # 16-bit
-            f.setframerate(audio.sample_rate)
-            f.writeframes(samples.tobytes())
-            
-        buffer.seek(0)
-        return buffer
-    except Exception as e:
-        logger.error(f"❌ Sherpa Generation Failed: {e}")
-        return None
+# Sherpa functions removed.
 
 def clean_text_strict(text: str) -> str:
     """
@@ -3467,15 +3353,8 @@ async def cmd_voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except Exception as e:
                 print(f"Datacula Fail: {e}")
 
-            # 2. Piper (Mana) - Sherpa
-            try:
-                audio_mana = await text_to_speech_sherpa(target_text)
-                if audio_mana:
+            # Model 2 (Sherpa) Removed
 
-                    caption_mana = "🗣️ <b>مدل ۲: Piper (مانا)</b> - لوکال (سریع)"
-                    await context.bot.send_voice(chat_id=msg.chat_id, voice=audio_mana, caption=caption_mana, parse_mode='HTML')
-            except Exception as e:
-                print(f"Sherpa Fail: {e}")
 
             # 3. EdgeTTS (Farid) - Force Fallback Logic
             try:
