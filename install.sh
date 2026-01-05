@@ -178,4 +178,17 @@ if command -v systemctl >/dev/null 2>&1; then
     fi
 fi
 
-echo "🎉 Setup Complete! Run: './run_dev.sh' or 'python3 su6i_yar.py'"
+# 5. Verification
+echo ""
+echo "🧪 Running Verification Tests..."
+chmod +x run_tests.sh
+if ./run_tests.sh; then
+    echo ""
+    echo "🎉 Setup & Verification Complete! System is ready."
+    echo "   Run: './run_dev.sh' or 'python3 su6i_yar.py'"
+else
+    echo ""
+    echo "❌ Setup Finished, but Verification FAILED."
+    echo "   Please check the logs above before running the bot."
+    exit 1
+fi
