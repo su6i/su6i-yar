@@ -84,7 +84,8 @@ meta_map = {
     "config": json.dumps(config),
     "language": "fa-IR", "voice": "mana", "has_espeak": "1",
     "sample_rate": str(config.get("audio", {}).get("sample_rate", 22050)),
-    "num_channels": "1", "model_type": "vits"
+    "num_channels": "1", "model_type": "vits",
+    "n_speakers": "1"
 }
 for k, v in meta_map.items():
     meta = model.metadata_props.add(); meta.key = k; meta.value = v
