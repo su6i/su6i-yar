@@ -152,9 +152,10 @@ if [ ! -f "$MODEL_DIR/lexicon.txt" ]; then
 import json
 
 # Persian Character to IPA Map (Standard VITS/Espeak approximation)
+# NOTE: Tie-bar (͡) is REMOVED because it's not in the model's token set.
 persian_phoneme_map = {
     "آ": "ʔɒː", "ا": "ʔ", "ب": "b", "پ": "p", "ت": "t",
-    "ث": "s", "ج": "d͡ʒ", "چ": "t͡ʃ", "ح": "h", "خ": "x",
+    "ث": "s", "ج": "dʒ", "چ": "tʃ", "ح": "h", "خ": "x",
     "د": "d", "ذ": "z", "ر": "ɾ", "ز": "z", "ژ": "ʒ",
     "س": "s", "ش": "ʃ", "ص": "s", "ض": "z", "ط": "t",
     "ظ": "z", "ع": "ʔ", "غ": "ɣ", "ف": "f", "ق": "ɢ",
