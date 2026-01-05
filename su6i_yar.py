@@ -3038,7 +3038,7 @@ def init_sherpa_engine():
     """Initialize Sherpa-ONNX TTS Engine (Mana Model)"""
     global SHERPA_ENGINE
     if not SHERPA_AVAILABLE:
-        print("⚠️ Sherpa-ONNX not installed. Local TTS disabled.")
+        logger.warning("⚠️ Sherpa-ONNX not installed. Local TTS disabled.")
         return
 
     model_path = "models/fa_IR-mana-medium-fixed.onnx"
@@ -3059,17 +3059,17 @@ def init_sherpa_engine():
             break
             
     if not espeak_data:
-        print("⚠️ espeak-ng-data not found! Install espeak-ng.")
+        logger.warning("⚠️ espeak-ng-data not found! Install espeak-ng.")
         # Don't return, let it try (Sherpa might crash or handle it), or return?
         # Better to return to avoid crash.
         return
     
     if not os.path.exists(model_path):
-        print(f"⚠️ Sherpa Model not found: {model_path}")
+        logger.warning(f"⚠️ Sherpa Model not found: {model_path}")
         return
 
     try:
-        print("🚀 Initializing Sherpa-ONNX (Mana)...")
+        logger.info("🚀 Initializing Sherpa-ONNX (Mana)...")
         config = sherpa_onnx.OfflineTtsConfig(
             model=sherpa_onnx.OfflineTtsModelConfig(
                 vits=sherpa_onnx.OfflineTtsVitsModelConfig(
@@ -3086,9 +3086,9 @@ def init_sherpa_engine():
             )
         )
         SHERPA_ENGINE = sherpa_onnx.OfflineTts(config)
-        print("✅ Sherpa-ONNX Engine Ready!")
+        logger.info("✅ Sherpa-ONNX Engine Ready!")
     except Exception as e:
-        print(f"❌ Sherpa Init Failed: {e}")
+        logger.error(f"❌ Sherpa Init Failed: {e}")
 
 # Call init immediately if available
 if SHERPA_AVAILABLE:
@@ -3101,13 +3101,13 @@ else:
 async def text_to_speech_sherpa(text: str) -> Optional[io.BytesIO]:
     """Generate TTS using local Sherpa-ONNX engine (Mana)."""
     if not SHERPA_ENGINE or not np:
-        print("⚠️ Sherpa Engine not loaded (None). Skipping Model 2.")
+        logger.warning("⚠️ Sherpa Engine not loaded (None). Skipping Model 2.")
         return None
         
     try:
         # Apply strict cleaning (Pauses, Diacritics, etc.)
         clean_text = clean_text_strict(text)
-        print(f"Sherpa Text: {clean_text[:50]}...")
+        logger.debug(f"Sherpa Text: {clean_text[:50]}...")
         audio = SHERPA_ENGINE.generate(clean_text, sid=0, speed=1.0)
         
         # Convert samples (float32) to int16 PCM wav
@@ -3125,7 +3125,7 @@ async def text_to_speech_sherpa(text: str) -> Optional[io.BytesIO]:
         buffer.seek(0)
         return buffer
     except Exception as e:
-        print(f"❌ Sherpa Generation Failed: {e}")
+        logger.error(f"❌ Sherpa Generation Failed: {e}")
         return None
 
 def clean_text_strict(text: str) -> str:
