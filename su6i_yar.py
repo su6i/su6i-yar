@@ -3092,12 +3092,15 @@ def init_sherpa_engine():
 # Call init immediately if available
 if SHERPA_AVAILABLE:
     init_sherpa_engine()
+else:
+    print("⚠️ Sherpa-ONNX module not found. Model 2 (Local TTS) is DISABLED. Run 'pip install -r requirements.txt'")
 
 
 
 async def text_to_speech_sherpa(text: str) -> Optional[io.BytesIO]:
     """Generate TTS using local Sherpa-ONNX engine (Mana)."""
     if not SHERPA_ENGINE or not np:
+        print("⚠️ Sherpa Engine not loaded (None). Skipping Model 2.")
         return None
         
     try:
