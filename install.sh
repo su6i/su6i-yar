@@ -71,8 +71,10 @@ if [ ! -f "$MODEL_FILE" ]; then
 fi
 
 # Apply Metadata Fix
-if [ ! -f "$FIXED_MODEL_FILE" ] && [ -f "$MODEL_FILE" ]; then
+# Force regeneration to ensure 'n_speakers' and other metadata is up to date
+if [ -f "$MODEL_FILE" ]; then
     echo "🛠️ Applying Metadata Fix..."
+    rm -f "$FIXED_MODEL_FILE"
     
     cat <<PYEOF > fix_metadata.py
 import onnx, json
