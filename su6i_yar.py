@@ -3108,8 +3108,18 @@ async def text_to_speech_sherpa(text: str) -> Optional[io.BytesIO]:
     try:
         # Apply strict cleaning (Pauses, Diacritics, etc.)
         clean_text = clean_text_strict(text)
-        logger.debug(f"Sherpa Text: {clean_text[:50]}...")
-        audio = SHERPA_ENGINE.generate(clean_text, sid=0, speed=1.0)
+        
+        # CRITICAL FIX for "Not a model using characters" / SegFault on OOV:
+        # Since we are using a custom character-based lexicon (no espeak),
+        # we MUST split the input text into individual characters so Sherpa treats
+        # each character as a verbal unit (word) matching our lexicon entries.
+        # e.g. "سلام" -> "س ل ا م"
+        expanded_text = " ".join(list(clean_text))
+        
+        logger.debug(f"Sherpa Raw: {clean_text[:50]}...")
+        logger.debug(f"Sherpa Expanded: {expanded_text[:50]}...")
+        
+        audio = SHERPA_ENGINE.generate(expanded_text, sid=0, speed=1.0)
         
         # Convert samples (float32) to int16 PCM wav
         samples = np.array(audio.samples)
