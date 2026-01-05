@@ -18,6 +18,8 @@ async def test_sherpa():
     try:
         from su6i_yar import init_sherpa_engine, text_to_speech_sherpa, SHERPA_ENGINE
         import su6i_yar
+        import importlib
+        importlib.reload(su6i_yar)
     except ImportError as e:
         print(f"❌ Import Failed: {e}")
         return False
