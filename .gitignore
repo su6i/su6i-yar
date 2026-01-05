@@ -119,6 +119,8 @@ probe_cobalt.py
 !Piper_TTS_Test.ipynb
 !Sherpa_TTS_Test.ipynb
 !Amir_Voice_Test.ipynb
+!tests/voice_tests/*.mp3
+!tests/voice_tests/*.wav
 
 # TTS Models (Large Files)
 models/*.onnx
