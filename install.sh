@@ -145,10 +145,30 @@ PYEOF
     rm generate_tokens.py
 fi
 
-# Generate Lexicon (Empty for VITS/Espeak usage, but file must exist)
+# Generate Lexicon (Persian IPA Mapping)
 if [ ! -f "$MODEL_DIR/lexicon.txt" ]; then
-    echo "📝 Creating empty lexicon.txt..."
-    touch "$MODEL_DIR/lexicon.txt"
+    echo "📝 Generating Persian Lexicon (IPA)..."
+    cat <<PYEOF > generate_lexicon.py
+import json
+
+# Persian Character to IPA Map (Standard VITS/Espeak approximation)
+persian_phoneme_map = {
+    "آ": "ʔɒː", "ا": "ʔ", "ب": "b", "پ": "p", "ت": "t",
+    "ث": "s", "ج": "d͡ʒ", "چ": "t͡ʃ", "ح": "h", "خ": "x",
+    "د": "d", "ذ": "z", "ر": "ɾ", "ز": "z", "ژ": "ʒ",
+    "س": "s", "ش": "ʃ", "ص": "s", "ض": "z", "ط": "t",
+    "ظ": "z", "ع": "ʔ", "غ": "ɣ", "ف": "f", "ق": "ɢ",
+    "ک": "k", "گ": "ɡ", "ل": "l", "م": "m", "ن": "n",
+    "و": "v", "ه": "h", "ی": "j", " ": " "
+}
+
+with open("$MODEL_DIR/lexicon.txt", "w", encoding="utf-8") as f:
+    for char, phoneme in persian_phoneme_map.items():
+        f.write(f"{char} {phoneme}\n")
+PYEOF
+    ./venv/bin/python generate_lexicon.py
+    rm generate_lexicon.py
+    echo "   -> Created models/lexicon.txt"
 fi
 echo "✅ Models Ready."
 
