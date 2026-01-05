@@ -3031,7 +3031,8 @@ TTS_VOICES = {
 
 DATACULA_API_URL = "https://tts.datacula.com/api/tts"
 
-
+# Global Sherpa Engine Cache
+SHERPA_ENGINE = None
 
 def init_sherpa_engine():
     """Initialize Sherpa-ONNX TTS Engine (Mana Model)"""
