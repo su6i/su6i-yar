@@ -1016,8 +1016,7 @@ async def analyze_text_gemini(text, status_msg=None, lang_code="fa", user_id=Non
         
 
         prompt_text = (
-            f"You are a professional Fact-Check Assistant. Answer STRICTLY in **{target_lang}** language.\n\n"
-            f"Analyze the following text and provide your response in {target_lang}.\n\n"
+            f"You are a professional Fact-Check Assistant. Analyze the following text and provide your response STRICTLY in **{target_lang}**.\n\n"
 
             "🛑 STRICT RELEVANCE FILTER (CRITICAL):\n"
             "You must FIRST decide: Is this text a verifiable FACTUAL CLAIM about an event, scientific fact, statistic, or news?\n"
