@@ -3023,6 +3023,9 @@ TTS_VOICES = {
 }
 
 
+
+DATACULA_API_URL = "https://tts.datacula.com/api/tts"
+
 # Sherpa functions removed.
 
 def clean_text_strict(text: str) -> str:
