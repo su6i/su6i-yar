@@ -3031,54 +3031,7 @@ TTS_VOICES = {
 
 DATACULA_API_URL = "https://tts.datacula.com/api/tts"
 
-# Global Sherpa Engine Cache
-SHERPA_ENGINE = None
 
-def init_sherpa_engine():
-    """Initialize Sherpa-ONNX TTS Engine (Mana Model)"""
-    global SHERPA_ENGINE
-    if not SHERPA_AVAILABLE:
-        print("⚠️ Sherpa-ONNX not installed. Local TTS disabled.")
-        return
-
-    model_path = "models/fa_IR-mana-medium-fixed.onnx"
-    tokens_path = "tokens.txt"
-    espeak_data = "/opt/homebrew/share/espeak-ng-data"
-    
-    if not os.path.exists(model_path):
-        print(f"⚠️ Sherpa Model not found: {model_path}")
-        return
-
-    try:
-        print("🚀 Initializing Sherpa-ONNX (Mana)...")
-        config = sherpa_onnx.OfflineTtsConfig(
-            model=sherpa_onnx.OfflineTtsModelConfig(
-                vits=sherpa_onnx.OfflineTtsVitsModelConfig(
-                    model=model_path,
-                    tokens=tokens_path,
-                    data_dir=espeak_data,
-                    noise_scale=0.667,
-                    length_scale=1.0,
-                    noise_scale_w=0.8,
-                ),
-                provider="cpu",
-                num_threads=1,
-                debug=False
-            )
-        )
-        SHERPA_ENGINE = sherpa_onnx.OfflineTts(config)
-        print("✅ Sherpa-ONNX Engine Ready!")
-    except Exception as e:
-        print(f"❌ Sherpa Init Failed: {e}")
-
-# Call init immediately or lazily? Let's call lazily or at module level if fast.
-# VITS load is fast (~1s).
-if SHERPA_AVAILABLE:
-    init_sherpa_engine()
-
-
-# Global Sherpa Engine Cache
-SHERPA_ENGINE = None
 
 def init_sherpa_engine():
     """Initialize Sherpa-ONNX TTS Engine (Mana Model)"""
@@ -3089,7 +3042,26 @@ def init_sherpa_engine():
 
     model_path = "models/fa_IR-mana-medium-fixed.onnx"
     tokens_path = "models/tokens.txt"
-    espeak_data = "/opt/homebrew/share/espeak-ng-data"
+    
+    # Check common paths for espeak-ng-data
+    espeak_candidates = [
+        "/opt/homebrew/share/espeak-ng-data", # Mac (Apple Silicon)
+        "/usr/local/share/espeak-ng-data",    # Mac (Intel) / Linux
+        "/usr/share/espeak-ng-data",          # Linux (Standard)
+        "/usr/lib/x86_64-linux-gnu/espeak-ng-data" # Linux (Debian/Ubuntu)
+    ]
+    
+    espeak_data = None
+    for path in espeak_candidates:
+        if os.path.exists(path):
+            espeak_data = path
+            break
+            
+    if not espeak_data:
+        print("⚠️ espeak-ng-data not found! Install espeak-ng.")
+        # Don't return, let it try (Sherpa might crash or handle it), or return?
+        # Better to return to avoid crash.
+        return
     
     if not os.path.exists(model_path):
         print(f"⚠️ Sherpa Model not found: {model_path}")
