@@ -25,7 +25,7 @@ async def test_sherpa():
     # 1. Inspect Model Metadata
     print("\n🔍 Inspecting Model Metadata...")
     import onnx
-    model_path = "models/fa_IR-mana-medium-fixed.onnx"
+    model_path = "models/fa-arash-low-fixed.onnx"
     if os.path.exists(model_path):
         try:
             model = onnx.load(model_path)

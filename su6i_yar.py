@@ -3041,7 +3041,7 @@ def init_sherpa_engine():
         logger.warning("⚠️ Sherpa-ONNX not installed. Local TTS disabled.")
         return
 
-    model_path = "models/fa_IR-mana-medium-fixed.onnx"
+    model_path = "models/fa-arash-low-fixed.onnx"
     tokens_path = "models/tokens.txt"
     lexicon_path = "models/lexicon.txt"
     
