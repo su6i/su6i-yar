@@ -3,6 +3,11 @@
 echo "🤖 Su6i Yar Installer"
 echo "======================"
 
+# 0. Fix Locale (Prevent Perl Warnings)
+export LC_ALL=C.UTF-8
+export LC_CTYPE=C.UTF-8
+export LANG=C.UTF-8
+
 # 1. Environment Setup
 if [[ ! -d "venv" ]]; then
     echo "📦 Creating Virtual Environment..."
