@@ -1018,8 +1018,20 @@ async def analyze_text_gemini(text, status_msg=None, lang_code="fa", user_id=Non
             f"You are a professional Fact-Check Assistant. Answer STRICTLY in **{target_lang}** language.\n\n"
             f"Analyze the following text and provide your response in {target_lang}.\n\n"
 
-            "PRELIMINARY CHECK:\n"
-            "If the input text is purely conversational (e.g. 'Hello', 'How are you'), a joke, an insult, or clearly NOT a scientific/health/news claim to analyze, output ONLY this token and nothing else:\n"
+        prompt_text = (
+            f"You are a professional Fact-Check Assistant. Answer STRICTLY in **{target_lang}** language.\n\n"
+            f"Analyze the following text and provide your response in {target_lang}.\n\n"
+
+            "🛑 STRICT RELEVANCE FILTER (CRITICAL):\n"
+            "You must FIRST decide: Is this text a verifiable FACTUAL CLAIM about an event, scientific fact, statistic, or news?\n"
+            "Output ONLY '|||IRRELEVANT|||' (and nothing else) if the text is:\n"
+            "1. An Opinion or Personal Belief (e.g., 'This is creativity, not cheating', 'X is bad').\n"
+            "2. A Joke, Sarcasm, or Common Saying.\n"
+            "3. A Greeting or Conversational filler.\n"
+            "4. A Rhetorical Question without a claim.\n"
+            "5. A General/Philosophical statement (e.g., 'Life is hard').\n\n"
+            "RULE: If you are unsure, or if it's just a debate topic without specific claims, treat it as IRRELEVANT.\n"
+            "ONLY proceed to fact-check if there is a specific, verifiable claim about reality.\n\n"
             "|||IRRELEVANT|||\n\n"
             "CRITICAL FORMATTING RULES:\n"
             "1. Your response MUST be split into TWO parts using: |||SPLIT|||\n"
