@@ -4,7 +4,9 @@
 
   <br>
   
-  <img src="https://img.shields.io/badge/Version-5.0.0-blue.svg" alt="Version"> <img src="https://img.shields.io/badge/Python-3.12+-yellow.svg" alt="Python"> <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License"> <a href="https://www.linkedin.com/in/su6i/"><img src="assets/linkedin_su6i.svg" height="20" alt="LinkedIn"></a>
+  <p align="center" style="white-space: nowrap;">
+    <img src="https://img.shields.io/badge/Version-5.0.0-blue.svg" alt="Version">&nbsp;<img src="https://img.shields.io/badge/Python-3.12+-yellow.svg" alt="Python">&nbsp;<img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License">&nbsp;<a href="https://www.linkedin.com/in/su6i/"><img src="assets/linkedin_su6i.svg" height="20" alt="LinkedIn"></a>
+  </p>
 </div>
 
 A powerful, intelligent Telegram bot that downloads Instagram videos, verifies factual claims, and provides multimodal educational content using Google Gemini AI.
