@@ -1014,9 +1014,6 @@ async def analyze_text_gemini(text, status_msg=None, lang_code="fa", user_id=Non
             example_conclusion2 = "La recherche montre une diminution de concentration mais le pourcentage exact varie"
             example_not_specified = "Non spécifié dans la recherche"
         
-        prompt_text = (
-            f"You are a professional Fact-Check Assistant. Answer STRICTLY in **{target_lang}** language.\n\n"
-            f"Analyze the following text and provide your response in {target_lang}.\n\n"
 
         prompt_text = (
             f"You are a professional Fact-Check Assistant. Answer STRICTLY in **{target_lang}** language.\n\n"
