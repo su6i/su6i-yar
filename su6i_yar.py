@@ -3341,7 +3341,7 @@ async def cmd_voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
         # --- MULTI-MODEL COMPARISON (PERSIAN ONLY) ---
         if target_lang == "fa":
-            await context.bot.send_message(chat_id=msg.chat_id, text="🧪 <b>تست مقایسه موتورهای صوتی (۳ مدل)</b>", parse_mode="HTML", reply_to_message_id=voice_reply_to)
+            await context.bot.send_message(chat_id=msg.chat_id, text="🧪 <b>تست مقایسه موتورهای صوتی (۲ مدل)</b>", parse_mode="HTML", reply_to_message_id=voice_reply_to)
             
             # 1. Datacula (Amir)
             try:
@@ -3367,7 +3367,7 @@ async def cmd_voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 audio_edge.seek(0)
                 
 
-                caption_edge = "🗣️ <b>مدل ۳: EdgeTTS (فرید)</b> - مایکروسافت"
+                caption_edge = "🗣️ <b>مدل ۲: EdgeTTS (فرید)</b> - مایکروسافت"
                 await context.bot.send_voice(chat_id=msg.chat_id, voice=audio_edge, caption=caption_edge, parse_mode='HTML')
             except Exception as e:
                 print(f"EdgeTTS Fail: {e}")
