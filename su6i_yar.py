@@ -2689,14 +2689,75 @@ async def cmd_download_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     # 1. Determine Target (Link & Reply ID)
     target_link = ""
     reply_to_id = msg.message_id  # Default: reply to command
+    target_video = None
     
     if context.args:
         target_link = context.args[0]
     elif msg.reply_to_message:
-        target_link = msg.reply_to_message.text or msg.reply_to_message.caption or ""
-        reply_to_id = msg.reply_to_message.message_id  # Fix: Reply to original link
+        # Check for Video File in Reply
+        r = msg.reply_to_message
+        if r.video: target_video = r.video
+        elif r.document and r.document.mime_type and r.document.mime_type.startswith("video/"):
+            target_video = r.document
+            
+        target_link = r.text or r.caption or ""
+        reply_to_id = r.message_id
     
-    # 2. Extract URL
+    # 2. Handle Video File Processing (Direct File)
+    if target_video:
+        status_msg = await msg.reply_text(get_msg("downloading", user_id), reply_to_message_id=reply_to_id)
+        try:
+            # A) Download
+            timestamp = int(asyncio.get_event_loop().time())
+            filename = Path(f"dl_file_{timestamp}.mp4")
+            
+            new_file = await target_video.get_file()
+            await new_file.download_to_drive(custom_path=filename)
+            
+            # B) Process (Compress/Standardize)
+            if await compress_video(filename):
+                logger.info(f"✅ Video processed: {filename}")
+            
+            # C) Meta & Thumb
+            meta = await get_video_metadata(filename)
+            duration = meta.get("duration", 0) if meta else 0
+            width = meta.get("width", 0) if meta else 0
+            height = meta.get("height", 0) if meta else 0
+            thumb_path = await generate_thumbnail(filename)
+            thumb_file = open(thumb_path, "rb") if thumb_path else None
+            
+            # D) Send Back
+            # Use original caption if available
+            caption = msg.reply_to_message.caption or ""
+            
+            await context.bot.send_video(
+                chat_id=msg.chat_id,
+                video=open(filename, "rb"),
+                caption=caption,
+                parse_mode="HTML",
+                reply_to_message_id=reply_to_id,
+                duration=int(duration),
+                width=width,
+                height=height,
+                thumbnail=thumb_file,
+                supports_streaming=True
+            )
+            
+            # Cleanup
+            if thumb_file: thumb_file.close()
+            if thumb_path and thumb_path.exists(): thumb_path.unlink()
+            if filename.exists(): filename.unlink()
+            if not IS_DEV: await safe_delete(status_msg)
+            
+            return # Done
+
+        except Exception as e:
+            logger.error(f"Video Processing Error: {e}")
+            await reply_including_error(update, context, "خطا در پردازش ویدیو.", str(e))
+            if not IS_DEV: await safe_delete(status_msg)
+            return
+
+    # 3. Extract URL (If no video file)
     match = re.search(r'(https?://(?:www\.)?instagram\.com/\S+)', target_link)
     if match:
         target_link = match.group(1)
