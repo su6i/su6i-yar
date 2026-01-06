@@ -222,7 +222,7 @@ sudo systemctl status su6i-yar
 | `/price`  | **Live Market:** Show currency and gold rates (alias: `/p`). |
 | `/help`  | Show instructions. |
 | `/detail` | Reply to analysis to get full scientific breakdown. |
-| `/dl` | Force download an Instagram link (reply or arg). |
+| `/dl` | Force download an Instagram link (reply or arg). **New:** Direct reply to video file to Compress & Fix. |
 | `/stop`  | **(Admin Only)** Shutdown the bot. |
 
 ---
