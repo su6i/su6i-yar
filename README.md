@@ -91,8 +91,6 @@ A powerful, intelligent Telegram bot that downloads Instagram videos, verifies f
 *   A Google Gemini API Key (from [Google AI Studio](https://aistudio.google.com/)).
 
 ### 2. Setup
-
-### 2. Setup
 Run the automated installer to set up dependencies and configuration in one step:
 
 ```bash
@@ -107,11 +105,6 @@ Follow the on-screen prompts to enter your API keys. You will need:
 | **`TELEGRAM_BOT_TOKEN`** | Connects your code to the Telegram bot so it can receive/send messages. | Start a chat with [@BotFather](https://t.me/BotFather) and send `/newbot`. |
 | **`GEMINI_API_KEY`** | Powers the AI! Used for generating text, fact-checking, and translating. | Get it from [Google AI Studio](https://aistudio.google.com/). |
 | **`admin_id`** | **Security:** Identifies YOU as the owner. The bot will ignore anyone else to prevent unauthorized usage. | Send a message to [@userinfobot](https://t.me/userinfobot) to see your numeric ID. |
-
----
-
-
----
 
 ---
 
