@@ -2728,9 +2728,11 @@ async def cmd_download_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             
             # D) Send Back
             # Use original caption if available
-            caption = msg.reply_to_message.caption or ""
+            original_caption = msg.reply_to_message.caption or ""
+            header = f"📥 <b>Su6i Yar</b> | @su6i_yar_bot"
+            caption, overflow_text = smart_split(original_caption, header=header, max_len=1024)
             
-            await context.bot.send_video(
+            video_msg = await context.bot.send_video(
                 chat_id=msg.chat_id,
                 video=open(filename, "rb"),
                 caption=caption,
@@ -2742,6 +2744,19 @@ async def cmd_download_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                 thumbnail=thumb_file,
                 supports_streaming=True
             )
+            
+            # Send overflow text as reply to video
+            if overflow_text:
+                remaining = overflow_text
+                while remaining:
+                    chunk = remaining[:4000]
+                    remaining = remaining[4000:]
+                    await context.bot.send_message(
+                        chat_id=msg.chat_id,
+                        text=f"📝 <b>ادامه کپشن:</b>\n\n{html.escape(chunk)}",
+                        parse_mode='HTML',
+                        reply_to_message_id=video_msg.message_id
+                    )
             
             # Cleanup
             if thumb_file: thumb_file.close()
