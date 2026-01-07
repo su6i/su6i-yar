@@ -216,6 +216,7 @@ sudo systemctl status su6i-yar
 | `/help`  | Show instructions. |
 | `/detail` | Reply to analysis to get full scientific breakdown. |
 | `/dl` | Force download an Instagram link (reply or arg). **New:** Direct reply to video file to Compress & Fix. |
+| `/birthday` | Manage birthdays (add/check/scan). **New:** Auto-Personalized Celebration. |
 | `/stop`  | **(Admin Only)** Shutdown the bot. |
 
 ---
