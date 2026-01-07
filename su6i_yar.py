@@ -2770,10 +2770,10 @@ async def cmd_birthday_handler(update: Update, context: ContextTypes.DEFAULT_TYP
 
     # --- WISH (Manual) ---
     elif subcmd == "wish":
-        # Usage: /birthday wish Name [Month]
-        # Example: /birthday wish Ali 5
+        # Usage: /birthday wish Name [Date]
+        # Example: /birthday wish Ali 17-10 (or 17-10-1981)
         if len(args) < 2:
-            await reply_and_delete(update, context, "⚠️ قالب: /birthday wish Name [MonthNum]", delay=10)
+            await reply_and_delete(update, context, "⚠️ قالب: /birthday wish Name [DD-MM]", delay=10)
             return
             
         target_name = args[1]
@@ -2783,9 +2783,30 @@ async def cmd_birthday_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         now = datetime.now()
         month_num = now.month
         
-        if len(args) >= 3 and args[2].isdigit():
-            month_num = int(args[2])
-            
+        # Parse Date if provided
+        if len(args) >= 3:
+            date_input = args[2]
+            try:
+                # Support DD-MM and DD-MM-YYYY
+                if "-" in date_input: parts = date_input.split("-")
+                elif "/" in date_input: parts = date_input.split("/")
+                else: 
+                     # Fallback check for single number (legacy support)
+                     if date_input.isdigit() and 1 <= int(date_input) <= 12:
+                         parts = [1, int(date_input)] # Dummy day
+                     else:
+                        raise ValueError
+
+                if len(parts) >= 2:
+                    month_num = int(parts[1])
+                    if not (1 <= month_num <= 12): raise ValueError
+                else: 
+                     raise ValueError
+                     
+            except ValueError:
+                await reply_and_delete(update, context, "⚠️ فرمت تاریخ نامعتبر! مثال: 17-10", delay=10)
+                return
+
         # Send Acknowledgement
         status_msg = await update.message.reply_text(f"🎂 در حال آماده‌سازی جشن تولد برای **{target_name}**... (ماه {month_num})", parse_mode='Markdown')
         
