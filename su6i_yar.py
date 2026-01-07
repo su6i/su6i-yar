@@ -2800,6 +2800,25 @@ async def cmd_birthday_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                 if len(parts) >= 2:
                     month_num = int(parts[1])
                     if not (1 <= month_num <= 12): raise ValueError
+                    
+                    # Store Logic (User Requested):
+                    # We need a unique ID. Since these are manual, we generate a synthetic ID.
+                    # Use negative hash of name to avoid collision with real Telegram IDs.
+                    # We default year to 2000 if not provided.
+                    wish_day = int(parts[0])
+                    wish_year = int(parts[2]) if len(parts) > 2 else 2000
+                    
+                    synthetic_id = -abs(hash(target_name)) 
+                    BIRTHDAYS[synthetic_id] = {
+                        "day": wish_day,
+                        "month": month_num,
+                        "year": wish_year,
+                        "username": target_name,
+                        "chat_id": chat_id, # Celebrate in this chat
+                        "type": "manual"
+                    }
+                    save_birthdays()
+                    
                 else: 
                      raise ValueError
                      
@@ -2808,7 +2827,7 @@ async def cmd_birthday_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                 return
 
         # Send Acknowledgement
-        status_msg = await update.message.reply_text(f"🎂 در حال آماده‌سازی جشن تولد برای **{target_name}**... (ماه {month_num})", parse_mode='Markdown')
+        status_msg = await update.message.reply_text(f"🎂 تولد **{target_name}** ثبت شد و جشن در حال آماده‌سازی است... (ماه {month_num})", parse_mode='Markdown')
         
         try:
              # Personalization
