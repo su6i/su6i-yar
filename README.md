@@ -225,7 +225,7 @@ sudo systemctl status su6i-yar
 | `/detail` | Reply to analysis to get full scientific breakdown. |
 | `/dl` | Force download an Instagram link (reply or arg). **New:** Direct reply to video file to Compress & Fix. |
 | `/dl` | Force download an Instagram link (reply or arg). **New:** Direct reply to video file to Compress & Fix. |
-| `/birthday` | **Add:** `/birthday add @user <date (Jalali/Gregorian)>`<br>**Wish:** `/birthday wish <name> <date>` (Auto-saves)<br>**Check:** `/birthday check` |
+| `/birthday` | **Add:** `/birthday add @user <date>` (or Reply to user)<br>**Wish:** `/birthday wish <name> <date>` (Auto-saves)<br>**Check:** `/birthday check` |
 | `/stop`  | **(Admin Only)** Shutdown the bot. |
 
 ---
