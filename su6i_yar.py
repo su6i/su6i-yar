@@ -2667,6 +2667,11 @@ async def download_instagram(url, chat_id, bot, reply_to_message_id=None, custom
 # HANDLERS
 # ==============================================================================
 
+async def cmd_help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show help message"""
+    user_id = update.effective_user.id
+    await reply_and_delete(update, context, get_msg("help_msg", user_id), delay=60, parse_mode='Markdown')
+
 # ==============================================================================
 # PROCESSED HANDLERS (DEBUGGING ADDED)
 # ==============================================================================
