@@ -3046,12 +3046,15 @@ async def cmd_download_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             return
 
     # 3. Extract URL (If no video file)
-    match = re.search(r'(https?://(?:www\.)?instagram\.com/\S+)', target_link)
+    # Generic regex for any http/https URL
+    import re
+    match = re.search(r'(https?://\S+)', target_link)
     if match:
         target_link = match.group(1)
     
     # 3. Validate
-    if "instagram.com" not in target_link:
+    if not target_link:
+    # if "instagram.com" not in target_link: # REMOVED RESTRICTION
         await reply_and_delete(update, context, get_msg("dl_usage_error", user_id))
         return
 
