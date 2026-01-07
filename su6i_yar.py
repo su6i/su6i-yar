@@ -2697,12 +2697,21 @@ async def cmd_birthday_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     # --- ADD ---
     if subcmd == "add":
         # Usage: /birthday add @username 17-10-1981
-        if len(args) < 3:
-            await reply_and_delete(update, context, "⚠️ قالب: /birthday add @username DD-MM-YYYY", delay=10)
-            return
+        # OR (Reply): /birthday add 17-10-1981
+        
+        is_reply = bool(update.message.reply_to_message)
+        min_args = 2 if is_reply else 3
+        
+        if len(args) < min_args:
+             await reply_and_delete(update, context, "⚠️ قالب: /birthday add [@username] DD-MM-YYYY", delay=10)
+             return
             
-        target_username = args[1]
-        date_str = args[2]
+        if is_reply and len(args) == 2:
+            target_username = "Unknown" # Will be fetched from reply
+            date_str = args[1]
+        else:
+            target_username = args[1]
+            date_str = args[2]
         
         try:
             # Parse Date
