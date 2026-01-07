@@ -164,8 +164,10 @@ from datetime import date
 USER_DAILY_USAGE = {}  # user_id -> {"count": int, "date": str}
 USER_LANG = {}         # user_id -> "fa" | "en" | "fr" | "ko"
 SEARCH_FILE_ID = None  # Persistent telegram file_id for the status GIF
+BIRTHDAYS = {}         # user_id -> {"month": int, "day": int, "year": int, "username": str, "chat_id": int}
 
 PERSISTENCE_FILE = "user_data.json"
+BIRTHDAY_FILE = "birthdays.json"
 
 def save_persistence():
     """Save user languages and daily usage to file."""
@@ -196,8 +198,30 @@ def load_persistence():
         except Exception as e:
             logger.error(f"Persistence Load Error: {e}")
 
+def save_birthdays():
+    """Save birthday data to file."""
+    try:
+        with open(BIRTHDAY_FILE, "w", encoding="utf-8") as f:
+            json.dump(BIRTHDAYS, f, ensure_ascii=False, indent=4)
+    except Exception as e:
+        logger.error(f"Birthday Save Error: {e}")
+
+def load_birthdays():
+    """Load birthday data from file."""
+    global BIRTHDAYS
+    if os.path.exists(BIRTHDAY_FILE):
+        try:
+            with open(BIRTHDAY_FILE, "r", encoding="utf-8") as f:
+                # Convert string keys to int
+                data = json.load(f)
+                BIRTHDAYS = {int(k): v for k, v in data.items()}
+                logger.info(f"🎂 Loaded {len(BIRTHDAYS)} birthdays.")
+        except Exception as e:
+            logger.error(f"Birthday Load Error: {e}")
+
 # Initial load
 load_persistence()
+load_birthdays()
 
 def get_user_limit(user_id: int) -> int:
     """Get user's daily request limit."""
@@ -2179,6 +2203,40 @@ async def download_instagram_cobalt(url: str, filename: Path) -> bool:
             "Origin": "https://cobalt.tools",
             "Referer": "https://cobalt.tools/"
         }
+        
+        payload = {
+            "url": url,
+            "filenamePattern": "basic"
+        }
+
+        async with httpx.AsyncClient(timeout=60) as client:
+            try:
+                # Randomize server choice for robustness
+                import random
+                active_api = random.choice(COBALT_INSTANCES)
+                logger.info(f"🧬 Trying Cobalt Instance: {active_api}")
+                
+                resp = await client.post(active_api, json=payload, headers=headers)
+                
+                if resp.status_code == 200:
+                    data = resp.json()
+                    dl_url = data.get("url")
+                    
+                    if dl_url:
+                        # Stream download the file
+                        async with client.stream("GET", dl_url) as dl_resp:
+                            dl_resp.raise_for_status()
+                            with open(custom_filename, "wb") as f:
+                                async for chunk in dl_resp.aiter_bytes():
+                                    f.write(chunk)
+                                    
+                        if custom_filename.exists() and custom_filename.stat().st_size > 0:
+                            logger.info(f"✅ Cobalt download successful: {custom_filename}")
+                            return True
+            except Exception as e:
+                logger.warning(f"⚠️ Instance {active_api} failed: {e}")
+                continue # Try next instance
+
 
         async with httpx.AsyncClient(timeout=20, follow_redirects=True) as client:
             # Strategy: Try each instance
@@ -2640,6 +2698,100 @@ async def download_instagram(url, chat_id, bot, reply_to_message_id=None, custom
 # ==============================================================================
 # PROCESSED HANDLERS (DEBUGGING ADDED)
 # ==============================================================================
+
+
+async def cmd_birthday_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Manage Birthdays:
+    /birthday add @user DD-MM-YYYY
+    /birthday check
+    /birthday scan (Admin Only - Scans group members)
+    """
+    user = update.effective_user
+    chat_id = update.effective_chat.id
+    args = context.args
+    
+    if not args:
+        await reply_and_delete(update, context, "🎂 استفاده: /birthday [add | check | scan]", delay=10)
+        return
+
+    subcmd = args[0].lower()
+    
+    # --- ADD ---
+    if subcmd == "add":
+        # Usage: /birthday add @username 17-10-1981
+        if len(args) < 3:
+            await reply_and_delete(update, context, "⚠️ قالب: /birthday add @username DD-MM-YYYY", delay=10)
+            return
+            
+        target_username = args[1]
+        date_str = args[2]
+        
+        try:
+            # Parse Date
+            if "-" in date_str: parts = date_str.split("-")
+            elif "/" in date_str: parts = date_str.split("/")
+            else: raise ValueError
+            
+            day, month, year = int(parts[0]), int(parts[1]), int(parts[2])
+            
+            target_id = None
+            
+            # Try to resolve user from reply
+            if update.message.reply_to_message:
+                target_user = update.message.reply_to_message.from_user
+                target_id = target_user.id
+                target_username = f"@{target_user.username}" if target_user.username else target_user.first_name
+            
+            # If manually entered @username matches an existing user in persistence
+            # (Limitation: we can't search telegram users by username via API easily)
+            # For now, if no reply, we rely on Admin providing a valid ID or just store with a dummy ID (not recommended)
+            # Let's enforce Reply or ID usage for now.
+            if not target_id:
+                 # Check if the text passed is numeric ID
+                 if target_username.isdigit():
+                     target_id = int(target_username)
+                     target_username = f"User {target_id}"
+                 else:
+                     await reply_and_delete(update, context, "⚠️ لطفاً روی پیام کاربر مورد نظر ریپلای کنید تا آیدی دقیق ثبت شود.", delay=15)
+                     return
+
+            BIRTHDAYS[target_id] = {
+                "day": day,
+                "month": month,
+                "year": year,
+                "username": target_username,
+                "chat_id": chat_id 
+            }
+            save_birthdays()
+            
+            await reply_and_delete(update, context, f"✅ تولد {target_username} ثبت شد: {year}/{month}/{day}", delay=10)
+            
+        except ValueError:
+            await reply_and_delete(update, context, "🚫 فرمت تاریخ اشتباه است. (DD-MM-YYYY)", delay=10)
+            
+    # --- CHECK ---
+    elif subcmd == "check":
+        if not BIRTHDAYS:
+            await reply_and_delete(update, context, "📭 لیست تولدها خالی است.", delay=10)
+            return
+            
+        msg_text = "📅 **لیست تولدها:**\n\n"
+        sorted_bdays = sorted(BIRTHDAYS.items(), key=lambda x: (x[1]['month'], x[1]['day']))
+        
+        for uid, data in sorted_bdays:
+            msg_text += f"👤 {data['username']}: {data['day']}/{data['month']}\n"
+            
+        await update.message.reply_text(msg_text, parse_mode="Markdown")
+
+    # --- SCAN ---
+    elif subcmd == "scan":
+        if user.id != SETTINGS["admin_id"]:
+            await reply_and_delete(update, context, get_msg("only_admin"), delay=5)
+            return
+
+        status_msg = await update.message.reply_text("⚠️ اسکن کامل اعضا توسط ربات محدودیت دارد. سیستم **کشف خودکار** فعال است و به محض فعالیت کاربران، بیوگرافی آنها بررسی خواهد شد.")
+
 
 async def cmd_start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"🚀 Command /start triggered by {update.effective_user.id}")
@@ -3745,18 +3897,18 @@ def main():
     app.add_handler(CommandHandler("dl", cmd_download_handler))
     app.add_handler(CommandHandler("download", cmd_download_handler))
     app.add_handler(CommandHandler("start", cmd_start_handler))
-    app.add_handler(CommandHandler("help", cmd_start_handler)) # Reuse start for help
-    app.add_handler(CommandHandler("close", cmd_close_handler))
+    app.add_handler(CommandHandler("help", cmd_help_handler))
     app.add_handler(CommandHandler("status", cmd_status_handler))
-    app.add_handler(CommandHandler("toggle_dl", cmd_toggle_dl_handler))
-    app.add_handler(CommandHandler("toggle_fc", cmd_toggle_fc_handler))
-    app.add_handler(CommandHandler("price", cmd_price_handler))
-    app.add_handler(CommandHandler("p", cmd_price_handler))
-    app.add_handler(CommandHandler("check", cmd_check_handler))
-    app.add_handler(CommandHandler("detail", cmd_detail_handler))
-    app.add_handler(CommandHandler("voice", cmd_voice_handler))  # TTS Voice
     app.add_handler(CommandHandler("learn", cmd_learn_handler))
     app.add_handler(CommandHandler("l", cmd_learn_handler))
+    app.add_handler(CommandHandler("check", cmd_check_handler))
+    app.add_handler(CommandHandler("voice", cmd_voice_handler))
+    app.add_handler(CommandHandler("v", cmd_voice_handler))
+    app.add_handler(CommandHandler("detail", cmd_detail_handler))
+    app.add_handler(CommandHandler("price", cmd_price_handler))
+    app.add_handler(CommandHandler("p", cmd_price_handler))
+    app.add_handler(CommandHandler("close", cmd_close_handler))
+    app.add_handler(CommandHandler("birthday", cmd_birthday_handler)) # New Birthday Command
     app.add_handler(CommandHandler("t", cmd_learn_handler))  # /t is for /learn
     app.add_handler(CommandHandler("translate", cmd_learn_handler))
     app.add_handler(CommandHandler("edu", cmd_learn_handler))
