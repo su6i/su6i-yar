@@ -2209,34 +2209,6 @@ async def download_instagram_cobalt(url: str, filename: Path) -> bool:
             "filenamePattern": "basic"
         }
 
-        async with httpx.AsyncClient(timeout=60) as client:
-            try:
-                # Randomize server choice for robustness
-                import random
-                active_api = random.choice(COBALT_INSTANCES)
-                logger.info(f"🧬 Trying Cobalt Instance: {active_api}")
-                
-                resp = await client.post(active_api, json=payload, headers=headers)
-                
-                if resp.status_code == 200:
-                    data = resp.json()
-                    dl_url = data.get("url")
-                    
-                    if dl_url:
-                        # Stream download the file
-                        async with client.stream("GET", dl_url) as dl_resp:
-                            dl_resp.raise_for_status()
-                            with open(custom_filename, "wb") as f:
-                                async for chunk in dl_resp.aiter_bytes():
-                                    f.write(chunk)
-                                    
-                        if custom_filename.exists() and custom_filename.stat().st_size > 0:
-                            logger.info(f"✅ Cobalt download successful: {custom_filename}")
-                            return True
-            except Exception as e:
-                logger.warning(f"⚠️ Instance {active_api} failed: {e}")
-                continue # Try next instance
-
 
         async with httpx.AsyncClient(timeout=20, follow_redirects=True) as client:
             # Strategy: Try each instance
@@ -2775,7 +2747,92 @@ async def cmd_birthday_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         if not BIRTHDAYS:
             await reply_and_delete(update, context, "📭 لیست تولدها خالی است.", delay=10)
             return
+
+        msg_text = "🎂 **لیست تولدها:**\n\n"
+        for uid, data in BIRTHDAYS.items():
+            msg_text += f"👤 {data['username']}: {data['day']}/{data['month']}/{data['year']}\n"
+        
+        await reply_and_delete(update, context, msg_text, delay=30)
+
+    # --- WISH (Manual) ---
+    elif subcmd == "wish":
+        # Usage: /birthday wish Name [Month]
+        # Example: /birthday wish Ali 5
+        if len(args) < 2:
+            await reply_and_delete(update, context, "⚠️ قالب: /birthday wish Name [MonthNum]", delay=10)
+            return
             
+        target_name = args[1]
+        
+        # Determine month
+        from datetime import datetime
+        now = datetime.now()
+        month_num = now.month
+        
+        if len(args) >= 3 and args[2].isdigit():
+            month_num = int(args[2])
+            
+        # Send Acknowledgement
+        status_msg = await update.message.reply_text(f"🎂 در حال آماده‌سازی جشن تولد برای **{target_name}**... (ماه {month_num})", parse_mode='Markdown')
+        
+        try:
+             # Personalization
+            month_names = {
+                1: "Jan/Dey", 2: "Feb/Bahman", 3: "Mar/Esfand", 4: "Apr/Farvardin", 
+                5: "May/Ordibehesht", 6: "Jun/Khordad", 7: "Jul/Tir", 8: "Aug/Mordad", 
+                9: "Sep/Shahrivar", 10: "Oct/Mehr", 11: "Nov/Aban", 12: "Dec/Azar"
+            }
+            month_name = month_names.get(month_num, "Unknown")
+            
+            # A) Generate User Image (Flux)
+            encoded_name = urllib.parse.quote(target_name)
+            image_prompt = f"Happy Birthday {encoded_name}, festive birthday party, delicious cake with text '{encoded_name}' written on it, cinematic lighting, 8k, hyperrealistic"
+            image_url = f"https://image.pollinations.ai/prompt/{image_prompt}?model=flux&width=1024&height=1024&nologo=true"
+            
+            # B) Generate Caption (Gemini)
+            caption = f"🎂 **تولدت مبارک {target_name}!** 🎉\n\n"
+            try:
+                model = ChatGoogleGenerativeAI(model="gemini-2.0-flash-exp", google_api_key=GEMINI_API_KEY)
+                prompt = (
+                    f"Write a short, exciting birthday wish in Persian for a user named '{target_name}'. "
+                    f"They are born in month {month_num} ({month_name}). "
+                    f"Mention one positive personality trait associated with this month playfully. "
+                    f"Use emojis. Keep it under 300 characters."
+                )
+                response = await model.invoke(prompt)
+                caption += response.content
+            except Exception as e:
+                logger.error(f"Gemini Wish Error: {e}")
+                caption += "امیدواریم سالی پر از موفقیت و شادی داشته باشی! 🥳"
+
+            # C) Send Access
+            # Send Image
+            await context.bot.send_photo(
+                chat_id=chat_id,
+                photo=image_url,
+                caption=caption,
+                parse_mode="Markdown"
+            )
+            
+            # Send Audio
+            audio_path = Path("assets/birthday_song.mp3")
+            if audio_path.exists():
+                 await context.bot.send_audio(
+                    chat_id=chat_id,
+                    audio=open(audio_path, "rb"),
+                    title=f"Happy Birthday {target_name}"
+                 )
+            
+            await safe_delete(status_msg)
+            
+        except Exception as e:
+            logger.error(f"Manual Wish Error: {e}")
+            await status_msg.edit_text(f"❌ خطا: {e}")
+            
+    # --- SCAN (Best Effort) ---
+    elif subcmd == "scan":
+        # ... (Existing scan logic placeholder or simple message)
+        await reply_and_delete(update, context, "🔍 اسکن پروفایل‌ها (محدودیت API): این قابلیت هنوز کامل نیست.", delay=10)
         msg_text = "📅 **لیست تولدها:**\n\n"
         sorted_bdays = sorted(BIRTHDAYS.items(), key=lambda x: (x[1]['month'], x[1]['day']))
         
