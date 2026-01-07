@@ -2928,6 +2928,16 @@ async def cmd_download_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     
     # 2. Handle Video File Processing (Direct File)
     if target_video:
+        # Check Telegram Bot API Limit (20MB)
+        file_size_mb = target_video.file_size / (1024 * 1024)
+        if file_size_mb > 19.5:
+            await reply_and_delete(update, context, 
+                f"⚠️ فایل خیلی حجیم است ({file_size_mb:.1f}MB).\n"
+                "ربات‌های تلگرام فقط می‌توانند فایل‌های زیر ۲۰ مگابایت را دانلود کنند.", 
+                delay=15
+            )
+            return
+
         status_msg = await msg.reply_text(get_msg("downloading", user_id), reply_to_message_id=reply_to_id)
         try:
             # A) Download
