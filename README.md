@@ -67,7 +67,8 @@ A powerful, intelligent Telegram bot that downloads Instagram videos, verifies f
 *   **Dual Calendar Support:** Automatically detects **Jalali (Solar Hijri)** vs **Gregorian** dates.
     *   Enter `1380-05-20` -> Stored as Jalali (celebrated on correct solar day).
     *   Enter `2001-08-11` -> Stored as Gregorian.
-    *   Enter `17-10` -> Defaults to Jalali Year 1360 (celebrates on 17 Dey).
+    *   Enter `17-10` -> Defaults to **Jalali Year 1360** (celebrates on 17 Dey).
+*   **Default Year:** Partial dates (e.g. `17-10`) default to Jalali 1360.
 *   **Automatic Scheduler:** Checks birthdays every morning at 09:00 AM IRST.
 *   **Safety & Privacy:**
     *   Prioritizes **Private Wishes** to the user first.
