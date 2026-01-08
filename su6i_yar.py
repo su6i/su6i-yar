@@ -236,14 +236,11 @@ def parse_smart_date(date_str: str):
         parts = [int(p) for p in date_str.split("-") if p.isdigit()]
         
         if len(parts) == 2:
-            # Format: DD-MM -> Default Year 2000 (Gregorian)
-            # Assumption: Input is Day-Month
+            # Format: DD-MM -> Default Year 1360 (Jalali)
+            # User wants partial dates to be treated as Jalali by default.
+            # Example: 17-10 -> 17 Dey 1360
             d, m = parts[0], parts[1]
-            y = 2000 
-            # Note: We defaulting to Gregorian 2000 which is a Leap Year.
-            # If user entered 31-06 (31 Shahrivar), this is valid Jalali but invalid Gregorian (June has 30 days).
-            # To be safe, let's try creating a date. If invalid Gregorian, assume it's Jalali 1380 (also Leap safe?).
-            # Actually, simpler: just return Gregorian 2000. If invalid datetime, catch it.
+            y = 1360
             
         elif len(parts) == 3:
             if parts[0] > 1000:
