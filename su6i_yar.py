@@ -2901,6 +2901,21 @@ async def cmd_birthday_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                         target_id = -abs(hash(target_username))
                         await smart_reply(f"⚠️ کاربر یافت نشد. استفاده از آیدی مجازی: {target_id}")
 
+        # DEDUPLICATION: Remove old Synthetic IDs for this user if we now have a Real ID
+        if target_id > 0:
+            clean_target_name = target_username.strip().replace("@", "").lower()
+            keys_to_remove = []
+            for uid, data in BIRTHDAYS.items():
+                # Check for Synthetic IDs (< 0) with same username
+                if uid < 0:
+                    uname = data.get("username", "").strip().replace("@", "").lower()
+                    if uname == clean_target_name:
+                        keys_to_remove.append(uid)
+            
+            for k in keys_to_remove:
+                del BIRTHDAYS[k]
+                logger.info(f"🗑 Removed duplicate synthetic ID {k} for {target_username}")
+
         target_data = {
             "day": g_d,
             "month": g_m,
@@ -2909,8 +2924,15 @@ async def cmd_birthday_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             "chat_id": chat_id,
             "is_jalali": is_jalali
         }
+        
+        # Dual Date Storage (Always store Jalali for reference)
+        # Dual Date Storage (Always store Jalali for reference)
         if is_jalali:
             target_data["jalali_date"] = [j_y, j_m, j_d]
+        else:
+            # Convert Gregorian to Jalali
+            j_date = jdatetime.date.fromgregorian(day=g_d, month=g_m, year=g_y)
+            target_data["jalali_date"] = [j_date.year, j_date.month, j_date.day]
 
         BIRTHDAYS[target_id] = target_data
         save_birthdays()
@@ -2943,57 +2965,32 @@ async def cmd_birthday_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         # Determine month
         from datetime import datetime
         now = datetime.now()
-        month_num = now.month
         
-        # Parse Date if provided
-                # Parse Date if provided
-        save_required = False
-        is_jalali = False
-        
+        # If date provided
         if len(args) >= 3:
-            date_input = args[2]
-            parsed = parse_smart_date(date_input)
-            
+            parsed = parse_smart_date(args[2])
             if parsed:
                  g_y, g_m, g_d, j_y, j_m, j_d, is_jalali = parsed
-                 
-                 # Use relevant month for personalization logic
-                 month_num = j_m if is_jalali else g_m
-                 
-                 # Store Logic
-                 synthetic_id = -abs(hash(target_name))
-                 
-                 target_data = {
-                    "day": g_d,
-                    "month": g_m,
-                    "year": g_y,
-                    "username": target_name,
-                    "chat_id": chat_id,
-                    "type": "manual",
-                    "is_jalali": is_jalali
-                 }
-                 if is_jalali:
-                     target_data["jalali_date"] = [j_y, j_m, j_d]
-                     
-                 BIRTHDAYS[synthetic_id] = target_data
-                 save_required = True
+                 # Use parsed month
             else:
-                await smart_reply("⚠️ فرمت تاریخ نامعتبر! مثال: 17-10-1370")
-                return
+                 await smart_reply("🚫 فرمت تاریخ اشتباه است.")
+                 return
         else:
-            # No date provided -> Use Today (Ad-hoc Wish)
-            # Just to determine month for theme
-            # We assume current month (Solar or Gregorian based on locale? defaulting to Solar for Iranians usually)
-            import jdatetime
-            j_now = jdatetime.date.fromgregorian(date=now.date())
-            month_num = j_now.month
-            is_jalali = True # Assume Jalali theme for ad-hoc
-            save_required = False # Do not save
+            # Default to Today
+            is_jalali = False
+            g_m = now.month
+            
+        # Determine visual month
+        if len(args) >= 3 and parsed:
+             v_month = j_m if is_jalali else g_m
+             month_num = v_month
+        else:
+             # Default
+             v_month = now.month
+             month_num = v_month
 
-        if save_required:
-             save_birthdays()
-             save_birthdays()
 
+        
         # Status: Log (or PV reply)
         await smart_reply(f"🎉 در حال آماده‌سازی جشن برای {target_name}...")
         
