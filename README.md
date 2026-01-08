@@ -67,8 +67,14 @@ A powerful, intelligent Telegram bot that downloads Instagram videos, verifies f
 *   **Dual Calendar Support:** Automatically detects **Jalali (Solar Hijri)** vs **Gregorian** dates.
     *   Enter `1380-05-20` -> Stored as Jalali (celebrated on correct solar day).
     *   Enter `2001-08-11` -> Stored as Gregorian.
-*   **Automatic Scheduler:** Checks birthdays every morning at 09:00 AM.
-*   **Manual Wishes:** Generate instant birthday cards (AI Image + Text + Song) using `/birthday wish`.
+    *   Enter `17-10` -> Defaults to Gregorian Year 2000 (celebrates on Oct 17th).
+*   **Automatic Scheduler:** Checks birthdays every morning at 09:00 AM IRST.
+*   **Safety & Privacy:**
+    *   Prioritizes **Private Wishes** to the user first.
+    *   Only sends **Group Wishes** if the user is currently a member.
+    *   Mentions the user in the group message.
+*   **AI Generated:** Creates a unique image (Flux) with month-themed visuals and a Persian caption with fun facts (Gemini).
+*   **Manual Wishes:** Ad-hoc wish via `/birthday wish Name`.
 *   **Smart Storage:** Data safely stored in `.storage/birthdays.json`.
 
 ### 🔒 Privacy & Access Control
@@ -225,7 +231,7 @@ sudo systemctl status su6i-yar
 | `/detail` | Reply to analysis to get full scientific breakdown. |
 | `/dl` | Force download an Instagram link (reply or arg). **New:** Direct reply to video file to Compress & Fix. |
 | `/dl` | Force download an Instagram link (reply or arg). **New:** Direct reply to video file to Compress & Fix. |
-| `/birthday` | **Add:** `/birthday add @user <date>` (or Reply to user)<br>**Wish:** `/birthday wish <name> <date>` (Auto-saves)<br>**Check:** `/birthday check` |
+| `/birthday` | **Add:** `/birthday add @user <date>` (e.g. `17-10-1991` or `17-10`)<br>**Wish:** `/birthday wish <name>` (Instant)<br>**Check:** `/birthday check` |
 | `/stop`  | **(Admin Only)** Shutdown the bot. |
 
 ---

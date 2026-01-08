@@ -25,6 +25,7 @@ from bs4 import BeautifulSoup
 import time
 import wave
 import struct
+import jdatetime
 
 # Third-party imports
 # Third-party imports (numpy removed)
@@ -166,8 +167,8 @@ USER_LANG = {}         # user_id -> "fa" | "en" | "fr" | "ko"
 SEARCH_FILE_ID = None  # Persistent telegram file_id for the status GIF
 BIRTHDAYS = {}         # user_id -> {"month": int, "day": int, "year": int, "username": str, "chat_id": int}
 
-PERSISTENCE_FILE = "user_data.json"
-BIRTHDAY_FILE = "birthdays.json"
+PERSISTENCE_FILE = ".storage/user_data.json"
+BIRTHDAY_FILE = ".storage/birthdays.json"
 
 def save_persistence():
     """Save user languages and daily usage to file."""
@@ -222,6 +223,54 @@ def load_birthdays():
 # Initial load
 load_persistence()
 load_birthdays()
+
+def parse_smart_date(date_str: str):
+    """
+    Parses date string (DD-MM-YYYY or DD-MM).
+    Smartly detects Jalali if year < 1700.
+    Returns: (g_y, g_m, g_d, j_y, j_m, j_d, is_jalali)
+    """
+    try:
+        # Normalize separators
+        date_str = date_str.replace("/", "-").replace(".", "-")
+        parts = [int(p) for p in date_str.split("-") if p.isdigit()]
+        
+        if len(parts) == 2:
+            # Format: DD-MM -> Default Year 2000 (Gregorian)
+            # Assumption: Input is Day-Month
+            d, m = parts[0], parts[1]
+            y = 2000 
+            # Note: We defaulting to Gregorian 2000 which is a Leap Year.
+            # If user entered 31-06 (31 Shahrivar), this is valid Jalali but invalid Gregorian (June has 30 days).
+            # To be safe, let's try creating a date. If invalid Gregorian, assume it's Jalali 1380 (also Leap safe?).
+            # Actually, simpler: just return Gregorian 2000. If invalid datetime, catch it.
+            
+        elif len(parts) == 3:
+            if parts[0] > 1000:
+                # Format: YYYY-MM-DD
+                y, m, d = parts[0], parts[1], parts[2]
+            else:
+                 # Format: DD-MM-YYYY
+                d, m, y = parts[0], parts[1], parts[2]
+        else:
+            return None
+
+        # Logic to return
+        if y < 1700:
+            # JALALI
+            j_date = jdatetime.date(y, m, d)
+            g_date = j_date.togregorian()
+            return (g_date.year, g_date.month, g_date.day, y, m, d, True)
+        else:
+            # GREGORIAN
+            from datetime import date
+            # Validate existence
+            date(y, m, d)
+            return (y, m, d, None, None, None, False)
+            
+    except Exception as e:
+        logger.error(f"Date Parse Error ({date_str}): {e}")
+        return None
 
 def get_user_limit(user_id: int) -> int:
     """Get user's daily request limit."""
@@ -1202,6 +1251,14 @@ MESSAGES = {
             "📄 **جزئیات تحلیل**\n"
             "اگر توضیحات بیشتر خواستید، روی نتیجه تحلیل ریپلای کنید:\n"
             "`/detail`\n\n"
+            "🎂 **تولد** (`/birthday`)\n"
+            "ثبت و تبریک تولد:\n"
+            "▫️ افزودن (ریپلای روی کاربر یا آیدی):\n"
+            "`/birthday add [تاریخ]`\n"
+            "▫️ تبریک دستی:\n"
+            "`/birthday wish [نام] [تاریخ]`\n"
+            "▫️ چک کردن لیست:\n"
+            "`/birthday check`\n\n"
             "━━━━━━━━━━━━━━"
         ),
         "help_msg_mono": (
@@ -1235,6 +1292,11 @@ MESSAGES = {
             "📄 **جزئیات**\n"
             "```\n"
             "/detail       -> (Reply)\n"
+            "```\n"
+            "🎂 **تولد**\n"
+            "```\n"
+            "/birthday add -> (Reply)\n"
+            "/birthday wish-> Manual\n"
             "```\n"
             "━━━━━━━━━━━━━━"
         ),
@@ -1351,6 +1413,10 @@ MESSAGES = {
             "💰 **Currency & Gold (/price):**\n"
             "   • Live USD, EUR, Gold 18k rates\n"
             "   • Gold parity & market gap analysis\n\n"
+            "🎂 **Birthday (/birthday):**\n"
+            "   • Add: `/birthday add <date>` (Reply to user)\n"
+            "   • Wish: `/birthday wish <name> <date>`\n"
+            "   • Check: `/birthday check`\n\n"
             "━━━━━━━━━━━━━━"
         ),
         "help_msg_mono": (
@@ -1384,6 +1450,11 @@ MESSAGES = {
             "📄 **Details**\n"
             "```\n"
             "/detail       -> (Reply)\n"
+            "```\n"
+            "🎂 **Birthday**\n"
+            "```\n"
+            "/birthday add -> (Reply)\n"
+            "/birthday wish-> Manual\n"
             "```\n"
             "━━━━━━━━━━━━━━"
         ),
@@ -1502,6 +1573,10 @@ MESSAGES = {
             "💰 **Devises & Or (/price):**\n"
             "   • Taux USD, EUR, Or 18k en direct\n"
             "   • Analyse de parité et écart du marché\n\n"
+            "🎂 **Anniversaire (/birthday):**\n"
+            "   • Ajout: `/birthday add <date>` (Répondre)\n"
+            "   • Vœux: `/birthday wish <nom> <date>`\n"
+            "   • Liste: `/birthday check`\n\n"
             "━━━━━━━━━━━━━━"
         ),
         "help_msg_mono": (
@@ -1535,6 +1610,11 @@ MESSAGES = {
             "📄 **Détails**\n"
             "```\n"
             "/detail       -> (Répondre)\n"
+            "```\n"
+            "🎂 **Anniversaire**\n"
+            "```\n"
+            "/birthday add -> (Reply)\n"
+            "/birthday wish-> Manuel\n"
             "```\n"
             "━━━━━━━━━━━━━━"
         ),
@@ -1650,6 +1730,10 @@ MESSAGES = {
             "   • 언어: fa, en, fr, ko (kr)\n\n"
             "📄 **분석 상세:**\n"
             "   • /detail - 전체 분석\n\n"
+            "🎂 **생일 (/birthday):**\n"
+            "   • 추가: `/birthday add <날짜>` (답장)\n"
+            "   • 축하: `/birthday wish <이름> <날짜>`\n"
+            "   • 확인: `/birthday check`\n\n"
             "━━━━━━━━━━━━━━"
         ),
         "help_msg_mono": (
@@ -1683,6 +1767,11 @@ MESSAGES = {
             "📄 **상세정보**\n"
             "```\n"
             "/detail       -> (답장)\n"
+            "```\n"
+            "🎂 **생일**\n"
+            "```\n"
+            "/birthday add -> (답장)\n"
+            "/birthday wish-> 수동\n"
             "```\n"
             "━━━━━━━━━━━━━━"
         ),
@@ -1837,7 +1926,8 @@ async def safe_delete(message):
     if not message: return
     try:
         await message.delete()
-    except Exception:
+    except Exception as e:
+        print(f"⚠️ Delete Failed: {e}")  # DEBUG: Show why delete failed (usually permissions)
         pass
 
 async def reply_with_countdown(update: Update, context, text: str, delay: int = 60, **kwargs):
@@ -2672,6 +2762,34 @@ async def cmd_help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     await reply_and_delete(update, context, get_msg("help_msg", user_id), delay=60, parse_mode='Markdown')
 
+def get_month_theme(month: int, is_jalali: bool = False) -> str:
+    """Returns a visual theme string for the month."""
+    if is_jalali:
+        themes = {
+            1: "Spring nature, cherry blossoms, Aries zodiac",      # Farvardin
+            2: "Green meadows, Taurus zodiac, spring breeze",      # Ordibehesht
+            3: "Gemini zodiac, late spring flowers, sunny",        # Khordad
+            4: "Summer heat, Cancer zodiac, beach vibes",          # Tir
+            5: "Hot summer, Leo zodiac, golden sun, sunflowers",   # Mordad
+            6: "End of summer, Virgo zodiac, harvest time",        # Shahrivar
+            7: "Autumn, orange leaves, Libra zodiac, cozy",        # Mehr
+            8: "Rainy autumn, Scorpio zodiac, pomegranates",       # Aban
+            9: "Late autumn, Sagittarius zodiac, fire and cold",   # Azar
+            10: "Winter snow, Capricorn zodiac, festive",          # Dey
+            11: "Deep winter, Aquarius zodiac, ice crystals",      # Bahman
+            12: "Late winter, Pisces zodiac, melting snow"         # Esfand
+        }
+    else:
+        themes = {
+            1: "Winter, Capricorn/Aquarius, snow", 2: "Winter, Aquarius/Pisces, ice",
+            3: "Spring, Pisces/Aries, green grass", 4: "Spring, Aries/Taurus, rain",
+            5: "Spring, Taurus/Gemini, flowers", 6: "Summer, Gemini/Cancer, sun",
+            7: "Summer, Cancer/Leo, beach", 8: "Summer, Leo/Virgo, heat",
+            9: "Autumn, Virgo/Libra, leaves", 10: "Autumn, Libra/Scorpio, pumpkins",
+            11: "Autumn, Scorpio/Sagittarius, rain", 12: "Winter, Sagittarius/Capricorn, snow"
+        }
+    return themes.get(month, "Festive colorful party")
+
 # ==============================================================================
 # PROCESSED HANDLERS (DEBUGGING ADDED)
 # ==============================================================================
@@ -2685,14 +2803,43 @@ async def cmd_birthday_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     /birthday scan (Admin Only - Scans group members)
     """
     user = update.effective_user
+    chat = update.effective_chat
+    is_private = chat.type == "private"
+    
+    # helper for smart response
+    async def smart_reply(text: str):
+        """Replies in PV, logs only in Group."""
+        if is_private:
+            await context.bot.send_message(chat_id=chat.id, text=text, parse_mode='Markdown')
+        else:
+            # Group: Log only
+            print(f"🤐 Silent Response: {text}")
+
+    # 1. Delete command message ONLY if in Group (Keep in PV)
+    if not is_private:
+        await safe_delete(update.message)
+
+    # 2. ALWAYS Log the attempt
+    logger.info(f"🎂 Birthday CMD Triggered by User: {user.id} ({user.first_name}) | Private: {is_private}")
+    print(f"DEBUG: Birthday CMD by {user.id}")
+
+    # 3. Security Check: Only Admin executes logic
+    if user.id != SETTINGS["admin_id"]:
+        print(f"⛔ Ignore: User {user.id} is not Admin.")
+        return
+
+    # 4. Proceed for Admin
     chat_id = update.effective_chat.id
     args = context.args
+    print(f"DEBUG: Birthday Triggered by {user.id}") # HARD DEBUG
+    logger.info(f"DEBUG: Handler Entry {user.id}")
     
     if not args:
-        await reply_and_delete(update, context, "🎂 استفاده: /birthday [add | check | scan]", delay=10)
+        await smart_reply("🎂 استفاده: /birthday [add | check | scan]")
         return
 
     subcmd = args[0].lower()
+    logger.info(f"🎂 Birthday CMD: {subcmd} | User: {user.id} | Admin: {SETTINGS['admin_id']}")
     
     # --- ADD ---
     if subcmd == "add":
@@ -2700,10 +2847,10 @@ async def cmd_birthday_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         # OR (Reply): /birthday add 17-10-1981
         
         is_reply = bool(update.message.reply_to_message)
-        min_args = 2 if is_reply else 3
+        min_args = 2 # Always 2 args minimum: add <date> (reply) OR add <user> <date>
         
         if len(args) < min_args:
-             await reply_and_delete(update, context, "⚠️ قالب: /birthday add [@username] DD-MM-YYYY", delay=10)
+             await smart_reply("⚠️ قالب: /birthday add [@username] DD-MM-YYYY")
              return
             
         if is_reply and len(args) == 2:
@@ -2713,67 +2860,82 @@ async def cmd_birthday_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             target_username = args[1]
             date_str = args[2]
         
-        try:
-            # Parse Date
-            if "-" in date_str: parts = date_str.split("-")
-            elif "/" in date_str: parts = date_str.split("/")
-            else: raise ValueError
-            
-            day, month, year = int(parts[0]), int(parts[1]), int(parts[2])
-            
-            target_id = None
-            
-            # Try to resolve user from reply
-            if update.message.reply_to_message:
-                target_user = update.message.reply_to_message.from_user
-                target_id = target_user.id
-                target_username = f"@{target_user.username}" if target_user.username else target_user.first_name
-            
-            # If manually entered @username matches an existing user in persistence
-            # (Limitation: we can't search telegram users by username via API easily)
-            # For now, if no reply, we rely on Admin providing a valid ID or just store with a dummy ID (not recommended)
-            # Let's enforce Reply or ID usage for now.
-            if not target_id:
-                 # Check if the text passed is numeric ID
-                 if target_username.isdigit():
-                     target_id = int(target_username)
-                     target_username = f"User {target_id}"
-                 else:
-                     await reply_and_delete(update, context, "⚠️ لطفاً روی پیام کاربر مورد نظر ریپلای کنید تا آیدی دقیق ثبت شود.", delay=15)
-                     return
+        parsed = parse_smart_date(date_str)
+        if not parsed:
+             await smart_reply("🚫 فرمت تاریخ اشتباه است. (DD-MM-YYYY or YYYY-MM-DD)")
+             return
 
-            BIRTHDAYS[target_id] = {
-                "day": day,
-                "month": month,
-                "year": year,
-                "username": target_username,
-                "chat_id": chat_id 
-            }
-            save_birthdays()
+        g_y, g_m, g_d, j_y, j_m, j_d, is_jalali = parsed
             
-            await reply_and_delete(update, context, f"✅ تولد {target_username} ثبت شد: {year}/{month}/{day}", delay=10)
+        target_id = None
             
-        except ValueError:
-            await reply_and_delete(update, context, "🚫 فرمت تاریخ اشتباه است. (DD-MM-YYYY)", delay=10)
+        # Try to resolve user from reply
+        if update.message.reply_to_message:
+            target_user = update.message.reply_to_message.from_user
+            target_id = target_user.id
+            target_username = f"@{target_user.username}" if target_user.username else target_user.first_name
+        
+        if not target_id:
+                # Check if the text passed is numeric ID
+                if target_username.isdigit():
+                    target_id = int(target_username)
+                    target_username = f"User {target_id}"
+                else:
+                    # SMART LOOKUP: Check if we already have this username in DB with a Real ID
+                    clean_target = target_username.strip().replace("@", "").lower()
+                    found_real_id = None
+                    
+                    for uid, data in BIRTHDAYS.items():
+                        # Only check Real IDs (positive)
+                        if uid > 0:
+                            db_uname = data.get("username", "").strip().replace("@", "").lower()
+                            if db_uname == clean_target:
+                                found_real_id = uid
+                                break
+                    
+                    if found_real_id:
+                        target_id = found_real_id
+                        logger.info(f"✅ Resolved {target_username} to existing ID {target_id}")
+                    else:
+                        # Manual Add (Synthetic ID)
+                        target_id = -abs(hash(target_username))
+                        await smart_reply(f"⚠️ کاربر یافت نشد. استفاده از آیدی مجازی: {target_id}")
+
+        target_data = {
+            "day": g_d,
+            "month": g_m,
+            "year": g_y,
+            "username": target_username,
+            "chat_id": chat_id,
+            "is_jalali": is_jalali
+        }
+        if is_jalali:
+            target_data["jalali_date"] = [j_y, j_m, j_d]
+
+        BIRTHDAYS[target_id] = target_data
+        save_birthdays()
+        
+        display_date = f"{j_y}/{j_m}/{j_d} (شمسی)" if is_jalali else f"{g_y}/{g_m}/{g_d} (میلادی)"
+        await smart_reply(f"✅ تولد {target_username} ثبت شد: {display_date}")
             
     # --- CHECK ---
     elif subcmd == "check":
         if not BIRTHDAYS:
-            await reply_and_delete(update, context, "📭 لیست تولدها خالی است.", delay=10)
+            await smart_reply("📭 لیست تولدها خالی است.")
             return
 
         msg_text = "🎂 **لیست تولدها:**\n\n"
         for uid, data in BIRTHDAYS.items():
             msg_text += f"👤 {data['username']}: {data['day']}/{data['month']}/{data['year']}\n"
         
-        await reply_and_delete(update, context, msg_text, delay=30)
+        await smart_reply(f"📊 تولدهای ثبت شده:\n{msg_text}")
 
     # --- WISH (Manual) ---
     elif subcmd == "wish":
         # Usage: /birthday wish Name [Date]
         # Example: /birthday wish Ali 17-10 (or 17-10-1981)
         if len(args) < 2:
-            await reply_and_delete(update, context, "⚠️ قالب: /birthday wish Name [DD-MM]", delay=10)
+            await smart_reply("⚠️ قالب: /birthday wish Name [DD-MM]")
             return
             
         target_name = args[1]
@@ -2784,50 +2946,56 @@ async def cmd_birthday_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         month_num = now.month
         
         # Parse Date if provided
+                # Parse Date if provided
+        save_required = False
+        is_jalali = False
+        
         if len(args) >= 3:
             date_input = args[2]
-            try:
-                # Support DD-MM and DD-MM-YYYY
-                if "-" in date_input: parts = date_input.split("-")
-                elif "/" in date_input: parts = date_input.split("/")
-                else: 
-                     # Fallback check for single number (legacy support)
-                     if date_input.isdigit() and 1 <= int(date_input) <= 12:
-                         parts = [1, int(date_input)] # Dummy day
-                     else:
-                        raise ValueError
-
-                if len(parts) >= 2:
-                    month_num = int(parts[1])
-                    if not (1 <= month_num <= 12): raise ValueError
-                    
-                    # Store Logic (User Requested):
-                    # We need a unique ID. Since these are manual, we generate a synthetic ID.
-                    # Use negative hash of name to avoid collision with real Telegram IDs.
-                    # We default year to 2000 if not provided.
-                    wish_day = int(parts[0])
-                    wish_year = int(parts[2]) if len(parts) > 2 else 2000
-                    
-                    synthetic_id = -abs(hash(target_name)) 
-                    BIRTHDAYS[synthetic_id] = {
-                        "day": wish_day,
-                        "month": month_num,
-                        "year": wish_year,
-                        "username": target_name,
-                        "chat_id": chat_id, # Celebrate in this chat
-                        "type": "manual"
-                    }
-                    save_birthdays()
-                    
-                else: 
-                     raise ValueError
+            parsed = parse_smart_date(date_input)
+            
+            if parsed:
+                 g_y, g_m, g_d, j_y, j_m, j_d, is_jalali = parsed
+                 
+                 # Use relevant month for personalization logic
+                 month_num = j_m if is_jalali else g_m
+                 
+                 # Store Logic
+                 synthetic_id = -abs(hash(target_name))
+                 
+                 target_data = {
+                    "day": g_d,
+                    "month": g_m,
+                    "year": g_y,
+                    "username": target_name,
+                    "chat_id": chat_id,
+                    "type": "manual",
+                    "is_jalali": is_jalali
+                 }
+                 if is_jalali:
+                     target_data["jalali_date"] = [j_y, j_m, j_d]
                      
-            except ValueError:
-                await reply_and_delete(update, context, "⚠️ فرمت تاریخ نامعتبر! مثال: 17-10", delay=10)
+                 BIRTHDAYS[synthetic_id] = target_data
+                 save_required = True
+            else:
+                await smart_reply("⚠️ فرمت تاریخ نامعتبر! مثال: 17-10-1370")
                 return
+        else:
+            # No date provided -> Use Today (Ad-hoc Wish)
+            # Just to determine month for theme
+            # We assume current month (Solar or Gregorian based on locale? defaulting to Solar for Iranians usually)
+            import jdatetime
+            j_now = jdatetime.date.fromgregorian(date=now.date())
+            month_num = j_now.month
+            is_jalali = True # Assume Jalali theme for ad-hoc
+            save_required = False # Do not save
 
-        # Send Acknowledgement
-        status_msg = await update.message.reply_text(f"🎂 تولد **{target_name}** ثبت شد و جشن در حال آماده‌سازی است... (ماه {month_num})", parse_mode='Markdown')
+        if save_required:
+             save_birthdays()
+             save_birthdays()
+
+        # Status: Log (or PV reply)
+        await smart_reply(f"🎉 در حال آماده‌سازی جشن برای {target_name}...")
         
         try:
              # Personalization
@@ -2837,71 +3005,111 @@ async def cmd_birthday_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                 9: "Sep/Shahrivar", 10: "Oct/Mehr", 11: "Nov/Aban", 12: "Dec/Azar"
             }
             month_name = month_names.get(month_num, "Unknown")
+            visual_theme = get_month_theme(month_num, is_jalali)
             
-            # A) Generate User Image (Flux)
-            encoded_name = urllib.parse.quote(target_name)
-            image_prompt = f"Happy Birthday {encoded_name}, festive birthday party, delicious cake with text '{encoded_name}' written on it, cinematic lighting, 8k, hyperrealistic"
-            image_url = f"https://image.pollinations.ai/prompt/{image_prompt}?model=flux&width=1024&height=1024&nologo=true"
-            
-            # B) Generate Caption (Gemini)
+            # B) Generate Content (Gemini) - Structured
+            # We ask for JSON to get both the Persian Wish and the English Transliteration for the Image
             caption = f"🎂 **تولدت مبارک {target_name}!** 🎉\n\n"
+            english_name_for_img = target_name # Fallback
+            
             try:
                 model = ChatGoogleGenerativeAI(model="gemini-2.0-flash-exp", google_api_key=GEMINI_API_KEY)
                 prompt = (
-                    f"Write a short, exciting birthday wish in Persian for a user named '{target_name}'. "
-                    f"They are born in month {month_num} ({month_name}). "
-                    f"Mention one positive personality trait associated with this month playfully. "
-                    f"Use emojis. Keep it under 300 characters."
+                    f"I need a birthday wish for user '{target_name}' (born in month {month_name}).\n"
+                    f"Include a short, fun fact about people born in this month.\n"
+                    f"Respond with valid JSON only: {{ \"wish\": \"Persian wish with emojis + fun fact\", \"english_name\": \"Transliterated name in English for image generation\" }}"
                 )
                 response = await model.invoke(prompt)
-                caption += response.content
+                
+                # cleaner parsing
+                import json
+                text_resp = response.content.replace('```json', '').replace('```', '').strip()
+                data = json.loads(text_resp)
+                
+                caption += data.get("wish", "تولدت مبارک!")
+                english_name_for_img = data.get("english_name", target_name)
+                
+                
+                
             except Exception as e:
                 logger.error(f"Gemini Wish Error: {e}")
                 caption += "امیدواریم سالی پر از موفقیت و شادی داشته باشی! 🥳"
 
-            # C) Send Access
-            # Send Image
-            await context.bot.send_photo(
-                chat_id=chat_id,
-                photo=image_url,
-                caption=caption,
-                parse_mode="Markdown"
+            # A) Generate User Image (Flux) - Robust Download
+            # Sanitize Text for Flux (Flux cannot render Persian)
+            text_on_cake = english_name_for_img
+            if not text_on_cake.isascii():
+                logger.warning(f"⚠️ Name '{text_on_cake}' is non-ASCII. Using generic text.")
+                text_on_cake = "HAPPY BIRTHDAY" # Generic fallback
+            else:
+                text_on_cake = text_on_cake.upper() # Uppercase is easier for AI
+            
+            logger.info(f"🎨 Generating Image for: {english_name_for_img} | Text: {text_on_cake} | Theme: {visual_theme}")
+            image_prompt_text = (
+                f"Happy Birthday {english_name_for_img}, {visual_theme} theme, "
+                f"delicious cake with text '{text_on_cake}' written on it, "
+                f"cinematic lighting, 8k, hyperrealistic"
             )
+            encoded_prompt = urllib.parse.quote(image_prompt_text)
+            image_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?model=flux&width=1024&height=1024&nologo=true"
             
-            # Send Audio
-            audio_path = Path("assets/birthday_song.mp3")
-            if audio_path.exists():
-                 await context.bot.send_audio(
+            # Download Image First (Avoid Telegram Timeout)
+            image_bytes = None
+            try:
+                async with httpx.AsyncClient(timeout=60.0) as client:
+                    resp = await client.get(image_url)
+                    if resp.status_code == 200:
+                        image_bytes = resp.content
+                    else:
+                        logger.error(f"Image Gen Failed: {resp.status_code}")
+            except Exception as img_err:
+                logger.error(f"Image Download Limit/Timeout: {img_err}")
+                await smart_reply("⚠️ تصویر ساخته نشد (کندی سرور)، اما جشن ادامه دارد! 🕯")
+
+            # C) Send Access
+            # 1. Send Image (if available)
+            if image_bytes:
+                await context.bot.send_photo(
                     chat_id=chat_id,
-                    audio=open(audio_path, "rb"),
-                    title=f"Happy Birthday {target_name}"
-                 )
+                    photo=image_bytes,
+                    caption=caption,
+                    parse_mode="Markdown"
+                )
+            else:
+                # Fallback: Just text
+                await context.bot.send_message(chat_id=chat_id, text=caption, parse_mode="Markdown")
             
-            await safe_delete(status_msg)
+            # 2. Send Audio (Decoupled check)
+            try:
+                audio_path = Path("assets/birthday_song.mp3")
+                if audio_path.exists():
+                     await context.bot.send_audio(
+                        chat_id=chat_id,
+                        audio=open(audio_path, "rb"),
+                        title=f"Happy Birthday {english_name_for_img}",
+                        performer="Su6i Yar"
+                     )
+            except Exception as audio_err:
+                logger.error(f"Audio Send Error: {audio_err}")
+            
+            # Cleanup moved to log
             
         except Exception as e:
+            await smart_reply(f"❌ خطا در جشن: {e}")
             logger.error(f"Manual Wish Error: {e}")
-            await status_msg.edit_text(f"❌ خطا: {e}")
             
-    # --- SCAN (Best Effort) ---
-    elif subcmd == "scan":
-        # ... (Existing scan logic placeholder or simple message)
-        await reply_and_delete(update, context, "🔍 اسکن پروفایل‌ها (محدودیت API): این قابلیت هنوز کامل نیست.", delay=10)
-        msg_text = "📅 **لیست تولدها:**\n\n"
-        sorted_bdays = sorted(BIRTHDAYS.items(), key=lambda x: (x[1]['month'], x[1]['day']))
-        
-        for uid, data in sorted_bdays:
-            msg_text += f"👤 {data['username']}: {data['day']}/{data['month']}\n"
-            
-        await update.message.reply_text(msg_text, parse_mode="Markdown")
-
     # --- SCAN ---
     elif subcmd == "scan":
+        logger.info(f"🔍 Scan requested by {user.id}")
         if user.id != SETTINGS["admin_id"]:
-            await reply_and_delete(update, context, get_msg("only_admin"), delay=5)
-            return
+             logger.warning(f"⛔ Access Denied: User {user.id} != Admin {SETTINGS['admin_id']}")
+             # For unauthorized, we already logged and returned at start of handler, but this block is redundant now.
+             # Removing logic to rely on the top-level check.
+             pass
 
-        status_msg = await update.message.reply_text("⚠️ اسکن کامل اعضا توسط ربات محدودیت دارد. سیستم **کشف خودکار** فعال است و به محض فعالیت کاربران، بیوگرافی آنها بررسی خواهد شد.")
+        # Scan is limitation-bound
+        msg_scan = "⚠️ **وضعیت اسکن:**\n\nسیستم **کشف خودکار** فعال است. با فعالیت کاربران در گروه، اطلاعات آنها (بیوگرافی/نام) به مرور بررسی می‌شود."
+        await smart_reply(msg_scan)
 
 
 async def cmd_start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -3998,6 +4206,142 @@ def extract_link_from_text(entities, text_content):
     return None
 
 
+async def check_birthdays_job(context: ContextTypes.DEFAULT_TYPE):
+    """Daily job to check birthdays (Jalali & Gregorian)"""
+    from datetime import datetime
+    import jdatetime
+    
+    now = datetime.now()
+    j_now = jdatetime.date.fromgregorian(date=now.date())
+    
+    # Iterate and Check
+    for uid, data in BIRTHDAYS.items():
+        is_match = False
+        
+        # Check Jalali
+        if data.get("is_jalali"):
+            # Check against Jalali Date
+            jd = data.get("jalali_date", [0, 0, 0]) # [y, m, d]
+            if jd[1] == j_now.month and jd[2] == j_now.day:
+                is_match = True
+        else:
+            # Check Gregorian
+            if data["month"] == now.month and data["day"] == now.day:
+                is_match = True
+        
+        if is_match:
+            try:
+                chat_id = data.get("chat_id")
+                target_name = data["username"]
+                
+                # Determine visual month
+                v_month = jd[1] if data.get("is_jalali") else data["month"]
+                visual_theme = get_month_theme(v_month, is_jalali=data.get("is_jalali", False))
+                month_names = {
+                    1: "Jan/Dey", 2: "Feb/Bahman", 3: "Mar/Esfand", 4: "Apr/Farvardin", 
+                    5: "May/Ordibehesht", 6: "Jun/Khordad", 7: "Jul/Tir", 8: "Aug/Mordad", 
+                    9: "Sep/Shahrivar", 10: "Oct/Mehr", 11: "Nov/Aban", 12: "Dec/Azar"
+                }
+                month_name = month_names.get(v_month, "Unknown")
+                
+                # Prepare Caption with Mention
+                mention_link = target_name
+                if uid > 0:
+                    mention_link = f"[{target_name}](tg://user?id={uid})"
+                
+                caption = f"🎂 **تولدت مبارک {mention_link}!** 🎉\n\n"
+                english_name_for_img = target_name
+
+                # Gemini Generation
+                try:
+                    model = ChatGoogleGenerativeAI(model="gemini-2.0-flash-exp", google_api_key=GEMINI_API_KEY)
+                    prompt = (
+                        f"I need a birthday wish for user '{target_name}' (born in month {month_name}).\n"
+                        f"Include a random interesting fact about this month.\n"
+                        f"Respond with valid JSON only: {{ \"wish\": \"Persian wish with emojis + fun fact\", \"english_name\": \"Transliterated name\" }}"
+                    )
+                    response = await model.invoke(prompt)
+                    import json
+                    text_resp = response.content.replace('```json', '').replace('```', '').strip()
+                    jdata = json.loads(text_resp)
+                    caption += jdata.get("wish", "تولدت مبارک!")
+                    english_name_for_img = jdata.get("english_name", target_name)
+                except Exception as e:
+                    logger.error(f"Auto Wish Gemini Error: {e}")
+                    caption += "امیدواریم سالی پر از موفقیت داشته باشی! 🥳"
+
+                # Image Generation
+                # Sanitize Text for Flux
+                text_on_cake = english_name_for_img
+                if not text_on_cake.isascii():
+                    text_on_cake = "HAPPY BIRTHDAY"
+                else:
+                    text_on_cake = text_on_cake.upper()
+                
+                logger.info(f"🎨 Generating Image for: {english_name_for_img} | Text: {text_on_cake} | Theme: {visual_theme}")
+                image_prompt_text = (
+                    f"Happy Birthday {english_name_for_img}, {visual_theme} theme, "
+                    f"delicious cake with text '{text_on_cake}' written on it, "
+                    f"cinematic lighting, 8k, hyperrealistic"
+                )
+                encoded_prompt = urllib.parse.quote(image_prompt_text)
+                image_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?model=flux&width=1024&height=1024&nologo=true"
+
+                # Download Image First (Robustness)
+                image_bytes = None
+                try:
+                    async with httpx.AsyncClient(timeout=60.0) as client:
+                        resp = await client.get(image_url)
+                        if resp.status_code == 200:
+                            image_bytes = resp.content
+                except Exception as img_err:
+                     logger.error(f"Job Image Download Failed: {img_err}")
+
+                # 1. SEND PRIVATE WISH (If Real User)
+                if uid > 0:
+                    try:
+                         if image_bytes:
+                            await context.bot.send_photo(chat_id=uid, photo=image_bytes, caption=caption, parse_mode="Markdown")
+                         else:
+                            await context.bot.send_message(chat_id=uid, text=caption, parse_mode="Markdown")
+                         logger.info(f"✅ Private wish sent to {uid}")
+                    except Exception as pv_err:
+                        logger.warning(f"⚠️ Could not send private wish to {uid} (Block/NotStarted): {pv_err}")
+
+                # 2. SEND GROUP WISH (If Member)
+                if chat_id:
+                    should_send_group = True
+                    if uid > 0:
+                        try:
+                            member = await context.bot.get_chat_member(chat_id=chat_id, user_id=uid)
+                            if member.status in ['left', 'kicked', 'restricted']:
+                                logger.info(f"🚫 Skipping Group Wish for {uid}: User is {member.status}")
+                                should_send_group = False
+                        except Exception as group_err:
+                            logger.warning(f"⚠️ Membership check failed for {uid} in {chat_id}: {group_err}")
+                            should_send_group = False
+                    
+                    if should_send_group:
+                        if image_bytes:
+                             await context.bot.send_photo(chat_id=chat_id, photo=image_bytes, caption=caption, parse_mode="Markdown")
+                        else:
+                             await context.bot.send_message(chat_id=chat_id, text=caption, parse_mode="Markdown")
+                        
+                        # Audio (Robust)
+                        try:
+                            audio_path = Path("assets/birthday_song.mp3")
+                            if audio_path.exists():
+                                 await context.bot.send_audio(chat_id=chat_id, audio=open(audio_path, "rb"), title=f"HBD {english_name_for_img}", performer="Su6i Yar")
+                        except Exception as aud_err:
+                             logger.error(f"Job Audio Error: {aud_err}")
+                
+            except Exception as e:
+                logger.error(f"Birthday Job Error for {uid}: {e}")
+                
+            except Exception as e:
+                logger.error(f"Birthday Job Error for {uid}: {e}")
+
+
 def main():
     # Quiet httpx noise
     logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -4007,15 +4351,43 @@ def main():
     #     print("❌ Error: TELEGRAM_BOT_TOKEN not found in .env")
     #     return
 
-    print("🚀 Starting SmartBot Core...")
+    print("🚀 Starting SmartBot Core... (Build: FixScan_v2)") # Unique ID
+    
+    # DIAGNOSTIC: Check connection before polling
+    async def post_init(application):
+        bot = application.bot
+        print(f"⏳ Diagnostics: Checking Check connection to Telegram API...")
+        try:
+            me = await bot.get_me()
+            print(f"✅ Connection OK! Bot: @{me.username} (ID: {me.id})")
+            
+            print("🔄 Diagnostics: Clearing potential webhooks...")
+            await bot.delete_webhook(drop_pending_updates=False)
+            print("✅ Webhook Cleared. Ready to poll.")
+        except Exception as e:
+            print(f"\n❌❌❌ CONNECTION ERROR ❌❌❌\nCould not connect to Telegram: {e}\n⚠️ Please check your VPN/Proxy settings or TELEGRAM_BOT_TOKEN.\n")
+
     from telegram.ext import JobQueue
     app = (
         ApplicationBuilder()
         .token(TELEGRAM_TOKEN)
         .concurrent_updates(True)
         .job_queue(JobQueue())  # Enable JobQueue for countdown timers
+        .post_init(post_init)   # Register diagnostic hook
         .build()
     )
+    
+    # Schedule Daily Birthday Check (e.g., at 09:00 AM)
+    # Using run_repeating (every 24h)
+    from datetime import time
+    # Check every 60s for debugging? No, let's set a daily time.
+    # Note: timezone unaware usually uses server time.
+    app.job_queue.run_daily(check_birthdays_job, time(hour=9, minute=0))
+
+    # DEBUG: Catch-all command logger to verify if /birthday is even seen as a command
+    async def debug_any_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        print(f"🔹 COMMAND RECEIVED: {update.message.text} from {update.effective_user.id}")
+    app.add_handler(MessageHandler(filters.COMMAND, debug_any_command), group=-1)
 
     # Commands
     app.add_handler(CommandHandler("dl", cmd_download_handler))
@@ -4052,7 +4424,7 @@ def main():
     print("✅ Bot is Polling...")
     app.run_polling(
         allowed_updates=["message", "callback_query", "channel_post", "edited_channel_post"],  # Only listen to needed updates
-        drop_pending_updates=True,  # Ignore old messages on restart
+        drop_pending_updates=False,  # DEBUG: Don't drop updates
         close_loop=False  # Allow graceful shutdown
     )
 
