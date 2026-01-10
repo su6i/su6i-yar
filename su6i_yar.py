@@ -1083,15 +1083,22 @@ async def analyze_text_gemini(text, status_msg=None, lang_code="fa", user_id=Non
             f"You are a professional Fact-Check Assistant. Analyze the following text and provide your response STRICTLY in **{target_lang}**.\n\n"
 
             "🛑 STRICT RELEVANCE FILTER (CRITICAL):\n"
-            "You must FIRST decide: Is this text a verifiable FACTUAL CLAIM about an event, scientific fact, statistic, or news?\n"
-            "Output ONLY '|||IRRELEVANT|||' (and nothing else) if the text is:\n"
-            "1. An Opinion or Personal Belief (e.g., 'This is creativity, not cheating', 'X is bad').\n"
-            "2. A Joke, Sarcasm, or Common Saying.\n"
-            "3. A Greeting or Conversational filler.\n"
-            "4. A Rhetorical Question without a claim.\n"
-            "5. A General/Philosophical statement (e.g., 'Life is hard').\n\n"
-            "RULE: If you are unsure, or if it's just a debate topic without specific claims, treat it as IRRELEVANT.\n"
-            "ONLY proceed to fact-check if there is a specific, verifiable claim about reality.\n\n"
+            "You must internalize these 3 rules to decide if you need to output '|||IRRELEVANT|||':\n\n"
+            "#### 1. REJECTION CRITERIA (Mark as IRRELEVANT)\n"
+            "Reject the input if it falls into any of these categories:\n"
+            "* **Political Commentary & News Analysis:** Debates, opinions on government policies, or praising/criticizing politicians (e.g., 'Policy X is a failure').\n"
+            "* **Social & Cultural Criticism:** Rants or general statements about society and human behavior (e.g., 'People are lazier these days').\n"
+            "* **Personal Opinions & Beliefs:** Subjective claims, personal defenses, or 'I think/believe' statements.\n"
+            "* **Conversational Fillers:** Jokes, sarcasm, greetings, or rhetorical questions that do not seek a factual answer.\n"
+            "* **General/Philosophical Statements:** Abstract or existential claims (e.g., 'Life is a journey').\n\n"
+            "#### 2. ACCEPTANCE CRITERIA\n"
+            "Accept the input **ONLY** if it meets the following condition:\n"
+            "* The text makes a **specific, objective, and verifiable claim** regarding **Science, Medicine, History, or Statistics**.\n\n"
+            "#### 3. CORE RULES\n"
+            "* **Dominant Intent:** If the text is primarily political or social commentary, **REJECT IT** even if it contains minor factual references.\n"
+            "* **Threshold of Doubt:** If you are unsure whether a claim is verifiable or if it is just a debate topic, **REJECT IT as IRRELEVANT**.\n"
+            "* **Final Action:** Only proceed to fact-check if there is a concrete claim about reality that can be proven or disproven by evidence.\n\n"
+            "Output ONLY '|||IRRELEVANT|||' if rejection criteria are met.\n"
             "|||IRRELEVANT|||\n\n"
             "CRITICAL FORMATTING RULES:\n"
             "1. Your response MUST be split into TWO parts using: |||SPLIT|||\n"
@@ -1363,7 +1370,7 @@ MESSAGES = {
             "`{theoretical_tm}` تومان"
         ),
         "dl_usage_error": "⛔ لطفاً لینک اینستاگرام را بفرستید یا روی آن ریپلای کنید.",
-        "irrelevant_msg": "😐 آدم باش! این ربات برای بررسی مطالب علمی طراحی شده نه مسخره‌بازی."
+        "irrelevant_msg": "⚠️ این محتوا به نظر می‌رسد سیاسی، عقیدتی یا اجتماعی باشد. من فقط ادعاهای دقیق علمی، پزشکی و آماری را بررسی می‌کنم."
     },
     "en": {
         "welcome": (
@@ -1523,7 +1530,7 @@ MESSAGES = {
         ),
 
         "dl_usage_error": "⛔ Please provide an Instagram link or reply to one.",
-        "irrelevant_msg": "😐 Behave yourself! This bot is designed for scientific fact-checking, not for joking around."
+        "irrelevant_msg": "⚠️ This content appears to be political or opinion-based. I only verify specific scientific, medical, or statistical claims."
     },
     "fr": {
         "welcome": (
@@ -1682,7 +1689,7 @@ MESSAGES = {
             "Écart du Marché: `{diff}` Rial"
         ),
         "dl_usage_error": "⛔ Veuillez fournir un lien Instagram ou y répondre.",
-        "irrelevant_msg": "😐 Sois sérieux ! Ce robot est conçu pour la vérification scientifique, pas pour jouer."
+        "irrelevant_msg": "⚠️ Ce contenu semble être politique ou basé sur une opinion. Je ne vérifie que les affirmations scientifiques, médicales ou statistiques."
     },
     "ko": {
         "welcome": (
@@ -1839,7 +1846,7 @@ MESSAGES = {
             "시장 차이: `{diff}` 리알"
         ),
         "dl_usage_error": "⛔ 인스타그램 링크를 보내거나 답장하세요.",
-        "irrelevant_msg": "😐 진지하게 하세요! 이 봇은 과학적 사실 확인을 위해 설계되었지 장난치려고 만든 게 아닙니다."
+        "irrelevant_msg": "⚠️ 이 콘텐츠는 정치적/의견 기반인 것 같습니다. 구체적인 과학적 검증만 수행합니다."
     }
 }
 
