@@ -1924,8 +1924,52 @@ async def safe_delete(message):
     try:
         await message.delete()
     except Exception as e:
-        print(f"⚠️ Delete Failed: {e}")  # DEBUG: Show why delete failed (usually permissions)
+        # logger.warning(f"⚠️ Safe Delete Failed: {e}") 
         pass
+
+async def delete_scheduled_message(context: ContextTypes.DEFAULT_TYPE):
+    """
+    Job Queue Callback: Safely deletes a message.
+    Expects `context.job.data` to be a dict with `chat_id` and `message_id`.
+    """
+    job_data = context.job.data
+    chat_id = job_data.get("chat_id")
+    message_id = job_data.get("message_id")
+    
+    if not chat_id or not message_id:
+        return
+
+    try:
+        await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
+    except Exception as e:
+        # Log purely for debug, but don't crash
+        # logger.debug(f"⚠️ Scheduled Delete Failed for {message_id}: {e}")
+        pass
+
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Log the error and send a telegram message to notify the developer."""
+    logger.error("❌ Exception while handling an update:", exc_info=context.error)
+
+    # Optional: Notify Admin
+    admin_id = SETTINGS.get("admin_id")
+    if admin_id:
+        try:
+            tb_list = traceback.format_exception(None, context.error, context.error.__traceback__)
+            tb_string = "".join(tb_list)
+            
+            # Truncate if too long
+            if len(tb_string) > 3500:
+                tb_string = tb_string[-3500:]
+
+            message = (
+                f"🚨 **Bot Error Catch**\n"
+                f"Update: {update}\n"
+                f"Error: `{context.error}`\n\n"
+                f"Traceback:\n```python\n{tb_string}\n```"
+            )
+            await context.bot.send_message(chat_id=admin_id, text=message, parse_mode='Markdown')
+        except Exception as e:
+            logger.error(f"Failed to send error report to admin: {e}")
 
 async def reply_with_countdown(update: Update, context, text: str, delay: int = 60, **kwargs):
     """
@@ -1972,13 +2016,15 @@ async def reply_and_delete(update: Update, context: ContextTypes.DEFAULT_TYPE, t
     if msg.chat_id < 0:
         # Delete Bot's Reply
         context.job_queue.run_once(
-            lambda ctx: ctx.bot.delete_message(chat_id=msg.chat_id, message_id=reply_msg.message_id),
-            delay
+            delete_scheduled_message,
+            delay,
+            data={"chat_id": msg.chat_id, "message_id": reply_msg.message_id}
         )
         # Delete User's Command Message
         context.job_queue.run_once(
-            lambda ctx: ctx.bot.delete_message(chat_id=msg.chat_id, message_id=msg.message_id),
-            delay
+            delete_scheduled_message,
+            delay,
+            data={"chat_id": msg.chat_id, "message_id": msg.message_id}
         )
     return reply_msg
 
@@ -4370,6 +4416,9 @@ def main():
         .post_init(post_init)   # Register diagnostic hook
         .build()
     )
+    
+    # Register Global Error Handler
+    app.add_error_handler(error_handler)
     
     # Schedule Daily Birthday Check (e.g., at 09:00 AM)
     # Using run_repeating (every 24h)

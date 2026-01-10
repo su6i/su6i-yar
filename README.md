@@ -93,6 +93,7 @@ A powerful, intelligent Telegram bot that downloads Instagram videos, verifies f
 *   **Monospace Help Menus:** Clean, consistent help formatting across all 4 languages.
 *   **Smart Auto-Cleanup:** Informational messages auto-delete after 30-60s to keep group chats clean.
 *   **Cookie Upload Script:** `upload_cookie.py` for easy Instagram authentication management.
+*   **Enhanced Stability:** Global error handling and safe message deletion to prevent crashes.
 
 ---
 
