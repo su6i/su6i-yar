@@ -20,6 +20,8 @@ if command -v uv &> /dev/null; then
     echo "📥 Syncing dependencies..."
     # --frozen: never modify uv.lock, install exactly what's locked
     uv sync --frozen > /dev/null 2>&1 || uv pip install -r requirements.txt > /dev/null 2>&1
+    # Always use latest yt-dlp (YouTube breaks with old versions)
+    uv pip install --upgrade yt-dlp > /dev/null 2>&1
     
     # Ensure Playwright browsers + system deps are installed
     if [ ! -f ".venv/.playwright_installed" ]; then
