@@ -2642,15 +2642,25 @@ async def download_instagram(url, chat_id, bot, reply_to_message_id=None, custom
         ffmpeg_args = ["--ffmpeg-location", ffmpeg_bin] if ffmpeg_bin else []
         logger.info(f"🔧 ffmpeg: {ffmpeg_bin or 'not found — merge may fail'}")
 
-        # Locate node for yt-dlp JS runtime (needed for YouTube PO token / bot bypass)
+        # Locate node/deno for yt-dlp JS runtime (needed for YouTube PO token / bot bypass)
         node_bin = shutil.which("node") or shutil.which("nodejs")
         if not node_bin:
             # Playwright bundles node — use it
             playwright_node = venv_bin.parent / "lib" / f"python{sys.version_info.major}.{sys.version_info.minor}" / "site-packages" / "playwright" / "driver" / "node"
             if playwright_node.exists():
                 node_bin = str(playwright_node)
-        js_runtime_args = ["--js-runtimes", f"node:{node_bin}"] if node_bin else []
-        logger.info(f"🟨 node: {node_bin or 'not found — some YouTube formats may be unavailable'}")
+        deno_bin = shutil.which("deno") or str(Path.home() / ".deno" / "bin" / "deno") if not node_bin else None
+        if deno_bin and not Path(deno_bin).exists():
+            deno_bin = None
+        if node_bin:
+            js_runtime_args = ["--js-runtimes", f"node:{node_bin}"]
+            logger.info(f"🟨 JS runtime: node @ {node_bin}")
+        elif deno_bin:
+            js_runtime_args = ["--js-runtimes", f"deno:{deno_bin}"]
+            logger.info(f"🟨 JS runtime: deno @ {deno_bin}")
+        else:
+            js_runtime_args = []
+            logger.warning("🟥 No JS runtime found (node/deno) — YouTube formats may be unavailable")
 
         # Build format chain from max_height
         h = max_height
