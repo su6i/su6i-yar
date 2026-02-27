@@ -17,9 +17,9 @@ if command -v uv &> /dev/null; then
         uv venv .venv
     fi
     source .venv/bin/activate
-    # Smart Sync: UV is fast, so we can ensure deps are installed quickly
     echo "📥 Syncing dependencies..."
-    uv pip install -r requirements.txt > /dev/null 2>&1
+    # --frozen: never modify uv.lock, install exactly what's locked
+    uv sync --frozen > /dev/null 2>&1 || uv pip install -r requirements.txt > /dev/null 2>&1
     
     # Ensure Playwright browsers are installed
     if [ ! -f ".venv/.playwright_installed" ]; then
