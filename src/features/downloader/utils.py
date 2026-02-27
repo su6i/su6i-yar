@@ -278,15 +278,44 @@ async def download_video(url: str) -> Optional[Path]:
 
     # 1. Setup yt-dlp
     import sys
+    import shutil
     venv_bin = Path(sys.executable).parent
     yt_dlp_path = venv_bin / "yt-dlp"
     executable = str(yt_dlp_path) if yt_dlp_path.exists() else "yt-dlp"
 
-    # 2. Handle Cookies
+    # 2. Handle Cookies — check project root first, then STORAGE_DIR
     json_cookies = Path(STORAGE_DIR) / "cookies.json"
     netscape_cookies = Path(STORAGE_DIR) / "cookies.txt"
+    # Also check project root cookies.txt (deployed manually on server)
+    project_root_cookies = Path(__file__).parent.parent.parent.parent / "cookies.txt"
+    if project_root_cookies.exists() and not netscape_cookies.exists():
+        netscape_cookies = project_root_cookies
     if json_cookies.exists():
         convert_cookies_json_to_netscape(json_cookies, netscape_cookies)
+
+    # 3. JS runtime detection (needed for YouTube n-challenge via deno/node)
+    node_bin = shutil.which("node") or shutil.which("nodejs")
+    if not node_bin:
+        # Try playwright bundled node
+        playwright_node = venv_bin.parent / "lib" / f"python{sys.version_info.major}.{sys.version_info.minor}" / "site-packages" / "playwright" / "driver" / "node"
+        if playwright_node.exists():
+            node_bin = str(playwright_node)
+    deno_bin = None
+    if not node_bin:
+        deno_bin = shutil.which("deno") or str(Path.home() / ".deno" / "bin" / "deno")
+        if not Path(deno_bin).exists():
+            deno_bin = None
+    if node_bin:
+        js_runtime_args = ["--js-runtimes", f"node:{node_bin}"]
+    elif deno_bin:
+        js_runtime_args = ["--js-runtimes", f"deno:{deno_bin}"]
+    else:
+        js_runtime_args = []
+
+    # 4. YouTube-specific args (remote EJS solver for n-challenge)
+    yt_extra_args = []
+    if platform == "youtube":
+        yt_extra_args = ["--remote-components", "ejs:github"] + js_runtime_args
 
     cmd_base = [
         executable,
@@ -294,8 +323,7 @@ async def download_video(url: str) -> Optional[Path]:
         "-o", str(filename),
         "--write-info-json", "--no-playlist",
         "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
-        url
-    ]
+    ] + yt_extra_args + [url]
 
     cmd_cookies = list(cmd_base)
     if netscape_cookies.exists():

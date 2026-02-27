@@ -1,0 +1,21 @@
+[Unit]
+Description=Su6i Yar Telegram Bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=su6i
+WorkingDirectory=/home/su6i/su6i-yar
+ExecStart=/bin/bash /home/su6i/su6i-yar/run.sh
+Restart=on-failure
+RestartSec=10
+StandardOutput=append:/home/su6i/bot.log
+StandardError=append:/home/su6i/bot.log
+# Give deno path access
+Environment="PATH=/home/su6i/.deno/bin:/home/su6i/.local/bin:/usr/local/bin:/usr/bin:/bin"
+# Prevent old PID file from blocking restart
+ExecStartPre=/bin/bash -c 'PF="$HOME/.su6i-yar.pid"; [ -f "$PF" ] && OLD=$(cat "$PF") && kill -0 "$OLD" 2>/dev/null && kill "$OLD" && sleep 2; rm -f "$PF" || true'
+
+[Install]
+WantedBy=multi-user.target
