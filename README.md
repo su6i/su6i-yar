@@ -13,14 +13,20 @@ A powerful, intelligent Telegram bot that downloads Instagram videos, verifies f
 
 **Rewritten from scratch for speed, stability, and ease of use.**
 
+> 📖 **User Guide:** [English](docs/GUIDE_EN.md) · [فارسی](docs/GUIDE_FA.md)
 
 
 ## ✨ Key Features
 
 ### 📥 Smart Downloader (Triple-Fallback)
 *   **Success Guarantee:** Uses a 3-stage strategy (Anonymous -> Safari Cookies -> Cobalt API) to bypass Instagram blocks.
-*   **Telegram 50MB Limit Fix:** Automatically detects large files and scales resolution (1080p → 720p → 480p) to ensure the video always fits Telegram's bot limit.
-*   **Auto-Captions:** Extracts original captions and attaches them to the video.
+*   **Aspect Ratio Preservation:** Native vertical/horizontal preservation. No more distorted videos.
+*   **Telegram 50MB Limit Fix:** 🛡️ **Two-Pass Fail-Safe:** Automatically applies emergency compression if the video exceeds 49MB to ensure successful delivery.
+*   **Intelligent Ordering:**
+    *   **Series Mode:** Downloads from oldest to newest (1, 2, 3...) to preserve series continuity.
+    *   **Update Mode:** Downloads newest videos first (Last, Last-1...) using the `last` keyword.
+*   **Paragraph-Aware Captions:** Splits long captions at paragraph boundaries (`\n\n`) to preserve readability.
+*   **Auto-Captions:** Extracts original captions and attaches them to the video with `#ویدیو_N` numbering.
 *   **Manual Override:** `/dl` command to force download processing.
 *   **Hybrid Authentication:**
     *   **Local (Mac):** Seamlessly uses Safari browser cookies for personal/dev use.
@@ -231,8 +237,7 @@ sudo systemctl status su6i-yar
 | `/price`  | **Live Market:** Show currency and gold rates (alias: `/p`). |
 | `/help`  | Show instructions. |
 | `/detail` | Reply to analysis to get full scientific breakdown. |
-| `/dl` | Force download an Instagram link (reply or arg). **New:** Direct reply to video file to Compress & Fix. |
-| `/dl` | Force download an Instagram link (reply or arg). **New:** Direct reply to video file to Compress & Fix. |
+| `/dl` | Force download an Instagram link (reply or arg).<br>**Switches:**<br>`/dl [URL] all` (All videos, oldest first)<br>`/dl [URL] last 5` (5 newest videos)<br>`/dl [URL] 10` (10 videos, oldest first) |
 | `/birthday` | **Add:** `/birthday add @user <date>` (e.g. `17-10-1991` or `17-10`)<br>**Wish:** `/birthday wish <name>` (Instant)<br>**Check:** `/birthday check` |
 | `/stop`  | **(Admin Only)** Shutdown the bot. |
 

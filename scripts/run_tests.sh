@@ -4,10 +4,13 @@ echo "🚀 Running Su6i Yar Diagnostic Tests..."
 echo "======================================="
 
 # Ensure we are in the root directory
-cd "$(dirname "$0")"
+# Ensure we are in the root directory
+cd "$(dirname "$0")/.."
 
 # Activate Venv
-if [ -d "venv" ]; then
+if [ -d ".venv" ]; then
+    source .venv/bin/activate
+elif [ -d "venv" ]; then
     source venv/bin/activate
 else
     echo "⚠️  Virtual environment not found! Running with system python..."

@@ -130,17 +130,11 @@ DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
 PEXELS_API_KEY = os.getenv("PEXELS_API_KEY", "").strip()
 ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY", "").strip()
 
-# 3. Global Settings
-SETTINGS = {
-    "download": True,
-    "fact_check": False,
-    "min_fc_len": 200,
-    "lang": "fa",
-    "admin_id": int(TELEGRAM_CHAT_ID) if TELEGRAM_CHAT_ID else 0,
-    "public_mode": False,  # If True, anyone can use. If False, only whitelist.
-    "default_daily_limit": 10,  # Default daily AI requests for whitelisted users
-    "free_trial_limit": 3,  # Free requests for non-whitelisted users
-}
+from src.core.config import SETTINGS, STORAGE_DIR, LOGS_DIR, TEMP_DIR
+
+def get_storage_path(filename: str) -> str:
+    """Resolve storage path relative to ~/.su6i-yar/storage/"""
+    return os.path.join(STORAGE_DIR, filename)
 
 # Rate Limiting (per user)
 RATE_LIMIT = {}  # user_id -> last_request_time
@@ -167,8 +161,8 @@ USER_LANG = {}         # user_id -> "fa" | "en" | "fr" | "ko"
 SEARCH_FILE_ID = None  # Persistent telegram file_id for the status GIF
 BIRTHDAYS = {}         # user_id -> {"month": int, "day": int, "year": int, "username": str, "chat_id": int}
 
-PERSISTENCE_FILE = ".storage/user_data.json"
-BIRTHDAY_FILE = ".storage/birthdays.json"
+PERSISTENCE_FILE = get_storage_path("user_data.json")
+BIRTHDAY_FILE = get_storage_path("birthdays.json")
 
 def save_persistence():
     """Save user languages and daily usage to file."""

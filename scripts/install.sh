@@ -8,17 +8,23 @@ export LC_ALL=C.UTF-8
 export LC_CTYPE=C.UTF-8
 export LANG=C.UTF-8
 
-# 1. Environment Setup
-if [[ ! -d "venv" ]]; then
-    echo "📦 Creating Virtual Environment..."
-    python3 -m venv venv
+# 1. Environment Setup (UV Optimized)
+if command -v uv &> /dev/null; then
+    echo "⚡ Using 'uv' for fast & space-efficient installation..."
+    if [[ ! -d ".venv" ]]; then
+        uv venv .venv
+    fi
+    source .venv/bin/activate
+    uv pip install -r requirements.txt
+else
+    echo "⚠️ 'uv' not found. Fallback to standard python venv (Slower/More Disk Usage)."
+    if [[ ! -d "venv" ]]; then
+        python3 -m venv venv
+    fi
+    source venv/bin/activate
+    pip install -r requirements.txt
 fi
 
-source venv/bin/activate
-
-# 2. Dependencies
-echo "📥 Installing Dependencies..."
-pip install -r requirements.txt
 echo "✅ Python Dependencies Installed."
 
 # 2.1 System Dependencies Check (espeak-ng) - REMOVED (Not needed for Model 1/3)

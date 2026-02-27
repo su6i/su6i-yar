@@ -1,0 +1,29 @@
+---
+description: Python Bot Development Standards for Su6i Yar
+globs: "**/*.py"
+---
+# SushiYar Coding Standards
+
+This document defines the coding standards and best practices for the Su6i Yar project.
+
+## 1. Async & Typing
+- **Async/Await**: Always use `async/await` syntax for all Telegram Bot API methods and other I/O-bound operations.
+- **Type Hints**: All functions and methods MUST include precise Type Hints for arguments and return values.
+
+## 2. Error Management
+- **Scheduled Jobs**: All scheduled tasks (e.g., JobQueue callbacks) MUST be enclosed in a `try/except` block to prevent a single job failure from crashing the entire bot.
+- **Example**: Refer to `delete_scheduled_message` for proper error handling pattern in jobs.
+
+## 3. Security
+- **Secrets Management**: NEVER hardcode bot tokens, database passwords, or API keys directly in the code.
+- **Implementation**: Always use `os.getenv` or load from a `.env` file. Check for the existence of `.env.example`.
+
+## 4. Documentation
+- **Docstrings**: Provide clear explanations for functions and business logic using standard Python docstrings.
+- **Language**: Docstrings MUST be written in **English** to ensure clarity and maintainability for developers.
+
+## 5. Code Cleanup
+- **Pruning**: When modifying or refactoring code, always remove:
+    - Unused variables.
+    - Unused imports or libraries.
+    - Dead code or commented-out logic (unless strictly needed for temporary debugging).

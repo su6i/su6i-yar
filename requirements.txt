@@ -14,7 +14,9 @@ langchain-openai>=0.2.0
 # TTS (Text-to-Speech)
 edge-tts>=6.1.0
 aiofiles>=23.0.0
-# sherpa-onnx, onnx, numpy, soundfile removed for cleanup
+
+# Image Generation
+fal-client>=0.10.0
 
 # Scraping & Utilities
 httpx>=0.27.0
@@ -24,3 +26,5 @@ beautifulsoup4>=4.12.0
 watchdog>=4.0.0
 # Note: nodemon is a Node.js package, if you prefer it, install via: npm install -g nodemon
 jdatetime
+playwright>=1.40.0
+instaloader>=4.11.0
