@@ -1,17 +1,12 @@
 #!/bin/bash
 # 🚀 Smart Entry Point for Su6i Yar
 
-# ── Single-instance lock ──────────────────────────────────────
-PIDFILE="$HOME/.su6i-yar.pid"
-if [ -f "$PIDFILE" ]; then
-    OLD_PID=$(cat "$PIDFILE")
-    if kill -0 "$OLD_PID" 2>/dev/null; then
-        echo "⚠️  Already running (PID $OLD_PID). Kill it first: kill $OLD_PID"
-        exit 1
-    fi
+# ── Single-instance lock (pgrep-based — survives exec) ───────
+if pgrep -f "python.*src\.main" > /dev/null 2>&1; then
+    EXISTING=$(pgrep -f "python.*src\.main" | tr '\n' ' ')
+    echo "⚠️  Already running (PID $EXISTING). Run: pkill -f src.main"
+    exit 1
 fi
-echo $$ > "$PIDFILE"
-trap "rm -f '$PIDFILE'" EXIT
 # ─────────────────────────────────────────────────────────────
 
 # Check/Create Env File
@@ -94,4 +89,4 @@ fi
 
 # 4. Production Run
 echo "🚀 Launching Su6i Yar..."
-python -m src.main "$@"
+exec python -m src.main "$@"

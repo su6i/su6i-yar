@@ -274,7 +274,7 @@ async def download_video(url: str) -> Optional[Path]:
         url = url.split("?")[0]
 
     timestamp = int(asyncio.get_event_loop().time())
-    filename = Path(f"video_{timestamp}.mp4")
+    filename = Path(TEMP_DIR) / f"video_{timestamp}.mp4"
 
     # 1. Setup yt-dlp
     import sys
@@ -332,18 +332,18 @@ async def download_video(url: str) -> Optional[Path]:
 
     # Attempt 1: Cookies (prefer auth if available)
     if netscape_cookies.exists():
-        logger.info("📥 Attempt 1: Downloading with Cookies...")
+        logger.info(f"📥 Attempt 1: yt-dlp with cookies cmd: {' '.join(cmd_cookies[:6])}...")
         proc = await asyncio.create_subprocess_exec(*cmd_cookies, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        await proc.communicate()
+        stdout1, stderr1 = await proc.communicate()
+        logger.info(f"📥 Attempt 1 stderr: {stderr1.decode()[-800:]}")
         if filename.exists(): return filename
 
     # Attempt 2: Anonymous
-    logger.info("📥 Attempt 2: Downloading Anonymously...")
+    logger.info(f"📥 Attempt 2: yt-dlp anonymous cmd: {' '.join(cmd_base[:6])}...")
     proc = await asyncio.create_subprocess_exec(*cmd_base, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     stdout, stderr = await proc.communicate()
+    logger.error(f"❌ yt-dlp attempt 2 stderr: {stderr.decode()[-800:]}")
     if filename.exists(): return filename
-    else:
-        logger.error(f"❌ yt-dlp failed: {stderr.decode()}")
 
     # Attempt 3: Cobalt fallback (works for Instagram, YouTube, and many others)
     if await download_instagram_cobalt(url, filename):
