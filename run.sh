@@ -1,6 +1,19 @@
 #!/bin/bash
 # 🚀 Smart Entry Point for Su6i Yar
 
+# ── Single-instance lock ──────────────────────────────────────
+PIDFILE="$HOME/.su6i-yar.pid"
+if [ -f "$PIDFILE" ]; then
+    OLD_PID=$(cat "$PIDFILE")
+    if kill -0 "$OLD_PID" 2>/dev/null; then
+        echo "⚠️  Already running (PID $OLD_PID). Kill it first: kill $OLD_PID"
+        exit 1
+    fi
+fi
+echo $$ > "$PIDFILE"
+trap "rm -f '$PIDFILE'" EXIT
+# ─────────────────────────────────────────────────────────────
+
 # Check/Create Env File
 if [ ! -f ".env" ]; then
     echo "⚠️  .env file not found. Creating default..."
