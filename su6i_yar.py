@@ -2612,7 +2612,11 @@ async def download_instagram(url, chat_id, bot, reply_to_message_id=None, custom
         # Locate ffmpeg for merge operations
         ffmpeg_bin = shutil.which("ffmpeg")
         if not ffmpeg_bin:
-            for candidate in ["/opt/homebrew/bin/ffmpeg", "/usr/local/bin/ffmpeg"]:
+            for candidate in [
+                str(Path.home() / ".local/bin/ffmpeg"),
+                "/opt/homebrew/bin/ffmpeg",
+                "/usr/local/bin/ffmpeg",
+            ]:
                 if Path(candidate).exists():
                     ffmpeg_bin = candidate
                     break
