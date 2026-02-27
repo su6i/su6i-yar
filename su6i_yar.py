@@ -1951,6 +1951,24 @@ async def delete_scheduled_message(context: ContextTypes.DEFAULT_TYPE):
 
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Log the error and send a telegram message to notify the developer."""
+    from telegram.error import Conflict
+
+    # ── Conflict: another instance is already polling ────────────────────────
+    if isinstance(context.error, Conflict):
+        logger.warning(
+            "\n"
+            "╔══════════════════════════════════════════════════════╗\n"
+            "║  ⚠️  CONFLICT: یه اینستنس دیگه داره اجرا می‌شه!      ║\n"
+            "║                                                      ║\n"
+            "║  دو تا ربات با یه توکن نمی‌تونن همزمان poll کنن.    ║\n"
+            "║  این پروسه خودش رو می‌بنده — نیازی به ری‌استارت نیست ║\n"
+            "╚══════════════════════════════════════════════════════╝"
+        )
+        # gracefully stop this instance so the other one keeps running
+        asyncio.get_event_loop().call_soon(lambda: os.kill(os.getpid(), signal.SIGTERM))
+        return
+    # ────────────────────────────────────────────────────────────────────────
+
     logger.error("❌ Exception while handling an update:", exc_info=context.error)
 
     # Optional: Notify Admin
