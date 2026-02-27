@@ -50,7 +50,17 @@ else
     fi
 fi
 
-# 2. Check Suno Cookie (Headless friendly)
+# 2. YouTube Cookies check
+if [ ! -f "cookies.txt" ]; then
+    echo ""
+    echo "⚠️  cookies.txt not found — YouTube may block downloads."
+    echo "   روی مک خودت اجرا کن:"
+    echo "   yt-dlp --cookies-from-browser chrome --cookies /tmp/yt_cookies.txt 'https://youtube.com'"
+    echo "   scp /tmp/yt_cookies.txt su6i@89.167.55.129:~/su6i-yar/cookies.txt"
+    echo ""
+fi
+
+# 3. Check Suno Cookie (Headless friendly)
 if [ ! -f .storage/suno_cookie.json ]; then
      # Only launch if we have a display (not SSH) and not strictly headless
      if [[ -n "$DISPLAY" ]] || [[ "$OSTYPE" == "darwin"* ]]; then

@@ -2642,6 +2642,16 @@ async def download_instagram(url, chat_id, bot, reply_to_message_id=None, custom
         ffmpeg_args = ["--ffmpeg-location", ffmpeg_bin] if ffmpeg_bin else []
         logger.info(f"🔧 ffmpeg: {ffmpeg_bin or 'not found — merge may fail'}")
 
+        # Locate node for yt-dlp JS runtime (needed for YouTube PO token / bot bypass)
+        node_bin = shutil.which("node") or shutil.which("nodejs")
+        if not node_bin:
+            # Playwright bundles node — use it
+            playwright_node = venv_bin.parent / "lib" / f"python{sys.version_info.major}.{sys.version_info.minor}" / "site-packages" / "playwright" / "driver" / "node"
+            if playwright_node.exists():
+                node_bin = str(playwright_node)
+        js_runtime_args = ["--js-runtimes", f"node:{node_bin}"] if node_bin else []
+        logger.info(f"🟨 node: {node_bin or 'not found — some YouTube formats may be unavailable'}")
+
         # Build format chain from max_height
         h = max_height
         fmt = (
@@ -2656,18 +2666,19 @@ async def download_instagram(url, chat_id, bot, reply_to_message_id=None, custom
             "-f", fmt,
             "--merge-output-format", "mp4",
             "--extractor-args", "youtube:player_client=ios,mweb",
+            *js_runtime_args,
             *ffmpeg_args,
             "-o", str(filename),
             "--write-info-json",
             "--no-playlist",
             url
         ]
-        
-        # 3. Cookies if available
+
+        # 3. Cookies if available (required for YouTube bot-check bypass)
         cookie_file = Path("cookies.txt")
         if cookie_file.exists():
-            cmd.insert(1, str(cookie_file))
-            cmd.insert(1, "--cookies")
+            cmd.extend(["--cookies", str(cookie_file)])
+            logger.info("🍪 Using cookies.txt for authentication")
 
         # 4. Run Download (1st Attempt: Anonymous)
         logger.info(f"📥 Attempt 1: Downloading {url} anonymously...")
