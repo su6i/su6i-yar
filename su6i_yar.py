@@ -2665,7 +2665,7 @@ async def download_instagram(url, chat_id, bot, reply_to_message_id=None, custom
             executable,
             "-f", fmt,
             "--merge-output-format", "mp4",
-            "--extractor-args", "youtube:player_client=ios,mweb",
+            "--remote-components", "ejs:github",
             *js_runtime_args,
             *ffmpeg_args,
             "-o", str(filename),
