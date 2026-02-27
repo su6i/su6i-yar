@@ -21,10 +21,13 @@ if command -v uv &> /dev/null; then
     # --frozen: never modify uv.lock, install exactly what's locked
     uv sync --frozen > /dev/null 2>&1 || uv pip install -r requirements.txt > /dev/null 2>&1
     
-    # Ensure Playwright browsers are installed
+    # Ensure Playwright browsers + system deps are installed
     if [ ! -f ".venv/.playwright_installed" ]; then
         echo "🌐 Installing browser binaries (Playwright)..."
         playwright install chromium
+        echo "📦 Installing Playwright system dependencies..."
+        sudo playwright install-deps chromium 2>/dev/null || \
+            sudo apt-get install -y libnspr4 libnss3 2>/dev/null || true
         touch .venv/.playwright_installed
     fi
 else

@@ -2655,6 +2655,7 @@ async def download_instagram(url, chat_id, bot, reply_to_message_id=None, custom
             executable,
             "-f", fmt,
             "--merge-output-format", "mp4",
+            "--extractor-args", "youtube:player_client=tv,web",
             *ffmpeg_args,
             "-o", str(filename),
             "--write-info-json",
@@ -2727,6 +2728,7 @@ async def download_instagram(url, chat_id, bot, reply_to_message_id=None, custom
                         f"best[height<={fallback_h}]/best"
                     )
                     cmd_fb = [executable, "-f", fallback_fmt, "--merge-output-format", "mp4",
+                              "--extractor-args", "youtube:player_client=tv,web",
                               *ffmpeg_args, "-o", str(filename), "--no-playlist", url]
                     proc_fb = await asyncio.create_subprocess_exec(
                         *cmd_fb, stdout=subprocess.PIPE, stderr=subprocess.PIPE
