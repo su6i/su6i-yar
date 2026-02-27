@@ -1,6 +1,8 @@
 import os
 import re
 import sys
+import shutil
+import traceback
 import asyncio
 import logging
 from typing import Optional
@@ -2586,9 +2588,9 @@ async def generate_thumbnail(video_path: Path) -> Optional[Path]:
         logger.error(f"Thumbnail generation failed: {e}")
         return None
 
-async def download_instagram(url, chat_id, bot, reply_to_message_id=None, custom_caption_header=None):
-    """Download and send video using yt-dlp with multi-stage fallback (Anonymous -> Cookies -> Cobalt)"""
-    logger.info(f"🚀 [Chat {chat_id}] Initialization of Instagram download for: {url}")
+async def download_instagram(url, chat_id, bot, reply_to_message_id=None, custom_caption_header=None, max_height: int = 480):
+    """Download and send video via yt-dlp. max_height controls quality ceiling (default 480p)."""
+    logger.info(f"🚀 [Chat {chat_id}] Downloading (max {max_height}p): {url}")
     
     # Clean URL: only strip query params for Instagram (YouTube needs ?v=)
     if "?" in url and "instagram.com" in url:
@@ -2603,7 +2605,6 @@ async def download_instagram(url, chat_id, bot, reply_to_message_id=None, custom
         logger.debug(f"📂 Temp files initialized: {filename}, {info_file}")
         
         # 2. Command - use absolute path if in venv
-        import sys, shutil
         venv_bin = Path(sys.executable).parent
         yt_dlp_path = venv_bin / "yt-dlp"
         executable = str(yt_dlp_path) if yt_dlp_path.exists() else "yt-dlp"
@@ -2623,15 +2624,18 @@ async def download_instagram(url, chat_id, bot, reply_to_message_id=None, custom
         ffmpeg_args = ["--ffmpeg-location", ffmpeg_bin] if ffmpeg_bin else []
         logger.info(f"🔧 ffmpeg: {ffmpeg_bin or 'not found — merge may fail'}")
 
+        # Build format chain from max_height
+        h = max_height
+        fmt = (
+            f"best[height<={h}][ext=mp4]/"
+            f"bestvideo[height<={h}][ext=mp4]+bestaudio[ext=m4a]/"
+            f"bestvideo[height<={h}][ext=webm]+bestaudio[ext=webm]/"
+            f"bestvideo[height<={h}]+bestaudio/"
+            f"best[height<={h}]/best"
+        )
         cmd = [
             executable,
-            # Format chain: pre-merged mp4 first (no ffmpeg needed),
-            # then merge variants for YouTube (require ffmpeg)
-            "-f", "best[height<=1080][ext=mp4]/"
-                  "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/"
-                  "bestvideo[height<=1080][ext=webm]+bestaudio[ext=webm]/"
-                  "bestvideo[height<=1080]+bestaudio/"
-                  "best[height<=1080]/best",
+            "-f", fmt,
             "--merge-output-format", "mp4",
             *ffmpeg_args,
             "-o", str(filename),
@@ -2688,50 +2692,39 @@ async def download_instagram(url, chat_id, bot, reply_to_message_id=None, custom
             logger.info(f"📊 Final file downloaded. Size: {filesize_mb:.2f} MB")
             
             if filesize > 50 * 1024 * 1024:
-                logger.error(f"🚫 File size ({filesize_mb:.2f}MB) exceeds Telegram Bot API limit (50MB).")
-                
-                # Attempt 3: Try compressed resolution (720p or lower)
-                if "[height<=1080]" in str(cmd):
-                    logger.info("📉 Attempt 3: Retrying with lower resolution (720p)...")
-                    filename.unlink()
-                    cmd_720 = [executable, "-f", "bestvideo[ext=mp4][height<=720]+bestaudio[ext=m4a]/best[ext=mp4][height<=720]/best", "-o", str(filename), "--no-playlist", url]
-                    process = await asyncio.create_subprocess_exec(*cmd_720, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                    await process.communicate()
-                    
+                logger.error(f"\U0001f6ab File size ({filesize_mb:.2f}MB) exceeds Telegram 50MB limit.")
+
+                # Step-down: try progressively lower quality until it fits
+                step_downs = [h2 for h2 in [720, 480, 360, 240] if h2 < max_height]
+                if not step_downs:
+                    step_downs = [360, 240]
+                fitted = False
+                for fallback_h in step_downs:
+                    logger.info(f"\U0001f4c9 Retrying at {fallback_h}p...")
+                    filename.unlink(missing_ok=True)
+                    fallback_fmt = (
+                        f"best[height<={fallback_h}][ext=mp4]/"
+                        f"bestvideo[height<={fallback_h}][ext=mp4]+bestaudio[ext=m4a]/"
+                        f"bestvideo[height<={fallback_h}]+bestaudio/"
+                        f"best[height<={fallback_h}]/best"
+                    )
+                    cmd_fb = [executable, "-f", fallback_fmt, "--merge-output-format", "mp4",
+                              *ffmpeg_args, "-o", str(filename), "--no-playlist", url]
+                    proc_fb = await asyncio.create_subprocess_exec(
+                        *cmd_fb, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+                    )
+                    await proc_fb.communicate()
                     if filename.exists():
-                        filesize = filename.stat().st_size
-                        filesize_mb = filesize / 1024 / 1024
-                        logger.info(f"📊 Compressed (720p) file size: {filesize_mb:.2f} MB")
-                        if filesize <= 50 * 1024 * 1024:
-                             logger.info("✅ 720p is within limits. Proceeding to send...")
-                        else:
-                            logger.info("📉 Attempt 4: Retrying with 480p...")
-                            filename.unlink()
-                            cmd_480 = [executable, "-f", "bestvideo[ext=mp4][height<=480]+bestaudio[ext=m4a]/best[ext=mp4][height<=480]/best", "-o", str(filename), "--no-playlist", url]
-                            process = await asyncio.create_subprocess_exec(*cmd_480, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                            await process.communicate()
-                            
-                            if filename.exists():
-                                filesize = filename.stat().st_size
-                                filesize_mb = filesize / 1024 / 1024
-                                logger.info(f"📊 Compressed (480p) file size: {filesize_mb:.2f} MB")
-                                if filesize <= 50 * 1024 * 1024:
-                                     logger.info("✅ 480p is within limits. Proceeding to send...")
-                                else:
-                                     logger.error("🚫 Even 480p is too large.")
-                                     filename.unlink()
-                                     if info_file.exists(): info_file.unlink()
-                                     return "TOO_LARGE"
-                            else:
-                                logger.error("❓ 480p download failed to produce a file.")
-                                return False
-                    else:
-                        logger.error("❓ 720p download failed to produce a file.")
-                        return False
-                
-                else:
-                    # Still too big or already tried 720
-                    filename.unlink()
+                        new_size_mb = filename.stat().st_size / 1024 / 1024
+                        logger.info(f"\U0001f4ca {fallback_h}p size: {new_size_mb:.1f}MB")
+                        if new_size_mb <= 50:
+                            logger.info(f"\u2705 {fallback_h}p fits. Proceeding.")
+                            filesize_mb = new_size_mb
+                            fitted = True
+                            break
+                if not fitted:
+                    logger.error("\U0001f6ab All step-down qualities still exceed 50MB.")
+                    filename.unlink(missing_ok=True)
                     if info_file.exists(): info_file.unlink()
                     return "TOO_LARGE"
         else:
@@ -3225,16 +3218,29 @@ async def cmd_download_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     target_video = None
     
     if context.args:
-        target_link = context.args[0]
+        # Parse: /dl <url> [quality]  OR  /dl <quality>  (when replying to a message)
+        first = context.args[0]
+        if first.isdigit():
+            # /dl 720  — user is replying; quality only
+            quality = int(first)
+            target_link = ""
+        else:
+            target_link = first
+            quality = int(context.args[1]) if len(context.args) > 1 and context.args[1].isdigit() else 480
+        # Clamp to nearest supported value
+        quality = min([240, 360, 480, 720, 1080], key=lambda q: abs(q - quality))
     elif msg.reply_to_message:
+        quality = 480
         # Check for Video File in Reply
         r = msg.reply_to_message
         if r.video: target_video = r.video
         elif r.document and r.document.mime_type and r.document.mime_type.startswith("video/"):
             target_video = r.document
-            
+
         target_link = r.text or r.caption or ""
         reply_to_id = r.message_id
+    else:
+        quality = 480
     
     # 2. Handle Video File Processing (Direct File)
     if target_video:
@@ -3336,7 +3342,8 @@ async def cmd_download_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     
     # 5. Execute Download
     try:
-        success = await download_instagram(target_link, msg.chat_id, context.bot, reply_to_message_id=reply_to_id)
+        success = await download_instagram(target_link, msg.chat_id, context.bot,
+                                           reply_to_message_id=reply_to_id, max_height=quality)
         if success == "TOO_LARGE":
             if not IS_DEV: await safe_delete(status_msg)
             await reply_and_delete(update, context, get_msg("err_too_large", user_id), delay=15)
@@ -3534,7 +3541,9 @@ async def global_message_handler(update: Update, context: ContextTypes.DEFAULT_T
             get_msg("downloading", user_id),
             reply_to_message_id=msg.message_id
         )
-        success = await download_instagram(text, msg.chat_id, context.bot, msg.message_id, custom_caption_header=f"📥 {platform}")
+        success = await download_instagram(text, msg.chat_id, context.bot, msg.message_id,
+                                           custom_caption_header=f"📥 {platform}",
+                                           max_height=480)
         if success == "TOO_LARGE":
             await status_msg.edit_text(get_msg("err_too_large", user_id))
             if not IS_DEV:
