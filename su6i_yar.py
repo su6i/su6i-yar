@@ -2590,12 +2590,11 @@ async def download_instagram(url, chat_id, bot, reply_to_message_id=None, custom
     """Download and send video using yt-dlp with multi-stage fallback (Anonymous -> Cookies -> Cobalt)"""
     logger.info(f"🚀 [Chat {chat_id}] Initialization of Instagram download for: {url}")
     
-    # Clean URL (Remove tracking parameters for better compatibility)
-    if "?" in url:
+    # Clean URL: only strip query params for Instagram (YouTube needs ?v=)
+    if "?" in url and "instagram.com" in url:
         original_url = url
         url = url.split("?")[0]
-        logger.info(f"🧹 URL cleaned: '{original_url}' -> '{url}'")
-        
+        logger.info(f"🧹 Instagram URL cleaned: '{original_url}' -> '{url}'")
     try:
         # 1. Filename setup
         timestamp = int(asyncio.get_event_loop().time())
@@ -3497,21 +3496,26 @@ async def global_message_handler(update: Update, context: ContextTypes.DEFAULT_T
         os.kill(os.getpid(), signal.SIGKILL)
         return
 
-    # --- 2. INSTAGRAM LINK CHECK ---
-    if "instagram.com" in text:
+    # --- 2. SUPPORTED VIDEO LINK CHECK (Instagram / YouTube / Aparat) ---
+    def _detect_platform(u: str) -> str:
+        for domain, name in [("instagram.com", "Instagram"), ("youtu.be", "YouTube"),
+                              ("youtube.com", "YouTube"), ("aparat.com", "Aparat")]:
+            if domain in u: return name
+        return ""
+    platform = _detect_platform(text)
+    if platform:
         if not SETTINGS["download"]:
             await msg.reply_text("⚠️ " + get_msg("dl_off", user_id))
             return
-            
+
         status_msg = await msg.reply_text(
             get_msg("downloading", user_id),
             reply_to_message_id=msg.message_id
         )
-        
-        success = await download_instagram(text, msg.chat_id, context.bot, msg.message_id)
+        success = await download_instagram(text, msg.chat_id, context.bot, msg.message_id, custom_caption_header=f"📥 {platform}")
         if success == "TOO_LARGE":
             await status_msg.edit_text(get_msg("err_too_large", user_id))
-            if not IS_DEV: 
+            if not IS_DEV:
                 async def del_msg(ctx): await safe_delete(status_msg)
                 context.job_queue.run_once(del_msg, 15)
         elif success:
