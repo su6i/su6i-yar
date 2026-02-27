@@ -2321,12 +2321,12 @@ async def download_instagram_cobalt(url: str, filename: Path) -> bool:
         # Strategy: Prioritize known-good community instances
         # Source: https://instances.cobalt.best & https://cobalt.directory
         instances = [
-            "https://coapi.kelig.me/api/json",         # v7 style
-            "https://cobalt.meowing.de",              # High reliability
-            "https://cobalt.pub",                     # Community 1
-            "https://api.cobalt.kwiatekmiki.pl",      # Community 2
-            "https://cobalt.hyperr.net",              # Community 3
-            "https://cobalt.kuba2k2.com"             # Additional Community
+            "https://api.cobalt.tools",               # Official (may need API key)
+            "https://cobalt.api.timelessnesses.me",   # Community - v10
+            "https://cobalt.privacyredirect.com",     # Privacy-friendly mirror
+            "https://cobalt.tnix.dev",                # Community
+            "https://co.wuk.sh",                      # Original legacy
+            "https://cobalt.synzr.space",             # Community
         ]
         
         # Enhanced headers to mimic browser
@@ -2603,19 +2603,36 @@ async def download_instagram(url, chat_id, bot, reply_to_message_id=None, custom
         logger.debug(f"📂 Temp files initialized: {filename}, {info_file}")
         
         # 2. Command - use absolute path if in venv
-        import sys
+        import sys, shutil
         venv_bin = Path(sys.executable).parent
         yt_dlp_path = venv_bin / "yt-dlp"
         executable = str(yt_dlp_path) if yt_dlp_path.exists() else "yt-dlp"
         logger.info(f"🛠️ Using yt-dlp executable: {executable}")
-        
+
+        # Locate ffmpeg for merge operations
+        ffmpeg_bin = shutil.which("ffmpeg")
+        if not ffmpeg_bin:
+            for candidate in ["/opt/homebrew/bin/ffmpeg", "/usr/local/bin/ffmpeg"]:
+                if Path(candidate).exists():
+                    ffmpeg_bin = candidate
+                    break
+        ffmpeg_args = ["--ffmpeg-location", ffmpeg_bin] if ffmpeg_bin else []
+        logger.info(f"🔧 ffmpeg: {ffmpeg_bin or 'not found — merge may fail'}")
+
         cmd = [
             executable,
-            "-f", "bestvideo[ext=mp4][height<=1080]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+            # Format chain: pre-merged mp4 first (no ffmpeg needed),
+            # then merge variants for YouTube (require ffmpeg)
+            "-f", "best[height<=1080][ext=mp4]/"
+                  "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/"
+                  "bestvideo[height<=1080][ext=webm]+bestaudio[ext=webm]/"
+                  "bestvideo[height<=1080]+bestaudio/"
+                  "best[height<=1080]/best",
+            "--merge-output-format", "mp4",
+            *ffmpeg_args,
             "-o", str(filename),
             "--write-info-json",
             "--no-playlist",
-            # Remove --max-filesize to avoid silent skips with exit code 0
             url
         ]
         
@@ -2637,8 +2654,9 @@ async def download_instagram(url, chat_id, bot, reply_to_message_id=None, custom
         if process.returncode != 0 or not filename.exists():
             err_msg = stderr.decode()
             out_msg = stdout.decode()
-            logger.warning(f"⚠️ Attempt 1 failed (Code {process.returncode}, File: {filename.exists()}): {err_msg[:300]}")
-            if out_msg: logger.debug(f"Attempt 1 stdout: {out_msg[:300]}")
+            logger.warning(f"⚠️ Attempt 1 failed (Code {process.returncode}, File: {filename.exists()})")
+            logger.error(f"yt-dlp stderr: {err_msg[:500]}")
+            if out_msg: logger.debug(f"yt-dlp stdout: {out_msg[:300]}")
 
             # 4.5 Attempt 2: With Browser Cookies (Safari)
             logger.info("📥 Attempt 2: Retrying with Safari cookies...")
