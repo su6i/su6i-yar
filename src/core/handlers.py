@@ -17,17 +17,26 @@ from src.utils.text_tools import get_msg, extract_link_from_text
 from src.utils.telegram import reply_and_delete, safe_delete, reply_with_countdown
 
 from src.features.utility.utils import get_status_text, get_main_keyboard
-from src.features.downloader.utils import download_instagram, download_video, detect_platform
+from src.features.downloader.utils import download_instagram, download_video, detect_platform, CookieExpiredError
 from src.features.fact_check.utils import smart_reply, LAST_ANALYSIS_CACHE
 from src.features.voice.utils import text_to_speech
 from src.features.finance.handlers import cmd_price_handler
 from src.services.gemini import analyze_text_gemini
 
+# Cache for auto-resuming downloads after cookie update
+PENDING_AUTH_URLS = {}
+
 async def global_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """MASTER HANDLER: Processes ALL text messages"""
     msg = update.effective_message
-    if not msg or not msg.text: return
-    text = msg.text.strip()
+    
+    # Allow other handlers to trigger the global pipeline with custom text
+    override = context.user_data.pop("override_text", None) if context.user_data else None
+    raw_text = override or (msg.text if msg else None)
+    
+    if not raw_text: return
+    text = raw_text.strip()
+    
     user = update.effective_user
     user_id = user.id
     
@@ -37,6 +46,49 @@ async def global_message_handler(update: Update, context: ContextTypes.DEFAULT_T
     lang = USER_LANG[user_id]
 
     logger.info(f"📨 Message received request from {user.id} ({lang})")
+
+    # --- 0. AUTH COOKIE INGESTION (Text Paste) ---
+    if user_id == SETTINGS.get("admin_id"):
+        # Check if the text broadly looks like an EditThisCookie export
+        if '"domain"' in text and '"expirationDate"' in text:
+            import re
+            # Greedy match to capture the full array from first [ to last ]
+            json_match = re.search(r'\[\s*\{.*\}\s*\]', text, re.DOTALL)
+            if json_match:
+                try:
+                    from pathlib import Path
+                    from src.core.config import STORAGE_DIR
+                    from src.features.downloader.utils import convert_cookies_json_to_netscape
+                    
+                    json_candidate = json_match.group(0)
+                    cookies = json.loads(json_candidate)
+                    
+                    if isinstance(cookies, list) and len(cookies) > 0 and "domain" in cookies[0] and "value" in cookies[0]:
+                        status_msg = await msg.reply_text("📥 در حال پردازش کوکی‌های متنی (EditThisCookie)...")
+                        json_path = Path(STORAGE_DIR) / "cookies.json"
+                        txt_path = Path(STORAGE_DIR) / "cookies.txt"
+                        
+                        with open(json_path, "w", encoding="utf-8") as f:
+                            json.dump(cookies, f)
+                        
+                        convert_cookies_json_to_netscape(json_path, txt_path)
+                        logger.info(f"🍪 Converted pasted text to netscape cookies.txt")
+                        
+                        # Auto-resume download if a URL was pending
+                        pending_url = PENDING_AUTH_URLS.pop(user_id, None)
+                        if pending_url:
+                            await status_msg.edit_text("✅ کوکی‌های متنی شما با موفقیت نصب شد!\n\n🚀 در حال تلاش مجدد برای دانلود ویدیوی قبلی...")
+                            context.user_data["override_text"] = pending_url
+                            await global_message_handler(update, context)
+                        else:
+                            await status_msg.edit_text("✅ کوکی‌های متنی شما (EditThisCookie) با موفقیت شناسایی، تبدیل و روی موتور نصب شد!\n\n🚀 حالا می‌توانید لینک ویدیوی قبلی را دوباره بفرستید.")
+                        return
+                except Exception as e:
+                    logger.debug(f"Matches JSON but failed to process cookies: {e}")
+            
+            # If we reach here, it looks exactly like a cookie text but failed to parse (e.g. truncated)
+            await msg.reply_text("⚠️ این متن شبیه فایل کوکی است اما ساختار JSON آن نامعتبر یا ناقص است (احتمالاً به دلیل محدودیت طول پیام در تلگرام کات شده).\n\nدر این شرایط لطفاً کوکی‌ها را مستقیماً به عنوان فایل `.txt` یا `.json` (Document) بفرستید.")
+            return
 
     # --- 1. MENU COMMANDS (Check by Emoji/Start) --- 
     
@@ -146,25 +198,40 @@ async def global_message_handler(update: Update, context: ContextTypes.DEFAULT_T
             reply_to_message_id=msg.message_id
         )
 
-        path = await download_video(text)
-        success = False
-        if path and path.exists():
-            try:
-                await msg.reply_video(
-                    video=open(path, 'rb'),
-                    caption=f"🎥 {platform_label} | @Su6i_Yar_Bot",
-                    supports_streaming=True,
-                    reply_to_message_id=msg.message_id
-                )
-                success = True
-                path.unlink()
-            except Exception as e:
-                logger.error(f"Send Video Error ({platform_label}): {e}")
+        try:
+            path = await download_video(text)
+            success = False
+            if path and path.exists():
+                try:
+                    await msg.reply_video(
+                        video=open(path, 'rb'),
+                        caption=f"🎥 {platform_label} | @Su6i_Yar_Bot",
+                        supports_streaming=True,
+                        reply_to_message_id=msg.message_id
+                    )
+                    success = True
+                    path.unlink()
+                except Exception as e:
+                    logger.error(f"Send Video Error ({platform_label}): {e}")
 
-        if success:
-            if not IS_DEV: await safe_delete(status_msg)
-        else:
-            await status_msg.edit_text(get_msg("err_dl", user_id))
+            if success:
+                if not IS_DEV: await safe_delete(status_msg)
+            else:
+                await status_msg.edit_text(get_msg("err_dl", user_id))
+        except CookieExpiredError as e:
+            logger.warning(f"Auth Blocked: {e}")
+            PENDING_AUTH_URLS[user_id] = text # Save the URL to try again automatically
+            
+            await status_msg.edit_text(
+                "⚠️ **هشدار امنیتی: انقضای کوکی‌های سرور**\n\n"
+                "سایت مدنظر دسترسی ربات را به خاطر سیستم‌های **ضد بات** (Anti-Bot) مسدود کرده است.\n\n"
+                "🛡️ **راه‌حل:** افزونه‌ی `EditThisCookie` را روی مرورگر دسکتاپ خود نصب کنید. در تب یوتیوب روی افزونه کلیک کرده و خروجیِ فایل را به صورت داکیومنت (`.json`) در همین بات بفرستید.\n"
+                "💡 **یا حتی راحت‌تر:** متن کپی شده‌یِ افزونه را مستقیماً همینجا در چت پِیست (Paste) کنید!\n\n"
+                "_اگر ادمین نیستید، لطفاً این موضوع را به ادمین اطلاع دهید._\n\n"
+                f"**DIAGNOSTICS:**\n`{str(e)}`",
+                parse_mode=ParseMode.MARKDOWN
+            )
+
         return
 
     # --- 3. AI ANALYSIS (Fallback) ---
