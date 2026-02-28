@@ -145,11 +145,6 @@ def main():
         (filters.PHOTO | filters.Document.IMAGE) & ~filters.CAPTION,
         amir_album_continuation_handler,
     ))
-    # Album continuation: uncaptioned photos that are part of a tracked media group
-    app.add_handler(MessageHandler(
-        (filters.PHOTO | filters.Document.IMAGE) & ~filters.CAPTION,
-        amir_album_continuation_handler,
-    ))
     
     # --- Message Handlers ---
     

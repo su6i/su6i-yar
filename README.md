@@ -145,7 +145,7 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 
 # 3. Run the bot
-python3 su6i_yar.py
+python3 -m src.main
 ```
 
 > **Important:** The bot will only work while your computer is running. Close the terminal = bot stops.
@@ -194,7 +194,7 @@ After=network.target
 User=your_user
 Group=your_user
 WorkingDirectory=/path/to/su6i-yar
-ExecStart=/path/to/su6i-yar/venv/bin/python su6i_yar.py
+ExecStart=/path/to/su6i-yar/venv/bin/python -m src.main
 Restart=always
 RestartSec=10
 

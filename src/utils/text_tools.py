@@ -1,4 +1,5 @@
 from src.core.database import USER_LANG
+import re
 
 LANG_ALIASES = {
     "fa": "fa", "persian": "fa", "farsi": "fa",

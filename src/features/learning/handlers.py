@@ -157,7 +157,15 @@ async def cmd_learn_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             
             ai_resp = await chain.ainvoke(educational_prompt)
-            raw_text = ai_resp.content.replace('```json', '').replace('```', '').strip()
+            import re
+            
+            # Extract JSON block even if preceded/followed by text
+            match = re.search(r'\{.*\}', ai_resp.content, re.DOTALL)
+            if match:
+                raw_text = match.group(0)
+            else:
+                raw_text = ai_resp.content.replace('```json', '').replace('```', '').strip()
+                
             data = json.loads(raw_text)
             
             slides = data.get("slides", [])

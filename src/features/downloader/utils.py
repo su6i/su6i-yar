@@ -1,8 +1,9 @@
-import asyncio
+import os
 import json
+import httpx
+import asyncio
 import logging
 import subprocess
-import httpx
 from pathlib import Path
 from typing import Optional, Union
 from datetime import datetime
@@ -294,17 +295,27 @@ async def download_video(url: str) -> Optional[Path]:
         convert_cookies_json_to_netscape(json_cookies, netscape_cookies)
 
     # 3. JS runtime detection (needed for YouTube n-challenge via deno/node)
-    node_bin = shutil.which("node") or shutil.which("nodejs")
-    if not node_bin:
+    node_bin = shutil.which("node") or shutil.which("nodejs") or "/usr/bin/node" or "/usr/local/bin/node"
+    if not Path(node_bin).exists():
+        node_bin = None
         # Try playwright bundled node
         playwright_node = venv_bin.parent / "lib" / f"python{sys.version_info.major}.{sys.version_info.minor}" / "site-packages" / "playwright" / "driver" / "node"
         if playwright_node.exists():
             node_bin = str(playwright_node)
+            
     deno_bin = None
     if not node_bin:
-        deno_bin = shutil.which("deno") or str(Path.home() / ".deno" / "bin" / "deno")
-        if not Path(deno_bin).exists():
-            deno_bin = None
+        deno_paths = [
+            shutil.which("deno"),
+            str(Path.home() / ".deno" / "bin" / "deno"),
+            "/home/su6i/.deno/bin/deno",
+            "/usr/bin/deno",
+            "/usr/local/bin/deno"
+        ]
+        for p in deno_paths:
+            if p and Path(p).exists():
+                deno_bin = p
+                break
     if node_bin:
         js_runtime_args = ["--js-runtimes", f"node:{node_bin}"]
     elif deno_bin:
@@ -317,33 +328,46 @@ async def download_video(url: str) -> Optional[Path]:
     if platform == "youtube":
         yt_extra_args = ["--remote-components", "ejs:github"] + js_runtime_args
 
+    # Prepare base command
     cmd_base = [
         executable,
         "-f", "bestvideo[ext=mp4][height<=1080]+bestaudio[ext=m4a]/best[ext=mp4]/best",
         "-o", str(filename),
         "--write-info-json", "--no-playlist",
-        "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
     ] + yt_extra_args + [url]
 
-    cmd_cookies = list(cmd_base)
+    # --- ATTEMPT STRATEGIES ---
+
+    # Attempt 1: Explicit Cookies File (Priority)
     if netscape_cookies.exists():
+        cmd_cookies = list(cmd_base)
         cmd_cookies.insert(1, str(netscape_cookies))
         cmd_cookies.insert(1, "--cookies")
-
-    # Attempt 1: Cookies (prefer auth if available)
-    if netscape_cookies.exists():
-        logger.info(f"📥 Attempt 1: yt-dlp with cookies cmd: {' '.join(cmd_cookies[:6])}...")
+        logger.info(f"📥 Attempt 1: yt-dlp with explicit cookies.txt...")
         proc = await asyncio.create_subprocess_exec(*cmd_cookies, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         stdout1, stderr1 = await proc.communicate()
-        logger.info(f"📥 Attempt 1 stderr: {stderr1.decode()[-800:]}")
         if filename.exists(): return filename
+        logger.warning(f"⚠️ Attempt 1 failed. stderr: {stderr1.decode()[-800:]}")
 
-    # Attempt 2: Anonymous
-    logger.info(f"📥 Attempt 2: yt-dlp anonymous cmd: {' '.join(cmd_base[:6])}...")
+    # Attempt 2: Extract Cookies from Browsers (Fallback for YouTube Sign-in)
+    for browser in ["brave", "chrome", "safari"]:
+        cmd_browser = list(cmd_base)
+        cmd_browser.insert(1, browser)
+        cmd_browser.insert(1, "--cookies-from-browser")
+        logger.info(f"📥 Attempt 2 ({browser}): yt-dlp extracting cookies from {browser}...")
+        proc = await asyncio.create_subprocess_exec(*cmd_browser, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        stdout2, stderr2 = await proc.communicate()
+        if filename.exists(): return filename
+        err_out = stderr2.decode()
+        if "Could not find Chrome" not in err_out and "Keychain" not in err_out:
+             logger.warning(f"⚠️ Attempt 2 ({browser}) failed. stderr: {err_out[-400:]}")
+
+    # Attempt 3: Anonymous
+    logger.info(f"📥 Attempt 3: yt-dlp anonymous...")
     proc = await asyncio.create_subprocess_exec(*cmd_base, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     stdout, stderr = await proc.communicate()
-    logger.error(f"❌ yt-dlp attempt 2 stderr: {stderr.decode()[-800:]}")
     if filename.exists(): return filename
+    logger.error(f"❌ yt-dlp attempt 3 (anonymous) failed. stderr: {stderr.decode()[-800:]}")
 
     # Attempt 3: Cobalt fallback (works for Instagram, YouTube, and many others)
     if await download_instagram_cobalt(url, filename):

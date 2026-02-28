@@ -27,3 +27,7 @@ This document defines the coding standards and best practices for the Su6i Yar p
     - Unused variables.
     - Unused imports or libraries.
     - Dead code or commented-out logic (unless strictly needed for temporary debugging).
+
+## 6. LLM Data & Environment Robustness
+- **LLM JSON Parsing**: ALWAYS use robust Regex (e.g., `re.search(r'\{.*\}', text, re.DOTALL)`) to extract JSON from raw LLM responses, as models may inject conversational text or markdown before/after the JSON struct.
+- **Systemd Executable Paths**: Do not rely purely on `shutil.which()` for external tools like `node` or `deno` when the bot runs as a systemd service (as it lacks a full `$PATH`). Always fallback to absolute explicit paths (e.g., `/usr/local/bin/node`, `~/.deno/bin/deno`).
