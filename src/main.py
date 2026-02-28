@@ -1,4 +1,9 @@
 import os
+import sys
+
+# Ensure the root directory is in sys.path so 'src' can be imported reliably
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from telegram import Update
 from telegram.ext import (
     ApplicationBuilder, 
@@ -25,6 +30,7 @@ from src.features.fact_check import cmd_check_handler
 from src.features.birthday import cmd_birthday_handler, check_birthdays_job
 from src.features.learning import cmd_learn_handler
 from src.features.finance import cmd_price_handler
+from src.features.auth_manager.handlers import cookie_document_handler
 from src.features.voice import cmd_voice_handler
 from src.features.amir import (
     amir_media_handler,
@@ -147,6 +153,9 @@ def main():
     ))
     
     # --- Message Handlers ---
+    
+    # Auth / Cookie Handler for admins (Listens to Document Uploads)
+    app.add_handler(MessageHandler(filters.Document.ALL & filters.ChatType.PRIVATE, cookie_document_handler))
     
     # Channel Post (Fun Channel)
     app.add_handler(MessageHandler(filters.ChatType.CHANNEL, channel_post_handler))
