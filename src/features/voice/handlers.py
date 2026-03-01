@@ -21,15 +21,15 @@ async def cmd_voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Check for language and gender arguments
     explicit_target = None
-    explicit_gender = "male" # Default gender
+    user_requested_gender = None
     args_copy = list(context.args) if context.args else []
     
     # 1. Look for gender keyword
     if "female" in args_copy:
-        explicit_gender = "female"
+        user_requested_gender = "female"
         args_copy.remove("female")
     elif "male" in args_copy:
-        explicit_gender = "male"
+        user_requested_gender = "male"
         args_copy.remove("male")
         
     # 2. Look for language alias
@@ -103,7 +103,7 @@ async def cmd_voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         import json
         
         # --- MULTI-MODEL COMPARISON (PERSIAN ONLY) ---
-        if target_lang == "fa":
+        if target_lang == "fa" and not user_requested_gender:
             await context.bot.send_message(
                 chat_id=msg.chat_id, 
                 text="🧪 <b>تست مقایسه موتورهای صوتی (۲ مدل)</b>", 
@@ -111,41 +111,31 @@ async def cmd_voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_to_message_id=voice_reply_to
             )
             
-            # Model 1: Datacula (Amir - Male)
+            # Model 1: Datacula (Amir - Male) / EdgeTTS Fallback
             try:
-                import httpx
-                import io
-                from src.features.voice.utils import DATACULA_API_URL
-                from src.utils.text_tools import clean_text_strict
-                
-                clean_text = clean_text_strict(target_text)
-                params = {"text": clean_text[:2000], "model_name": "امیر"}
-                
-                async with httpx.AsyncClient(timeout=20) as client:
-                    response = await client.get(DATACULA_API_URL, params=params)
-                
-                if response.status_code == 200 and len(response.content) > 1000:
-                    audio_amir = io.BytesIO(response.content)
-                    caption_amir = "🗣️ <b>مدل ۱: Datacula (امیر)</b> - آنلاین"
+                # Use male to trigger Datacula (Amir) or its natural EdgeTTS fallback
+                audio_amir = await text_to_speech(target_text, "fa", "male")
+                if audio_amir:
+                    caption_amir = "🗣️ <b>مدل ۱: Datacula (امیر) / فرید</b> - مرد"
                     await context.bot.send_voice(chat_id=msg.chat_id, voice=audio_amir, caption=caption_amir, parse_mode='HTML')
             except Exception as e:
-                logger.error(f"Datacula Fail in handler: {e}")
+                logger.error(f"Male Voice Fail in handler: {e}")
 
-            # Model 2: EdgeTTS (Dilara - Female) -> So the user actually hears a different voice!
+            # Model 2: EdgeTTS (Dilara - Female) -> Bypasses Datacula because gender is female
             try:
                 audio_edge = await text_to_speech(target_text, "fa", "female")
                 if audio_edge:
-                    caption_edge = "🗣️ <b>مدل ۲: EdgeTTS (دیلارا)</b> - مایکروسافت"
+                    caption_edge = "🗣️ <b>مدل ۲: EdgeTTS (دیلارا)</b> - زن"
                     await context.bot.send_voice(chat_id=msg.chat_id, voice=audio_edge, caption=caption_edge, parse_mode='HTML')
             except Exception as e:
-                logger.error(f"EdgeTTS Fail in handler: {e}")
+                logger.error(f"EdgeTTS Female Fail in handler: {e}")
                 
             await safe_delete(status_msg)
             return # Exit after sending comparison
 
-        # --- STANDARD SINGLE VOICE (NON-PERSIAN) ---
-        # Default to male voice
-        audio_buffer = await text_to_speech(target_text, target_lang, "male")
+        # --- STANDARD SINGLE VOICE (NON-PERSIAN OR EXPLICIT GENDER) ---
+        # Default to male voice if no gender was explicitly requested
+        audio_buffer = await text_to_speech(target_text, target_lang, user_requested_gender or "male")
         
         if audio_buffer:
             caption = f"🗣️ <b>Voice ({LANG_NAMES.get(target_lang, target_lang)})</b>"

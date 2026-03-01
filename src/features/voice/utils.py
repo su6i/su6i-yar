@@ -48,7 +48,7 @@ async def text_to_speech(text: str, lang: str = "fa", gender: str = "male") -> i
     audio_buffer = io.BytesIO()
     
     # --- STRATEGY 1: DATACULA (Persian Only) ---
-    if is_persian_request:
+    if is_persian_request and gender == "male":
         try:
             logger.info("🎙️ Using Datacula (Amir) for Persian TTS...")
             params = {
