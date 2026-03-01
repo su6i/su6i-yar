@@ -69,19 +69,15 @@ warp-cli --accept-tos connect
 Inside your Python download logic, inject the SOCKS5 proxy string into the `yt-dlp` base command. Ensure you bind it to `127.0.0.1`.
 
 ```python
-yt_extra_args = [
-    "--proxy", "socks5://127.0.0.1:40000",
-    "--remote-components", "ejs:github",
-    "--extractor-args", "youtube:player_client=ios,android,default"
-]
-
-cmd_base = [
-    "yt-dlp",
-    # Enforce AVC1 (H264) codec for maximum Apple Telegram compatibility so videos don't black-screen
-    "-f", "bestvideo[vcodec^=avc][height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[vcodec^=avc][ext=mp4]/best[ext=mp4]/best",
-    "-o", "output.mp4",
-    "--write-info-json", "--no-playlist",
-] + yt_extra_args + [url]
+    # Route strict sites through WARP SOCKS5 proxy to avoid Datacenter IP bans
+    if platform in ["youtube", "instagram"]:
+        yt_extra_args.extend(["--proxy", "socks5://127.0.0.1:40000"])
+        
+    if platform == "youtube":
+        yt_extra_args.extend([
+            "--remote-components", "ejs:github",
+            "--extractor-args", "youtube:player_client=ios,android,default"
+        ])
 ```
 
-This ensures that only YouTube traffic requested by the bot passes through Cloudflare, bypassing Datacenter tracking entirely!
+This ensures that only YouTube and Instagram traffic requested by the bot passes through Cloudflare, bypassing Datacenter tracking entirely!

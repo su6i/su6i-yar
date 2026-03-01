@@ -400,14 +400,19 @@ async def download_video(url: str) -> Optional[Path]:
     else:
         js_runtime_args = []
 
-    # 4. YouTube-specific args (remote EJS solver for n-challenge & mobile players for PoToken bypass)
+    # 4. Platform-specific args
     yt_extra_args = []
+    
+    # Route strict sites through WARP SOCKS5 proxy to avoid Datacenter IP bans
+    if platform in ["youtube", "instagram"]:
+        yt_extra_args.extend(["--proxy", "socks5://127.0.0.1:40000"])
+        
     if platform == "youtube":
-        yt_extra_args = [
-            "--proxy", "socks5://127.0.0.1:40000",
+        yt_extra_args.extend([
             "--remote-components", "ejs:github",
             "--extractor-args", "youtube:player_client=ios,android,default"
-        ] + js_runtime_args
+        ])
+        yt_extra_args.extend(js_runtime_args)
 
     # Prepare base command
     cmd_base = [
