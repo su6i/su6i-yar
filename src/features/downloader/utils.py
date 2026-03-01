@@ -203,8 +203,8 @@ async def download_instagram_cobalt(url: str, filename: Path) -> bool:
             
             logger.info(f"🛡️ Trying Cobalt: {api_url}")
             payloads = [
-                {"url": url, "videoQuality": "max", "audioFormat": "mp3", "filenameStyle": "basic"}, # v10
-                {"url": url, "vCodec": "h264", "vQuality": "max", "aFormat": "mp3", "filenamePattern": "basic"} # v7
+                {"url": url, "videoQuality": "max", "filenameStyle": "basic"}, # v10
+                {"url": url, "vQuality": "max", "filenamePattern": "basic"} # v7
             ]
 
             dl_url = None
@@ -230,6 +230,64 @@ async def download_instagram_cobalt(url: str, filename: Path) -> bool:
 
     logger.error("❌ All Cobalt instances failed.")
     return False
+
+def get_video_caption_and_split(video_path: Path, title_filter: str = None, fallback_index: str = None) -> tuple[str, str]:
+    """
+    Extracts caption from yt-dlp's .info.json and smartly splits it to fit Telegram's 1024-char limit.
+    Returns: (final_caption_for_video, extra_text_for_followup_message)
+    """
+    full_caption = ""
+    info_files = [
+        video_path.with_suffix(".mp4.info.json"),
+        video_path.with_suffix(".info.json"),
+        Path(str(video_path).replace(".mp4", ".info.json"))
+    ]
+    
+    for info_file in info_files:
+        if info_file.exists():
+            try:
+                import json
+                info_data = json.loads(info_file.read_text(encoding="utf-8"))
+                full_caption = info_data.get("description", "") or info_data.get("title", "")
+                info_file.unlink() # Clean up
+                break
+            except Exception as e:
+                logger.error(f"⚠️ Failed to read .info.json ({info_file.name}): {e}")
+    
+    base_footer = "\n\n📥 @Su6i_Yar_Bot"
+    if fallback_index is not None:
+        base_footer = f"\n\n#ویدیو_{fallback_index}" + base_footer
+        
+    limit = 1024 - len(base_footer) - 10 # Buffer
+    
+    final_caption = ""
+    extra_text = ""
+    
+    if not full_caption:
+        if title_filter or fallback_index:
+             final_caption = f"🎬 {title_filter or 'قسمت'} {fallback_index or ''}{base_footer}".strip()
+        else:
+             final_caption = f"🎬 ویدیو دریافت شد{base_footer}"
+    else:
+        # Split by paragraphs
+        paragraphs = full_caption.split('\n')
+        current_batch = []
+        current_len = 0
+        split_happened = False
+        
+        for p in paragraphs:
+            p_len = len(p) + 1 # +1 for newline
+            if not split_happened and (current_len + p_len <= limit):
+                current_batch.append(p)
+                current_len += p_len
+            else:
+                split_happened = True
+                extra_text += p + "\n"
+        
+        main_text = "\n".join(current_batch).strip()
+        final_caption = f"{main_text}{base_footer}"
+        
+    return final_caption, extra_text
 
 def convert_cookies_json_to_netscape(json_path: Path, txt_path: Path):
     """Convert Chrome-style JSON cookies to Netscape format for yt-dlp."""
@@ -354,7 +412,7 @@ async def download_video(url: str) -> Optional[Path]:
     # Prepare base command
     cmd_base = [
         executable,
-        "-f", "bestvideo[ext=mp4][height<=1080]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+        "-f", "bestvideo[vcodec^=avc][height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[vcodec^=avc][ext=mp4]/best[ext=mp4]/best",
         "-o", str(filename),
         "--write-info-json", "--no-playlist",
     ] + yt_extra_args + [url]

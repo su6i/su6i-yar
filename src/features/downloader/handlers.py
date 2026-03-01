@@ -15,7 +15,8 @@ from src.features.downloader.utils import (
     download_instagram_batch,
     compress_video,
     get_video_metadata,
-    generate_thumbnail
+    generate_thumbnail,
+    CookieExpiredError
 )
 
 async def cmd_download_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -144,54 +145,13 @@ async def handle_instagram_batch(update: Update, context: ContextTypes.DEFAULT_T
                 if video_path and video_path.exists():
                     await compress_video(video_path)
                     
-                    # 📝 Fetch Metadata (Caption) from yt-dlp's .info.json
-                    full_caption = ""
-                    # Check multiple possible naming schemes
-                    info_files = [
-                        video_path.with_suffix(".mp4.info.json"),
-                        video_path.with_suffix(".info.json"),
-                        Path(str(video_path).replace(".mp4", ".info.json"))
-                    ]
-                    
-                    for info_file in info_files:
-                        if info_file.exists():
-                            try:
-                                import json
-                                info_data = json.loads(info_file.read_text(encoding="utf-8"))
-                                full_caption = info_data.get("description", "") or info_data.get("title", "")
-                                info_file.unlink() # Clean up
-                                break
-                            except Exception as e:
-                                logger.error(f"⚠️ Failed to read .info.json ({info_file.name}): {e}")
-                    
-                    # ✂️ Smart Paragraph-Aware Splitting
-                    base_footer = f"\n\n#ویدیو_{i+1}\n📥 @Su6i_Yar_Bot"
-                    limit = 1024 - len(base_footer) - 10 # Buffer
-                    
-                    final_caption = ""
-                    extra_text = ""
-                    
-                    if not full_caption:
-                        final_caption = f"🎬 {title_filter or 'قسمت'} {i+1}{base_footer}"
-                    else:
-                        # Split by paragraphs
-                        paragraphs = full_caption.split('\n') # Simple split for now, refine if needed
-                        
-                        current_batch = []
-                        current_len = 0
-                        split_happened = False
-                        
-                        for p in paragraphs:
-                            p_len = len(p) + 1 # +1 for newline
-                            if not split_happened and (current_len + p_len <= limit):
-                                current_batch.append(p)
-                                current_len += p_len
-                            else:
-                                split_happened = True
-                                extra_text += p + "\n"
-                        
-                        main_text = "\n".join(current_batch).strip()
-                        final_caption = f"{main_text}{base_footer}"
+                    # 📝 Fetch and split Smart Caption
+                    from src.features.downloader.utils import get_video_caption_and_split
+                    final_caption, extra_text = get_video_caption_and_split(
+                        video_path, 
+                        title_filter=title_filter, 
+                        fallback_index=str(i+1)
+                    )
                     
                     # Check file size (Telegram Bot API limit is 50MB for sendVideo unless local API is used)
                     file_size = video_path.stat().st_size
@@ -299,10 +259,37 @@ async def handle_video_link(update: Update, context: ContextTypes.DEFAULT_TYPE, 
 
         await compress_video(video_path)
 
-        caption = f"📥 {platform_label} | @Su6i_Yar_Bot"
-        await send_video_file(context.bot, msg.chat.id, video_path, caption=caption, reply_to=reply_to_id)
+        from src.features.downloader.utils import get_video_caption_and_split
+        caption, extra_text = get_video_caption_and_split(video_path)
+
+        msg_vid = await send_video_file(context.bot, msg.chat.id, video_path, caption=caption, reply_to=reply_to_id)
+        
+        if extra_text and msg_vid:
+            chunk_size = 4000
+            for j in range(0, len(extra_text), chunk_size):
+                 await context.bot.send_message(
+                    chat_id=msg.chat.id,
+                    text=extra_text[j:j+chunk_size],
+                    reply_to_message_id=msg_vid.message_id
+                )
+                
         await safe_delete(status_msg)
 
+    except CookieExpiredError as e:
+        logger.warning(f"Auth Blocked: {e}")
+        from src.core.handlers import PENDING_AUTH_URLS
+        PENDING_AUTH_URLS[user_id] = url # Save the URL to try again
+
+        from telegram.constants import ParseMode
+        await status_msg.edit_text(
+            "⚠️ **هشدار امنیتی: انقضای کوکی‌های سرور**\n\n"
+            "سایت مدنظر دسترسی ربات را به خاطر سیستم‌های **ضد بات** (Anti-Bot) مسدود کرده است.\n\n"
+            "🛡️ **راه‌حل:** افزونه‌ی `EditThisCookie` را روی مرورگر دسکتاپ خود نصب کنید. در تب یوتیوب روی افزونه کلیک کرده و خروجیِ فایل را به صورت داکیومنت (`.json`) در همین بات بفرستید.\n"
+            "💡 **یا حتی راحت‌تر:** متن کپی شده‌یِ افزونه را مستقیماً همینجا در چت پِیست (Paste) کنید!\n\n"
+            "_اگر ادمین نیستید، لطفاً این موضوع را به ادمین اطلاع دهید._\n\n"
+            f"**DIAGNOSTICS:**\n`{str(e)}`",
+            parse_mode=ParseMode.MARKDOWN
+        )
     except Exception as e:
         logger.error(f"{platform_label} DL Error: {e}")
         await status_msg.edit_text(get_msg("err_dl", user_id))
@@ -318,7 +305,7 @@ async def handle_instagram_link(update: Update, context: ContextTypes.DEFAULT_TY
     await handle_video_link(update, context, url, reply_to_id)
 
 async def send_video_file(bot, chat_id, file_path, caption, reply_to=None):
-    """Helper to send video with thumbnail"""
+    """Helper to send video with thumbnail. Returns the sent message object."""
     thumb_path = await generate_thumbnail(file_path)
     meta = await get_video_metadata(file_path)
     
@@ -329,7 +316,7 @@ async def send_video_file(bot, chat_id, file_path, caption, reply_to=None):
     with open(file_path, "rb") as video_file:
         if thumb_path:
             with open(thumb_path, "rb") as thumb_file:
-                 await bot.send_video(
+                 return await bot.send_video(
                     chat_id=chat_id,
                     video=video_file,
                     caption=caption,
@@ -340,7 +327,7 @@ async def send_video_file(bot, chat_id, file_path, caption, reply_to=None):
                     reply_to_message_id=reply_to
                 )
         else:
-            await bot.send_video(
+            return await bot.send_video(
                 chat_id=chat_id,
                 video=video_file,
                 caption=caption,

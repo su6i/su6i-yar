@@ -192,46 +192,11 @@ async def global_message_handler(update: Update, context: ContextTypes.DEFAULT_T
             await msg.reply_text("⚠️ " + get_msg("dl_off", user_id))
             return
 
-        platform_label = {"instagram": "Instagram", "youtube": "YouTube", "aparat": "Aparat"}.get(platform, "video")
-        status_msg = await msg.reply_text(
-            get_msg("downloading", user_id),
-            reply_to_message_id=msg.message_id
-        )
-
         try:
-            path = await download_video(text)
-            success = False
-            if path and path.exists():
-                try:
-                    await msg.reply_video(
-                        video=open(path, 'rb'),
-                        caption=f"🎥 {platform_label} | @Su6i_Yar_Bot",
-                        supports_streaming=True,
-                        reply_to_message_id=msg.message_id
-                    )
-                    success = True
-                    path.unlink()
-                except Exception as e:
-                    logger.error(f"Send Video Error ({platform_label}): {e}")
-
-            if success:
-                if not IS_DEV: await safe_delete(status_msg)
-            else:
-                await status_msg.edit_text(get_msg("err_dl", user_id))
-        except CookieExpiredError as e:
-            logger.warning(f"Auth Blocked: {e}")
-            PENDING_AUTH_URLS[user_id] = text # Save the URL to try again automatically
-            
-            await status_msg.edit_text(
-                "⚠️ **هشدار امنیتی: انقضای کوکی‌های سرور**\n\n"
-                "سایت مدنظر دسترسی ربات را به خاطر سیستم‌های **ضد بات** (Anti-Bot) مسدود کرده است.\n\n"
-                "🛡️ **راه‌حل:** افزونه‌ی `EditThisCookie` را روی مرورگر دسکتاپ خود نصب کنید. در تب یوتیوب روی افزونه کلیک کرده و خروجیِ فایل را به صورت داکیومنت (`.json`) در همین بات بفرستید.\n"
-                "💡 **یا حتی راحت‌تر:** متن کپی شده‌یِ افزونه را مستقیماً همینجا در چت پِیست (Paste) کنید!\n\n"
-                "_اگر ادمین نیستید، لطفاً این موضوع را به ادمین اطلاع دهید._\n\n"
-                f"**DIAGNOSTICS:**\n`{str(e)}`",
-                parse_mode=ParseMode.MARKDOWN
-            )
-
+            from src.features.downloader.handlers import handle_video_link
+            await handle_video_link(update, context, text, msg.message_id)
+        except Exception as e:
+            logger.error(f"Global Handler Error: {e}")
         return
 
     # --- 3. AI ANALYSIS (Fallback) ---
