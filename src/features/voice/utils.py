@@ -79,9 +79,11 @@ async def _attempt_edge_tts(text: str, voice: str) -> io.BytesIO | None:
             if chunk["type"] == "audio":
                 audio_buffer.write(chunk["data"])
                 
-        audio_buffer.seek(0)
+        # Check size before seeking to 0!
         if audio_buffer.tell() == 0:
             raise ValueError("Empty audio stream returned")
+            
+        audio_buffer.seek(0)
         return audio_buffer
     except Exception as e:
         logger.error(f"EdgeTTS error with {voice}: {e}")
