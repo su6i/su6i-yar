@@ -290,48 +290,7 @@ def extract_text(response) -> str:
     
     return str(content).strip()
 
-def smart_split(text, header="", max_len=1024, overflow_prefix="... ادامه در پیام بعدی"):
-    """
-    Split text into two parts: a caption (max_len) and overflow_text.
-    Uses HTML formatting for stability.
-    Returns (final_caption_html, overflow_raw_text)
-    """
-    if not text:
-        return header, ""
-        
-    # Split by paragraphs
-    paragraphs = text.split('\n\n')
-    current_caption_raw = ""
-    overflow_text_raw = ""
-    overflow_started = False
-    
-    for para in paragraphs:
-        if overflow_started:
-            overflow_text_raw += ("\n\n" if overflow_text_raw else "") + para
-        else:
-            potential = (current_caption_raw + "\n\n" if current_caption_raw else "") + para
-            
-            # Test length with HTML escaping
-            test_caption_html = header + "\n\n" + html.escape(potential) + "\n\n<i>" + html.escape(overflow_prefix) + "</i>"
-            
-            if len(test_caption_html) <= max_len:
-                current_caption_raw = potential
-            else:
-                if not current_caption_raw:
-                    # Hard split if first paragraph is too long
-                    allowed = max_len - len(header) - len(overflow_prefix) - 30
-                    current_caption_raw = para[:allowed]
-                    overflow_text_raw = para[allowed:]
-                    overflow_started = True
-                else:
-                    overflow_started = True
-                    overflow_text_raw = para
-                    
-    final_caption_html = header + (("\n\n" + html.escape(current_caption_raw)) if current_caption_raw else "")
-    if overflow_text_raw:
-        final_caption_html += "\n\n<i>" + html.escape(overflow_prefix) + "</i>"
-        
-    return final_caption_html, overflow_text_raw
+from src.utils.text_tools import smart_split
 
 async def detect_language(text: str) -> str:
     """Detect language of text. Prioritizes local regex for FA/KO, then AI."""
