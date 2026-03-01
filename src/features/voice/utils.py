@@ -53,7 +53,7 @@ async def text_to_speech(text: str, lang: str = "fa", gender: str = "male") -> i
             logger.info("🎙️ Using Datacula (Amir) for Persian TTS...")
             params = {
                 "text": clean_text,
-                "model_name": "امیر" # Confirmed Persian ID
+                "model_name": "Amir" # Confirmed Persian ID
             }
             # Timeout is important as it's a queued free API (20s)
             async with httpx.AsyncClient(timeout=20) as client:
@@ -62,6 +62,7 @@ async def text_to_speech(text: str, lang: str = "fa", gender: str = "male") -> i
             if response.status_code == 200 and len(response.content) > 1000:
                 audio_buffer.write(response.content)
                 audio_buffer.seek(0)
+                audio_buffer.name = 'voice.mp3'
                 return audio_buffer
             else:
                 logger.warning(f"⚠️ Datacula Failed: {response.status_code}")
@@ -110,6 +111,7 @@ async def _attempt_edge_tts(text: str, voice: str) -> io.BytesIO | None:
             raise ValueError("Empty audio stream returned")
             
         audio_buffer.seek(0)
+        audio_buffer.name = 'voice.mp3'
         return audio_buffer
     except Exception as e:
         logger.error(f"EdgeTTS error with {voice}: {e}")
