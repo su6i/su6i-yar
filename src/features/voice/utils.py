@@ -58,9 +58,39 @@ async def text_to_speech(text: str, lang: str = "fa", gender: str = "male") -> i
         return audio_buffer
     except Exception as e:
         logger.error(f"EdgeTTS failed (voice={voice}): {e}")
-        # Last-resort fallback: English male
-        if voice != _FALLBACK_VOICE:
+        
+        # Smart Fallback: If it's Persian, edge-tts is known to fail frequently. Use gTTS instead.
+        if lang_key == "fa":
             try:
+                from gtts import gTTS
+                logger.info("🎙️ Falling back to Google TTS (gTTS) for Persian...")
+                tts = gTTS(text=clean_text, lang="ar") # gTTS doesn't formally support 'fa', but 'ar' reads Persian script perfectly without accent in gTTS
+                
+                # We save to a temporary file because gTTS write_to_fp has historically had bugs with BytesIO
+                import tempfile
+                import os
+                
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as temp_audio:
+                    temp_path = temp_audio.name
+                    
+                tts.save(temp_path)
+                
+                fallback_buffer = io.BytesIO()
+                with open(temp_path, "rb") as f:
+                    fallback_buffer.write(f.read())
+                    
+                fallback_buffer.seek(0)
+                os.remove(temp_path)
+                return fallback_buffer
+                
+            except Exception as gtts_e:
+                logger.error(f"❌ gTTS fallback also failed: {gtts_e}")
+                return None
+                
+        # Last-resort fallback: English male for other languages
+        elif voice != _FALLBACK_VOICE:
+            try:
+                logger.info(f"🎙️ Falling back to English Voice: {_FALLBACK_VOICE}")
                 audio_buffer = io.BytesIO()
                 communicate = edge_tts.Communicate(clean_text, _FALLBACK_VOICE)
                 async for chunk in communicate.stream():
@@ -69,6 +99,6 @@ async def text_to_speech(text: str, lang: str = "fa", gender: str = "male") -> i
                 audio_buffer.seek(0)
                 return audio_buffer
             except Exception as e2:
-                logger.error(f"EdgeTTS fallback also failed: {e2}")
+                logger.error(f"❌ EdgeTTS English fallback also failed: {e2}")
         return None
 

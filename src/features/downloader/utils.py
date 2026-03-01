@@ -414,12 +414,11 @@ async def download_video(url: str) -> Optional[Path]:
         ])
         yt_extra_args.extend(js_runtime_args)
 
-    # Prepare base command
     cmd_base = [
         executable,
         "-f", "bestvideo[vcodec^=avc][height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[vcodec^=avc][ext=mp4]/best[ext=mp4]/best",
         "-o", str(filename),
-        "--write-info-json", "--no-playlist",
+        "--write-info-json",
     ] + yt_extra_args + [url]
 
     # --- ATTEMPT STRATEGIES ---
