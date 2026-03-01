@@ -19,12 +19,25 @@ async def cmd_voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.effective_message
     user_id = update.effective_user.id
     
-    # Check for language argument
+    # Check for language and gender arguments
     explicit_target = None
-    if context.args:
-        lang_arg = context.args[0].lower()
+    explicit_gender = "male" # Default gender
+    args_copy = list(context.args) if context.args else []
+    
+    # 1. Look for gender keyword
+    if "female" in args_copy:
+        explicit_gender = "female"
+        args_copy.remove("female")
+    elif "male" in args_copy:
+        explicit_gender = "male"
+        args_copy.remove("male")
+        
+    # 2. Look for language alias
+    if args_copy:
+        lang_arg = args_copy[0].lower()
         if lang_arg in LANG_ALIASES:
             explicit_target = LANG_ALIASES[lang_arg]
+            args_copy.pop(0)
     
     # Priority 1: Check if replied to a message
     target_text = ""
@@ -34,12 +47,8 @@ async def cmd_voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_target_id = msg.reply_to_message.message_id
     
     # Priority 2: Check for direct text input
-    if not target_text and context.args:
-        if context.args[0].lower() in LANG_ALIASES:
-            if len(context.args) > 1:
-                target_text = " ".join(context.args[1:])
-        else:
-            target_text = " ".join(context.args)
+    if not target_text and args_copy:
+        target_text = " ".join(args_copy)
     
     # Priority 3: Check cache
     if not target_text:
@@ -89,10 +98,67 @@ async def cmd_voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             
         # 2. Generate Audio
-        audio_buffer = await text_to_speech(target_text, target_lang)
+        voice_reply_to = reply_target_id
+        from telegram import InlineKeyboardMarkup, InlineKeyboardButton
+        import json
+        
+        # --- MULTI-MODEL COMPARISON (PERSIAN ONLY) ---
+        if target_lang == "fa":
+            await context.bot.send_message(
+                chat_id=msg.chat_id, 
+                text="🧪 <b>تست مقایسه موتورهای صوتی (۲ مدل)</b>", 
+                parse_mode="HTML", 
+                reply_to_message_id=voice_reply_to
+            )
+            
+            # Model 1: Datacula (Amir - Male)
+            try:
+                import httpx
+                import io
+                from src.features.voice.utils import DATACULA_API_URL
+                from src.utils.text_tools import clean_text_strict
+                
+                clean_text = clean_text_strict(target_text)
+                params = {"text": clean_text[:2000], "model_name": "امیر"}
+                
+                async with httpx.AsyncClient(timeout=20) as client:
+                    response = await client.get(DATACULA_API_URL, params=params)
+                
+                if response.status_code == 200 and len(response.content) > 1000:
+                    audio_amir = io.BytesIO(response.content)
+                    caption_amir = "🗣️ <b>مدل ۱: Datacula (امیر)</b> - آنلاین"
+                    await context.bot.send_voice(chat_id=msg.chat_id, voice=audio_amir, caption=caption_amir, parse_mode='HTML')
+            except Exception as e:
+                logger.error(f"Datacula Fail in handler: {e}")
+
+            # Model 2: EdgeTTS (Dilara - Female) -> So the user actually hears a different voice!
+            try:
+                audio_edge = await text_to_speech(target_text, "fa", "female")
+                if audio_edge:
+                    caption_edge = "🗣️ <b>مدل ۲: EdgeTTS (دیلارا)</b> - مایکروسافت"
+                    await context.bot.send_voice(chat_id=msg.chat_id, voice=audio_edge, caption=caption_edge, parse_mode='HTML')
+            except Exception as e:
+                logger.error(f"EdgeTTS Fail in handler: {e}")
+                
+            await safe_delete(status_msg)
+            return # Exit after sending comparison
+
+        # --- STANDARD SINGLE VOICE (NON-PERSIAN) ---
+        # Default to male voice
+        audio_buffer = await text_to_speech(target_text, target_lang, "male")
         
         if audio_buffer:
             caption = f"🗣️ <b>Voice ({LANG_NAMES.get(target_lang, target_lang)})</b>"
+            
+            # Add voice toggle buttons
+            # We compress the text to fit in callback_data limit (64 bytes). 
+            # If text is too long, we can't easily pass it. Better to just pass target_lang and gender toggle.
+            # But we don't have a DB for state here, so let's stick to simple implementation without inline buttons for now, 
+            # Or pass a hash if we had a cache. Since we have LAST_ANALYSIS_CACHE, we could use that, but it's complex for arbitrary replies.
+            # The User specifically asked for a single voice explicitly (or 2 models for Persian).
+            # I will omit the callback buttons for now because Telegram limits callback_data to 64 bytes, 
+            # and caching arbitrary user messages just for voice toggling is overkill. The 2-model Persian split covers their main use case.
+
             await context.bot.send_voice(
                 chat_id=msg.chat_id, 
                 voice=audio_buffer, 
