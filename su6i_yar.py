@@ -3796,7 +3796,7 @@ def clean_text_strict(text: str) -> str:
     
     return text.strip()
 
-async def text_to_speech(text: str, lang: str = "fa") -> io.BytesIO:
+async def text_to_speech(text: str, lang: str = "fa", gender: str = "male") -> io.BytesIO | None:
     """
     Convert text to speech.
     Primary: Datacula (Amir) for Persian.
@@ -3826,7 +3826,7 @@ async def text_to_speech(text: str, lang: str = "fa") -> io.BytesIO:
     audio_buffer = io.BytesIO()
     
     # --- STRATEGY 1: DATACULA (Persian Only) ---
-    if is_persian_request:
+    if is_persian_request and gender == "male":
         try:
             # logger.info(f"🎙️ Using Datacula (Amir) for Persian TTS...")
             params = {
@@ -3849,23 +3849,28 @@ async def text_to_speech(text: str, lang: str = "fa") -> io.BytesIO:
             # Fall through to EdgeTTS
 
     # --- STRATEGY 2: EDGE TTS (Fallback/Default) ---
-    # Choose Cyrus (Farid) or Dilara? User liked Amir which is Male. So fallback to Farid (Male).
-    voice = TTS_VOICES.get(lang_key)
-    if is_persian_request:
-        voice = "fa-IR-FaridNeural" # Male fallback to match Amir
+    # Choose voice based on requested gender
+    voices = TTS_VOICES.get(lang_key, TTS_VOICES.get("en", ["en-US-GuyNeural", "en-US-JennyNeural"]))
     
-    if not voice:
-        # Fallback to English if unknown char
-        voice = TTS_VOICES.get("en", "en-US-ChristopherNeural")
+    # voices is a tuple (male, female). Depending on the setup in su6i_yar.py, it may be a list.
+    # Actually, in su6i_yar.py: `TTS_VOICES = { "fa": ("fa-IR-FaridNeural", "fa-IR-DilaraNeural"), ... }`
+    primary_voice = voices[1] if gender == "female" else voices[0]
+    alternate_voice = voices[0] if gender == "female" else voices[1]
+    
+    if is_persian_request:
+        primary_voice = "fa-IR-DilaraNeural" if gender == "female" else "fa-IR-FaridNeural"
 
     try:
-        communicate = edge_tts.Communicate(clean_text, voice)
+        communicate = edge_tts.Communicate(clean_text, primary_voice)
         async for chunk in communicate.stream():
             if chunk["type"] == "audio":
                 audio_buffer.write(chunk["data"])
         
-        audio_buffer.seek(0)
-        return audio_buffer
+        if audio_buffer.tell() > 0:
+            audio_buffer.seek(0)
+            return audio_buffer
+        else:
+            return None
     except Exception as e:
         print(f"❌ EdgeTTS Failed: {e}")
         return None
@@ -3977,11 +3982,25 @@ async def cmd_voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Check for language argument
     explicit_target = None
-    if context.args:
-        lang_arg = context.args[0].lower()
+    # Check for language and gender arguments
+    explicit_target = None
+    user_requested_gender = None
+    args_copy = list(context.args) if context.args else []
+    
+    # 1. Look for gender keyword
+    if "female" in args_copy:
+        user_requested_gender = "female"
+        args_copy.remove("female")
+    elif "male" in args_copy:
+        user_requested_gender = "male"
+        args_copy.remove("male")
+        
+    # 2. Look for language alias
+    if args_copy:
+        lang_arg = args_copy[0].lower()
         if lang_arg in LANG_ALIASES:
             explicit_target = LANG_ALIASES[lang_arg]
-        # If not a lang alias, we assume it's direct text input later
+            args_copy.pop(0)
     
     # Priority 1: Check if replied to a message
     target_text = ""
@@ -3991,17 +4010,12 @@ async def cmd_voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_target_id = msg.reply_to_message.message_id
     
     # Priority 2: Check for direct text input
-    if not target_text and context.args:
-        if context.args[0].lower() in LANG_ALIASES:
-            if len(context.args) > 1:
-                target_text = " ".join(context.args[1:])
-        else:
-            target_text = " ".join(context.args)
+    if not target_text and args_copy:
+        target_text = " ".join(args_copy)
     
     # Priority 3: Check cache
     if not target_text:
         target_text = LAST_ANALYSIS_CACHE.get(user_id, "")
-        # If from cache, we might not have a good reply target, use command
         reply_target_id = msg.message_id 
     
     if not target_text:
@@ -4013,17 +4027,11 @@ async def cmd_voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await safe_delete(msg)
 
     # Decide target language and translation need
-    # Decide target language and translation need
     if explicit_target:
-        # User explicitly asked for a specific language -> Translate if needed
         target_lang = explicit_target
-        # We assume the source text is usually in the user's interface language for translation purposes,
-        # but the translation logic itself handles any source.
-        # Actually, let's detect source to be sure if translation is needed.
         source_lang = await detect_language(target_text)
         need_translation = target_lang != source_lang
     else:
-        # No language specified -> Use the text's natural language (no translation)
         target_lang = await detect_language(target_text)
         need_translation = False
     
@@ -4043,43 +4051,56 @@ async def cmd_voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             voice_reply_to = reply_target_id
             
         # --- MULTI-MODEL COMPARISON (PERSIAN ONLY) ---
-        if target_lang == "fa":
+        if target_lang == "fa" and not user_requested_gender:
             await context.bot.send_message(chat_id=msg.chat_id, text="🧪 <b>تست مقایسه موتورهای صوتی (۲ مدل)</b>", parse_mode="HTML", reply_to_message_id=voice_reply_to)
             
             # 1. Datacula (Amir)
             try:
-                audio_amir = await text_to_speech(target_text, "fa") # Default uses Datacula logic
+                # Assuming Datacula works
+                audio_amir = await text_to_speech(target_text, "fa") # Current text_to_speech defaults to Datacula if Persian
                 if audio_amir:
-
                     caption_amir = "🗣️ <b>مدل ۱: Datacula (امیر)</b> - آنلاین"
                     await context.bot.send_voice(chat_id=msg.chat_id, voice=audio_amir, caption=caption_amir, parse_mode='HTML')
             except Exception as e:
                 print(f"Datacula Fail: {e}")
 
-            # Model 2 (Sherpa) Removed
-
-
-            # 3. EdgeTTS (Farid) - Force Fallback Logic
+            # 3. EdgeTTS (Dilara / Female for contrast)
             try:
-                # Manually invoke EdgeTTS for comparison
+                # Use female logic manually
                 audio_edge = io.BytesIO()
-                communicate = edge_tts.Communicate(clean_text_strict(target_text), "fa-IR-FaridNeural")
+                communicate = edge_tts.Communicate(clean_text_strict(target_text), "fa-IR-DilaraNeural")
                 async for chunk in communicate.stream():
                     if chunk["type"] == "audio":
                         audio_edge.write(chunk["data"])
-                audio_edge.seek(0)
-                
-
-                caption_edge = "🗣️ <b>مدل ۲: EdgeTTS (فرید)</b> - مایکروسافت"
-                await context.bot.send_voice(chat_id=msg.chat_id, voice=audio_edge, caption=caption_edge, parse_mode='HTML')
+                if audio_edge.tell() > 0:
+                    audio_edge.seek(0)
+                    caption_edge = "🗣️ <b>مدل ۲: EdgeTTS (دیلارا)</b> - مایکروسافت"
+                    await context.bot.send_voice(chat_id=msg.chat_id, voice=audio_edge, caption=caption_edge, parse_mode='HTML')
             except Exception as e:
                 print(f"EdgeTTS Fail: {e}")
                 
             return # Exit after sending comparison
 
-        # --- STANDARD SINGLE VOICE (NON-PERSIAN) ---
+        # --- STANDARD SINGLE VOICE (NON-PERSIAN OR EXPLICIT GENDER) ---
         # 2. Convert to speech
-        audio_buffer = await text_to_speech(target_text, target_lang)
+        # We need the monolith `text_to_speech` to accept gender or simulate it. 
+        # Actually, let's just implement the gender selection.
+        # But wait, `text_to_speech` in `su6i_yar.py` doesn't accept gender. I should just use `text_to_speech` but import it from src? No, the monolith has its own `text_to_speech`.
+        # I will replace the monolith's text_to_speech in a bit. But for now, let's just construct EdgeTTS manually if gender is female.
+        audio_buffer = None
+        if user_requested_gender == "female":
+             voices = {"fa": "fa-IR-DilaraNeural", "en": "en-US-JennyNeural"}
+             v = voices.get(target_lang, "en-US-JennyNeural")
+             try:
+                 temp_buf = io.BytesIO()
+                 comm = edge_tts.Communicate(clean_text_strict(target_text), v)
+                 async for chunk in comm.stream():
+                     if chunk["type"] == "audio": temp_buf.write(chunk["data"])
+                 if temp_buf.tell() > 0: temp_buf.seek(0); audio_buffer = temp_buf
+             except: pass
+        
+        if not audio_buffer:
+            audio_buffer = await text_to_speech(target_text, target_lang)
         
         # 3. Build caption with smart_split
         lang_name = LANG_NAMES.get(target_lang, target_lang)
