@@ -1,8 +1,12 @@
 import io
 import asyncio
+import httpx
 import edge_tts
 from src.core.logger import logger
 from src.utils.text_tools import clean_text_strict
+import re
+
+DATACULA_API_URL = "https://tts.datacula.com/api/tts"
 
 # Best EdgeTTS voice per language
 # Two options per language: [0] = primary  [1] = secondary (different gender)
@@ -28,38 +32,60 @@ _FALLBACK_VOICE = "en-US-GuyNeural"
 
 async def text_to_speech(text: str, lang: str = "fa", gender: str = "male") -> io.BytesIO | None:
     """
-    Convert text to speech using EdgeTTS.
-
-    Args:
-        text:   The text to speak.
-        lang:   BCP-47 language code prefix (e.g. 'fa', 'en', 'ko').
-        gender: 'male' (index 0) or 'female' (index 1).  Default: male.
-
-    Returns:
-        BytesIO with MP3 audio, or None on failure.
+    Convert text to speech.
+    Primary: Datacula (Amir) for Persian.
+    Fallback: EdgeTTS (Farid/Dilara) for Persian, or appropriate voice for others.
     """
     lang_key = lang[:2].lower()
+    
+    # Determine Logic (Is it Persian?)
+    is_persian_request = (lang_key == "fa") or (lang_key not in TTS_VOICES and re.search(r'[\u0600-\u06FF]', text))
+    
     clean_text = clean_text_strict(text) or text
     if len(clean_text) > 2000:
         clean_text = clean_text[:2000] + "..."
 
+    audio_buffer = io.BytesIO()
+    
+    # --- STRATEGY 1: DATACULA (Persian Only) ---
+    if is_persian_request:
+        try:
+            logger.info("🎙️ Using Datacula (Amir) for Persian TTS...")
+            params = {
+                "text": clean_text,
+                "model_name": "امیر" # Confirmed Persian ID
+            }
+            # Timeout is important as it's a queued free API (20s)
+            async with httpx.AsyncClient(timeout=20) as client:
+                response = await client.get(DATACULA_API_URL, params=params)
+            
+            if response.status_code == 200 and len(response.content) > 1000:
+                audio_buffer.write(response.content)
+                audio_buffer.seek(0)
+                return audio_buffer
+            else:
+                logger.warning(f"⚠️ Datacula Failed: {response.status_code}")
+                # Fall through to EdgeTTS
+        except Exception as e:
+            logger.error(f"⚠️ Datacula Error: {e}")
+            # Fall through to EdgeTTS
+            
+    # --- STRATEGY 2: EDGE TTS (Fallback/Default) ---
     voices = TTS_VOICES.get(lang_key, TTS_VOICES["en"])
     primary_voice = voices[1] if gender == "female" else voices[0]
     alternate_voice = voices[0] if gender == "female" else voices[1]
     
     # Attempt 1: Primary Voice
-    audio_buffer = await _attempt_edge_tts(clean_text, primary_voice)
-    if audio_buffer:
-        return audio_buffer
+    edge_buffer = await _attempt_edge_tts(clean_text, primary_voice)
+    if edge_buffer: return edge_buffer
         
-    logger.warning(f"⚠️ Primary voice ({primary_voice}) failed. Falling back to alternate voice ({alternate_voice})...")
+    logger.warning(f"⚠️ Primary EdgeTTS voice ({primary_voice}) failed. Falling back to {alternate_voice}...")
     
-    # Attempt 2: Alternate Voice (Same language, different gender)
-    audio_buffer = await _attempt_edge_tts(clean_text, alternate_voice)
-    if audio_buffer:
-        return audio_buffer
+    # Attempt 2: Alternate Voice
+    edge_buffer = await _attempt_edge_tts(clean_text, alternate_voice)
+    if edge_buffer: return edge_buffer
         
-    logger.error(f"❌ Alternate voice ({alternate_voice}) also failed.")
+    logger.error(f"❌ Alternate EdgeTTS voice ({alternate_voice}) also failed.")
     
     # Attempt 3: Universal Fallback (Only if the requested language wasn't already English)
     if lang_key != "en":
