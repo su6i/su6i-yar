@@ -138,24 +138,43 @@ async def cmd_voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         audio_buffer = await text_to_speech(target_text, target_lang, user_requested_gender or "male")
         
         if audio_buffer:
-            caption = f"🗣️ <b>Voice ({LANG_NAMES.get(target_lang, target_lang)})</b>"
+            from src.utils.text_tools import smart_split
+            import html
             
-            # Add voice toggle buttons
-            # We compress the text to fit in callback_data limit (64 bytes). 
-            # If text is too long, we can't easily pass it. Better to just pass target_lang and gender toggle.
-            # But we don't have a DB for state here, so let's stick to simple implementation without inline buttons for now, 
-            # Or pass a hash if we had a cache. Since we have LAST_ANALYSIS_CACHE, we could use that, but it's complex for arbitrary replies.
-            # The User specifically asked for a single voice explicitly (or 2 models for Persian).
-            # I will omit the callback buttons for now because Telegram limits callback_data to 64 bytes, 
-            # and caching arbitrary user messages just for voice toggling is overkill. The 2-model Persian split covers their main use case.
-
-            await context.bot.send_voice(
-                chat_id=msg.chat_id, 
-                voice=audio_buffer, 
-                caption=caption, 
+            # 3. Build caption with smart_split
+            lang_name = LANG_NAMES.get(target_lang, target_lang)
+            if need_translation:
+                header = f"🎙️ <b>دوبله ({lang_name}):</b>"
+                overflow_title = "ادامه دوبله"
+            else:
+                header = f"🔊 <b>نسخه صوتی ({lang_name}):</b>"
+                overflow_title = "ادامه متن"
+                
+            caption, overflow_text = smart_split(target_text, header=header, max_len=1024)
+            
+            # 4. Send Voice
+            voice_msg = await context.bot.send_voice(
+                chat_id=msg.chat_id,
+                voice=audio_buffer,
+                caption=caption,
                 parse_mode='HTML',
-                reply_to_message_id=reply_target_id
+                reply_to_message_id=reply_target_id,
+                read_timeout=90
             )
+            
+            # 5. Send overflow parts
+            if overflow_text:
+                remaining = overflow_text
+                while remaining:
+                    chunk = remaining[:4000]
+                    remaining = remaining[4000:]
+                    await context.bot.send_message(
+                        chat_id=msg.chat_id,
+                        text=f"📝 <b>{overflow_title}:</b>\n\n{html.escape(chunk)}",
+                        parse_mode='HTML',
+                        reply_to_message_id=voice_msg.message_id
+                    )
+                    
             await safe_delete(status_msg)
         else:
            await status_msg.edit_text(get_msg("err_api", user_id))
