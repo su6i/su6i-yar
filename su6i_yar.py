@@ -3691,73 +3691,7 @@ DATACULA_API_URL = "https://tts.datacula.com/api/tts"
 
 # Sherpa functions removed.
 
-def clean_text_strict(text: str) -> str:
-    """
-    Strict cleaning for Persian TTS as requested:
-    - Replace meaningful emojis with text (e.g., ✅ -> تأیید شده).
-    - Keep only letters (Persian/English), spaces, and basic punctuation.
-    - Remove numbers, other emojis, and styling symbols.
-    - Ensure titles/headers are on separate lines.
-    """
-    # 0. Semantic Emoji Mapping (Convert visual status to spoken text)
-    emoji_map = {
-        "✅": "تأیید شده",
-        "❌": "رد شده",
-        "⛔": "غیرمجاز",
-        "⚠️": "هشدار",
-        "🧠": "تحلیل",
-        "💡": "نتیجه",
-        "📄": "منبع",
-        "🔍": "بررسی",
-        "📊": "آمار",
-        "📈": "روند",
-        "📉": "روند نزولی",
-        "🆔": "شناسه",
-        "👤": "کاربر",
-        "🟢": "فعال",
-        "🔴": "غیرفعال",
-    }
-    
-    for emoji_char, text_replacement in emoji_map.items():
-        text = text.replace(emoji_char, f" {text_replacement} ")
-
-    # 0.5. Explicit Removals (User Requests)
-    
-    # 1. Handle Titles/Headers (Markdown bold) -> Add period for pause
-    text = re.sub(r'\*\*(.*?)\*\*', r' . . . \1 . . . ', text)
-
-    # 2. PAUSE STRATEGY (User Request):
-    # Detect Headers/Titles ending in colon (:) -> Surround with explicitly punctuation pauses.
-    # Newlines are NOT pauses. Use ". . ." or ", , ,"
-    # Pattern: Start of line, optional emoji/bullet, short text (max 60 chars), colon.
-    # Replacement:  . . . Text . . . 
-    # This handles keys such as "General Status", "Claim", "Audio Version", etc.
-    text = re.sub(r'(\n|^)\s*([^\n]{1,60}?):\s*', r'\1 . . . \2 . . . ', text)
-    
-    # Replace remaining colons (inline) with dot for pause
-    text = text.replace(":", " . ")
-
-    # 2.5 Allow Arabic/Persian Diacritics (Harakat) explicitly
-    # 064B-0652: Fathah, Dammah, Kasrah, etc.
-    allowed_diacritics = {chr(i) for i in range(0x064B, 0x0653)}
-
-    clean_chars = []
-    for char in text:
-        # Keep letters, spaces, newlines, basic punctuation, AND diacritics
-        if char.isalpha() or char.isspace() or char in ".،?!؟," or char in allowed_diacritics:
-            clean_chars.append(char)
-        else:
-            clean_chars.append(" ")
-            
-    text = "".join(clean_chars)
-    
-    # 3. Final Polish
-    # Collapse multiple spaces but PRESERVE newlines (important for the user's strategy)
-    text = re.sub(r'[ \t]+', ' ', text) 
-    # Collapse excessive newlines to avoid long silence loops
-    text = re.sub(r'\n{2,}', '\n\n', text)
-    
-    return text.strip()
+from src.utils.text_tools import clean_text_strict
 
 from src.features.voice.utils import text_to_speech
 

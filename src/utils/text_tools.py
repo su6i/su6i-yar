@@ -205,32 +205,57 @@ def clean_text_strict(text: str) -> str:
     import re
     # 0. Semantic Emoji Mapping
     emoji_map = {
-        "✅": "تأیید شده", "❌": "رد شده", "⛔": "غیرمجاز", "⚠️": "هشدار",
-        "🧠": "تحلیل", "💡": "نتیجه", "📄": "منبع", "🔍": "بررسی",
-        "📊": "آمار", "📈": "روند", "📉": "روند نزولی", "🆔": "شناسه",
-        "👤": "کاربر", "🟢": "فعال", "🔴": "غیرفعال",
+        "✅": "تأیید شده",
+        "❌": "رد شده",
+        "⛔": "غیرمجاز",
+        "⚠️": "هشدار",
+        "🧠": "تحلیل",
+        "💡": "نتیجه",
+        "📄": "منبع",
+        "🔍": "بررسی",
+        "📊": "آمار",
+        "📈": "روند",
+        "📉": "روند نزولی",
+        "🆔": "شناسه",
+        "👤": "کاربر",
+        "🟢": "فعال",
+        "🔴": "غیرفعال",
     }
     
     for emoji_char, text_replacement in emoji_map.items():
         text = text.replace(emoji_char, f" {text_replacement} ")
 
+    # 0.5. Explicit Removals (User Requests)
+    
     # 1. Handle Titles/Headers (Markdown bold) -> Add period for pause
     text = re.sub(r'\*\*(.*?)\*\*', r' . . . \1 . . . ', text)
+
+    # 2. PAUSE STRATEGY (User Request):
+    # Detect Headers/Titles ending in colon (:) -> Surround with explicitly punctuation pauses.
+    text = re.sub(r'(\n|^)\s*([^\n]{1,60}?):\s*', r'\1 . . . \2 . . . ', text)
     
-    # 2. Convert colons in headers to full stops/pauses
-    text = re.sub(r'(^|\n)(.*?):', r'\1\2 . . . ', text)
+    # Replace remaining colons (inline) with dot for pause
+    text = text.replace(":", " . ")
+
+    # 2.5 Allow Arabic/Persian Diacritics (Harakat) explicitly
+    # 064B-0652: Fathah, Dammah, Kasrah, etc.
+    allowed_diacritics = {chr(i) for i in range(0x064B, 0x0653)}
+
+    clean_chars = []
+    for char in text:
+        # Keep letters, spaces, newlines, basic punctuation, AND diacritics
+        if char.isalpha() or char.isspace() or char in ".،?!؟," or char in allowed_diacritics:
+            clean_chars.append(char)
+        else:
+            clean_chars.append(" ")
+            
+    text = "".join(clean_chars)
     
-    # 3. Remove URLs
-    text = re.sub(r'http\S+', 'لینک', text)
+    # 3. Final Polish
+    text = re.sub(r'[ \t]+', ' ', text) 
+    text = re.sub(r'\n{2,}', '\n\n', text)
     
-    # 4. Remove all other non-word chars (except Persian/English chars and basic punctuation)
-    # Keeping Arabic/Persian range + English + basic punctuation
-    text = re.sub(r'[^\w\s\.\,\?\!\u0600-\u06FF\u0750-\u077F\uFB50-\uFDFF\uFE70-\uFEFF]', ' ', text)
-    
-    # 5. Collapse spaces and newlines
-    text = re.sub(r'\s+', ' ', text).strip()
-    
-    return text
+    return text.strip()
 
 def extract_link_from_text(entities, text_content):
     """Helper to find URL in entities or regex"""
