@@ -748,10 +748,10 @@ async def cmd_learn_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"      \"translation\": \"[Translation ONLY in {explanation_lang}]\",\n"
                 f"      \"prompt\": \"A highly detailed English visual description for an AI image generator. IMPORTANT: This description MUST be based on the EXACT context and scene described in the 'sentence' and 'meaning' fields. DO NOT just describe the word. Create a vivid, high-quality cinematic scene representing the concept.\",\n"
                 f"      \"keywords\": \"3-4 simple English keywords representing the scene for image search\"\n"
-                f"    }},\n"
-                f"    ... (exactly 3 variant objects)\n"
+                f"    }}\n"
                 f"  ]\n"
                 f"}}\n"
+                f"IMPORTANT: 'slides' must contain EXACTLY 1 object.\n"
                 f"REPLY ONLY WITH JSON."
             )
             
@@ -790,7 +790,7 @@ async def cmd_learn_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 # Extract slides
                 variations = res.get("slides")
                 if not variations or not isinstance(variations, list): raise ValueError("Empty slides")
-                variations = variations[:3]
+                variations = variations[:1] # ONLY 1 SLIDE
 
             except Exception:
                 # Basic fallback
@@ -802,7 +802,8 @@ async def cmd_learn_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     "meaning": get_msg("learn_fallback_meaning", user_id),
                     "sentence": "Example sentence goes here.",
                     "translation": get_msg("learn_fallback_translation", user_id),
-                    "prompt": img_prompt
+                    "prompt": img_prompt,
+                    "keywords": target_text
                 }]
 
             # 5. Sequential Delivery (Download & Send one-by-one)
@@ -852,19 +853,22 @@ async def cmd_learn_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             image_bytes = await fetch_pexels_image(keywords)
                             if image_bytes: break
                             
-                            # FINAL FALLBACK: Try Pollinations again but with simple keywords (less chance of 414 URI Too Long)
-                            logger.info(f"🛡️ Pexels failed. Trying Final Pollinations Fallback with keywords: {keywords}")
+                            # FINAL FALLBACK: Try fal.ai (Guaranteed Quality)
+                            logger.info(f"🛡️ Pexels failed. Trying fal.ai Guaranteed Fallback for: {img_prompt}")
                             try:
-                                encoded_kw = urllib.parse.quote(keywords)
-                                seed_kw = int(asyncio.get_event_loop().time()) + 999
-                                url_kw = f"https://pollinations.ai/p/{encoded_kw}?width=1024&height=1024&seed={seed_kw}&nologo=true"
-                                def dl_kw():
-                                    req = urllib.request.Request(url_kw, headers={'User-Agent': 'Mozilla/5.0'})
-                                    with urllib.request.urlopen(req, timeout=60) as r: return r.read()
-                                image_bytes = await asyncio.to_thread(dl_kw)
+                                # Define fal.ai helper locally to prevent cluttering global scope if unused
+                                async def _get_fal():
+                                    import fal_client
+                                    import httpx
+                                    res = await fal_client.run_async("fal-ai/flux/schnell", arguments={"prompt": img_prompt, "image_size": "square_hd", "num_images": 1})
+                                    url = res["images"][0]["url"]
+                                    async with httpx.AsyncClient(timeout=30) as client:
+                                        r = await client.get(url)
+                                        return r.content if r.status_code == 200 else None
+                                image_bytes = await _get_fal()
                                 if image_bytes and len(image_bytes) > 5000: break
-                            except Exception as e_kw:
-                                logger.warning(f"Final fallback failed: {e_kw}")
+                            except Exception as e_fal:
+                                logger.warning(f"fal.ai final fallback failed: {e_fal}")
 
                     except Exception as e:
                         logger.warning(f"Image {i} attempt {attempt+1} failed: {e}")

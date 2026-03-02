@@ -199,6 +199,9 @@ def clean_text_strict(text: str) -> str:
     - Keep only letters, spaces, and basic punctuation.
     - Remove numbers, other emojis, and styling symbols.
     """
+    if not text:
+        return ""
+        
     import re
     # 0. Semantic Emoji Mapping
     emoji_map = {
