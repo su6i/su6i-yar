@@ -290,7 +290,7 @@ def extract_text(response) -> str:
     
     return str(content).strip()
 
-from src.utils.text_tools import smart_split
+from src.utils.text_tools import smart_split, extract_link_from_text
 
 async def detect_language(text: str) -> str:
     """Detect language of text. Prioritizes local regex for FA/KO, then AI."""
@@ -3308,10 +3308,7 @@ async def cmd_download_handler(update: Update, context: ContextTypes.DEFAULT_TYP
 
     # 3. Extract URL (If no video file)
     # Generic regex for any http/https URL
-    import re
-    match = re.search(r'(https?://\S+)', target_link)
-    if match:
-        target_link = match.group(1)
+    target_link = extract_link_from_text(None, target_link) or target_link
     
     # 3. Validate
     if not target_link:
@@ -3533,10 +3530,8 @@ async def global_message_handler(update: Update, context: ContextTypes.DEFAULT_T
             reply_to_message_id=msg.message_id
         )
         try:
-            # Extract just the URL from the text to prevent yt-dlp argument errors
-            import re
-            url_match = re.search(r'(https?://\S+)', text)
-            target_url = url_match.group(1) if url_match else text
+            # Use the shared utility function to cleanly extract the link
+            target_url = extract_link_from_text(msg.entities, text) or text
             
             success = await download_instagram(target_url, msg.chat_id, context.bot, msg.message_id,
                                                custom_caption_header=f"📥 {platform}",
@@ -3977,23 +3972,6 @@ async def cmd_fun_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Fun Command Error: {e}")
         if status_msg: await status_msg.edit_text(f"❌ خطا: {e}")
-
-def extract_link_from_text(entities, text_content):
-    """Helper to find URL in entities or regex"""
-    if not text_content: return None
-    
-    if entities:
-        for entity in entities:
-            if entity.type == 'text_link': # Hyperlink
-                return entity.url
-            elif entity.type == 'url': # Raw Link
-                return text_content[entity.offset:entity.offset + entity.length]
-    
-    # Fallback: Regex Search
-    found = re.search(r'(https?://\S+)', text_content)
-    if found:
-        return found.group(1)
-    return None
 
 
 async def check_birthdays_job(context: ContextTypes.DEFAULT_TYPE):
