@@ -258,20 +258,35 @@ def clean_text_strict(text: str) -> str:
     return text.strip()
 
 def extract_link_from_text(entities, text_content):
-    """Helper to find URL in entities or regex"""
+    """Helper to find URL safely, avoiding Telegram's UTF-16 offset bugs"""
     if not text_content: return None
     
+    # Check entities for direct URL type first
     if entities:
         for entity in entities:
             if entity.type == 'text_link': # Hyperlink
                 return entity.url
-            elif entity.type == 'url': # Raw Link
-                return text_content[entity.offset:entity.offset + entity.length]
+            if entity.type == 'url':
+                # Parse Telegram's UTF-16 offsets safely by encoding to utf-16-le
+                try:
+                    encoded_text = text_content.encode('utf-16-le')
+                    start = entity.offset * 2
+                    end = (entity.offset + entity.length) * 2
+                    url = encoded_text[start:end].decode('utf-16-le')
+                    return url.strip()
+                except Exception:
+                    pass # Fallback to regex on encoding errors
     
-    # Fallback: Regex Search
-    found = re.search(r'(https?://\S+)', text_content)
+    # Robust Regex Search (ignores Telegram offsets which break with emojis/Persian text)
+    url_pattern = r'(https?://[^\s\u0600-\u06FF<>"]+|www\.[^\s\u0600-\u06FF<>"]+)'
+    import re
+    found = re.search(url_pattern, text_content)
     if found:
-        return found.group(1)
+        url = found.group(0)
+        # Clean trailing punctuation more precisely
+        url = re.sub(r'[.,;:\?!\s]+$', '', url)
+        return url
+        
     return None
 
 import html
