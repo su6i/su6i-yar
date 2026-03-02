@@ -36,6 +36,9 @@ async def text_to_speech(text: str, lang: str = "fa", gender: str = "male") -> i
     Primary: Datacula (Amir) for Persian.
     Fallback: EdgeTTS (Farid/Dilara) for Persian, or appropriate voice for others.
     """
+    if not text:
+        return None
+        
     lang_key = lang[:2].lower()
     
     # Determine Logic (Is it Persian?)
@@ -91,9 +94,8 @@ async def text_to_speech(text: str, lang: str = "fa", gender: str = "male") -> i
     # Attempt 3: Universal Fallback (Only if the requested language wasn't already English)
     if lang_key != "en":
         logger.info(f"🎙️ Universal Fallback to English Voice: {_FALLBACK_VOICE}")
-        audio_buffer = await _attempt_edge_tts(clean_text, _FALLBACK_VOICE)
-        if audio_buffer:
-            return audio_buffer
+        edge_buffer = await _attempt_edge_tts(clean_text, _FALLBACK_VOICE)
+        if edge_buffer: return edge_buffer
             
     return None
 

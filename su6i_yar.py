@@ -847,9 +847,14 @@ async def cmd_learn_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         image_bytes = await asyncio.to_thread(dl)
                         if image_bytes and len(image_bytes) > 5000: break # Success
                         
-                        # If pollination fails on last attempt, try fal.ai guaranteed quality
+                        # If pollination fails on last attempt, try Pexels
                         if attempt == max_retries:
-                            logger.info(f"🛡️ Pollinations failed. Trying fal.ai Guaranteed Fallback for: {img_prompt}")
+                            logger.info(f"🛡️ Pollinations failed. Trying Pexels Fallback for slide {i+1}...")
+                            image_bytes = await fetch_pexels_image(keywords)
+                            if image_bytes: break
+                            
+                            # FINAL FALLBACK: Try fal.ai (Guaranteed Quality)
+                            logger.info(f"🛡️ Pexels failed. Trying fal.ai Guaranteed Fallback for: {img_prompt}")
                             try:
                                 async def _get_fal():
                                     import fal_client
@@ -863,27 +868,14 @@ async def cmd_learn_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                 if image_bytes and len(image_bytes) > 5000: break
                             except Exception as e_fal:
                                 logger.warning(f"fal.ai final fallback failed: {e_fal}")
-                                
-                            # FINAL FALLBACK: Pexels search
-                            logger.info(f"🛡️ fal.ai failed. Trying Pexels Fallback with keywords: {keywords}")
-                            image_bytes = await fetch_pexels_image(keywords)
-                            if image_bytes: break
 
                     except Exception as e:
                         logger.warning(f"Image {i} attempt {attempt+1} failed: {e}")
-                        # Fallback to Fal immediately if it's a connection error from Pollinations
+                        # Fallback to Pexels immediately if it's a connection error from Pollinations
                         if "pollinations.ai" in str(e):
                             try:
-                                logger.info(f"🛡️ Immediate Fallback to fal.ai for slide {i+1}...")
-                                async def _get_fal_fast():
-                                    import fal_client
-                                    import httpx
-                                    res = await fal_client.run_async("fal-ai/flux/schnell", arguments={"prompt": img_prompt, "image_size": "square_hd", "num_images": 1})
-                                    url = res["images"][0]["url"]
-                                    async with httpx.AsyncClient(timeout=30) as client:
-                                        r = await client.get(url)
-                                        return r.content if r.status_code == 200 else None
-                                image_bytes = await _get_fal_fast()
+                                logger.info(f"🛡️ Immediate Fallback to Pexels for slide {i+1}...")
+                                image_bytes = await fetch_pexels_image(keywords)
                                 if image_bytes: break
                             except: pass
 
