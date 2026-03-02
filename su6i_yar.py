@@ -847,16 +847,10 @@ async def cmd_learn_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         image_bytes = await asyncio.to_thread(dl)
                         if image_bytes and len(image_bytes) > 5000: break # Success
                         
-                        # If pollination fails on last attempt, try Pexels
+                        # If pollination fails on last attempt, try fal.ai guaranteed quality
                         if attempt == max_retries:
-                            logger.info(f"🛡️ Pollinations failed. Trying Pexels Fallback for slide {i+1}...")
-                            image_bytes = await fetch_pexels_image(keywords)
-                            if image_bytes: break
-                            
-                            # FINAL FALLBACK: Try fal.ai (Guaranteed Quality)
-                            logger.info(f"🛡️ Pexels failed. Trying fal.ai Guaranteed Fallback for: {img_prompt}")
+                            logger.info(f"🛡️ Pollinations failed. Trying fal.ai Guaranteed Fallback for: {img_prompt}")
                             try:
-                                # Define fal.ai helper locally to prevent cluttering global scope if unused
                                 async def _get_fal():
                                     import fal_client
                                     import httpx
@@ -869,14 +863,27 @@ async def cmd_learn_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                 if image_bytes and len(image_bytes) > 5000: break
                             except Exception as e_fal:
                                 logger.warning(f"fal.ai final fallback failed: {e_fal}")
+                                
+                            # FINAL FALLBACK: Pexels search
+                            logger.info(f"🛡️ fal.ai failed. Trying Pexels Fallback with keywords: {keywords}")
+                            image_bytes = await fetch_pexels_image(keywords)
+                            if image_bytes: break
 
                     except Exception as e:
                         logger.warning(f"Image {i} attempt {attempt+1} failed: {e}")
-                        # Fallback to Pexels immediately if it's a connection error from Pollinations
+                        # Fallback to Fal immediately if it's a connection error from Pollinations
                         if "pollinations.ai" in str(e):
                             try:
-                                logger.info(f"🛡️ Immediate Fallback to Pexels for slide {i+1}...")
-                                image_bytes = await fetch_pexels_image(keywords)
+                                logger.info(f"🛡️ Immediate Fallback to fal.ai for slide {i+1}...")
+                                async def _get_fal_fast():
+                                    import fal_client
+                                    import httpx
+                                    res = await fal_client.run_async("fal-ai/flux/schnell", arguments={"prompt": img_prompt, "image_size": "square_hd", "num_images": 1})
+                                    url = res["images"][0]["url"]
+                                    async with httpx.AsyncClient(timeout=30) as client:
+                                        r = await client.get(url)
+                                        return r.content if r.status_code == 200 else None
+                                image_bytes = await _get_fal_fast()
                                 if image_bytes: break
                             except: pass
 
@@ -898,7 +905,7 @@ async def cmd_learn_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         f"{get_msg('learn_example_sentence', user_id)}\n"
                         f"{target_flag} `{sentence}`\n"
                         f"{translation_line}"
-                        f"━━━━━━━━━━━━━━\n{get_msg('learn_slide_footer', user_id).format(index=i+1)}"
+                        f"━━━━━━━━━━━━━━\n{get_msg('learn_slide_footer', user_id)}"
                     )
 
                     current_slide_msg = None
@@ -1294,7 +1301,7 @@ MESSAGES = {
         "learn_quota_exceeded": "❌ سهمیه روزانه شما تمام شده است.",
         "learn_no_text": "❌ لطفاً متن یا کلمه‌ای برای یادگیری بفرستید (مثال: /learn apple یا در پاسخ به یک پیام).",
         "learn_example_sentence": "📖 **جمله نمونه:**",
-        "learn_slide_footer": "🎓 *آموزش ({index}/3)*",
+        "learn_slide_footer": "🎓 *آموزش*",
         "learn_queue_pos": " (نفر {pos} در صف...)",
         "learn_word_not_found": "❌ کلمه **{word}** پیدا نشد.\nآیا منظورتان **{suggestion}** بود؟\n(منبع: {lang} - {dict})",
         "learn_word_not_found_no_suggestion": "❌ کلمه **{word}** در هیچ دیکشنری معتبری پیدا نشد. لطفاً املای آن را بررسی کنید.",
@@ -1452,7 +1459,7 @@ MESSAGES = {
         "learn_quota_exceeded": "❌ Daily limit reached.",
         "learn_no_text": "❌ Please provide a word or phrase (e.g., /learn apple).",
         "learn_example_sentence": "📖 **Example Sentence:**",
-        "learn_slide_footer": "🎓 *Education ({index}/3)*",
+        "learn_slide_footer": "🎓 *Education*",
         "learn_queue_pos": " (Position {pos} in queue...)",
         "learn_word_not_found": "❌ **{word}** not found.\nDid you mean **{suggestion}**?\n(Source: {lang} - {dict})",
         "learn_word_not_found_no_suggestion": "❌ Word '**{word}**' was not found in any reliable dictionary. Please check your spelling.",
@@ -1612,7 +1619,7 @@ MESSAGES = {
         "learn_quota_exceeded": "❌ Limite quotidienne atteinte.",
         "learn_no_text": "❌ Veuillez fournir un mot ou une phrase (ex: /learn apple).",
         "learn_example_sentence": "📖 **Exemple de phrase:**",
-        "learn_slide_footer": "🎓 **Éducation ({index}/3)**",
+        "learn_slide_footer": "🎓 **Éducation**",
         "learn_searching_stats": "🔍 Recherche de **{word}** en {lang} (Source : {dict})...",
         "learn_word_not_found": "⚠️ Mot '**{word}**' introuvable. Affichage des résultats pour '**{suggestion}**' trouvé en {lang} ({dict}) à la place...",
         "learn_word_not_found_no_suggestion": "❌ Le mot '**{word}**' n'a été trouvé dans aucun dictionnaire fiable. Veuillez vérifier l'orthographe.",
@@ -1769,7 +1776,7 @@ MESSAGES = {
         "learn_quota_exceeded": "❌ 일일 한도에 도달했습니다.",
         "learn_no_text": "❌ 단어나 문장을 입력해주세요 (예: /learn apple).",
         "learn_example_sentence": "📖 **예문:**",
-        "learn_slide_footer": "🎓 *학습 ({index}/3)*",
+        "learn_slide_footer": "🎓 *학습*",
         "learn_queue_pos": " (대기 순서 {pos}번...)",
         "learn_word_not_found": "❌ **{word}** 을(를) 찾을 수 없습니다.\n혹시 **{suggestion}** 을(를) 찾으시나요?\n(출처: {lang} - {dict})",
         "learn_word_not_found_no_suggestion": "❌ **{word}** 단어를 신뢰할 수 있는 사전에서 찾을 수 없습니다. 철자를 확인해 주세요.",
@@ -3695,8 +3702,15 @@ from src.utils.text_tools import clean_text_strict
 
 from src.features.voice.utils import text_to_speech
 
-async def merge_bilingual_audio(target_audio: io.BytesIO, trans_audio: io.BytesIO) -> io.BytesIO:
+async def merge_bilingual_audio(target_audio: io.BytesIO | None, trans_audio: io.BytesIO | None) -> io.BytesIO | None:
     """Merge two audio streams with a silence gap using ffmpeg."""
+    if not target_audio and not trans_audio:
+        return None
+    if not trans_audio:
+        return target_audio
+    if not target_audio:
+        return trans_audio
+        
     import tempfile
     import os
     import subprocess
