@@ -2604,25 +2604,8 @@ async def download_instagram(url, chat_id, bot, reply_to_message_id=None, custom
         ffmpeg_args = ["--ffmpeg-location", ffmpeg_bin] if ffmpeg_bin else []
         logger.info(f"🔧 ffmpeg: {ffmpeg_bin or 'not found — merge may fail'}")
 
-        # Locate node/deno for yt-dlp JS runtime (needed for YouTube PO token / bot bypass)
-        node_bin = shutil.which("node") or shutil.which("nodejs")
-        if not node_bin:
-            # Playwright bundles node — use it
-            playwright_node = venv_bin.parent / "lib" / f"python{sys.version_info.major}.{sys.version_info.minor}" / "site-packages" / "playwright" / "driver" / "node"
-            if playwright_node.exists():
-                node_bin = str(playwright_node)
-        deno_bin = shutil.which("deno") or str(Path.home() / ".deno" / "bin" / "deno") if not node_bin else None
-        if deno_bin and not Path(deno_bin).exists():
-            deno_bin = None
-        if node_bin:
-            js_runtime_args = ["--js-runtimes", f"node:{node_bin}"]
-            logger.info(f"🟨 JS runtime: node @ {node_bin}")
-        elif deno_bin:
-            js_runtime_args = ["--js-runtimes", f"deno:{deno_bin}"]
-            logger.info(f"🟨 JS runtime: deno @ {deno_bin}")
-        else:
-            js_runtime_args = []
-            logger.warning("🟥 No JS runtime found (node/deno) — YouTube formats may be unavailable")
+        # JS runtimes (--js-runtimes) are excluded because the local version of yt-dlp does not support it.
+        js_runtime_args = []
 
         # Build format chain from max_height
         h = max_height
@@ -2637,7 +2620,6 @@ async def download_instagram(url, chat_id, bot, reply_to_message_id=None, custom
             executable,
             "-f", fmt,
             "--merge-output-format", "mp4",
-            "--remote-components", "ejs:github",
             *js_runtime_args,
             *ffmpeg_args,
             "-o", str(filename),
@@ -2684,7 +2666,7 @@ async def download_instagram(url, chat_id, bot, reply_to_message_id=None, custom
                 success = await download_instagram_cobalt(url, filename)
                 if not success:
                     logger.error(f"🛑 [Chat {chat_id}] All download methods exhausted for {url}")
-                    return False
+                    raise Exception(f"All download methods exhausted.\nyt-dlp stderr:\n{err_msg[:400]}")
                 logger.info(f"✨ [Chat {chat_id}] Recovery successful via Cobalt!")
 
         # 6. Check File Size (Final Safety Check)
@@ -2732,7 +2714,7 @@ async def download_instagram(url, chat_id, bot, reply_to_message_id=None, custom
                     return "TOO_LARGE"
         else:
             logger.error(f"❓ Download appeared successful but file '{filename}' is missing on disk.")
-            return False
+            raise Exception("Download appeared successful but file is missing on disk.")
 
         # 5. Extract caption from info.json
         original_caption = ""
@@ -3363,12 +3345,18 @@ async def cmd_download_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             if not IS_DEV: await safe_delete(status_msg)
             # Silent error to admin, generic fade-out to user
             await report_error_to_admin(context, user_id, "/dl", f"Download failed for {target_link}")
-            await reply_and_delete(update, context, get_msg("err_dl", user_id), delay=10)
+            err_msg_text = get_msg("err_dl", user_id)
+            if msg.chat.type == "private":
+                err_msg_text += "\n\n`All download methods (yt-dlp & Cobalt) exhausted or failed.`"
+            await reply_and_delete(update, context, err_msg_text, delay=10, parse_mode="Markdown")
             
     except Exception as e:
         if not IS_DEV: await safe_delete(status_msg)
         await report_error_to_admin(context, user_id, "/dl", str(e))
-        await reply_and_delete(update, context, get_msg("err_dl", user_id), delay=10)
+        err_msg_text = get_msg("err_dl", user_id)
+        if msg.chat.type == "private":
+            err_msg_text += f"\n\n`Error:\n{str(e)}`"
+        await reply_and_delete(update, context, err_msg_text, delay=20, parse_mode="Markdown")
 
 
 async def cmd_stop_bot_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -3544,18 +3532,28 @@ async def global_message_handler(update: Update, context: ContextTypes.DEFAULT_T
             get_msg("downloading", user_id),
             reply_to_message_id=msg.message_id
         )
-        success = await download_instagram(text, msg.chat_id, context.bot, msg.message_id,
-                                           custom_caption_header=f"📥 {platform}",
-                                           max_height=480)
-        if success == "TOO_LARGE":
-            await status_msg.edit_text(get_msg("err_too_large", user_id))
-            if not IS_DEV:
-                async def del_msg(ctx): await safe_delete(status_msg)
-                context.job_queue.run_once(del_msg, 15)
-        elif success:
-            if not IS_DEV: await safe_delete(status_msg)
-        else:
-            await status_msg.edit_text(get_msg("err_dl", user_id))
+        try:
+            success = await download_instagram(text, msg.chat_id, context.bot, msg.message_id,
+                                               custom_caption_header=f"📥 {platform}",
+                                               max_height=480)
+            if success == "TOO_LARGE":
+                await status_msg.edit_text(get_msg("err_too_large", user_id))
+                if not IS_DEV:
+                    async def del_msg(ctx): await safe_delete(status_msg)
+                    context.job_queue.run_once(del_msg, 15)
+            elif success:
+                if not IS_DEV: await safe_delete(status_msg)
+            else:
+                err_text = get_msg("err_dl", user_id)
+                if msg.chat.type == "private":
+                    err_text += "\n\n`All download methods (yt-dlp & Cobalt) exhausted or failed.`"
+                await status_msg.edit_text(err_text, parse_mode="Markdown")
+        except Exception as e:
+            err_text = get_msg("err_dl", user_id)
+            if msg.chat.type == "private":
+                err_text += f"\n\n`Traceback / Error:\n{str(e)}`"
+            await status_msg.edit_text(err_text, parse_mode="Markdown")
+            logger.error(f"Global download error: {e}")
         return
 
     # --- 3. AI ANALYSIS (Fallback) ---
