@@ -652,8 +652,8 @@ async def cmd_learn_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # Extract target text and language
-    target_text = ""
-    target_lang = user_lang # Default to user's app language
+    # Default to English if user is Persian (for bilingual learning), otherwise default to Persian
+    target_lang = "en" if user_lang == "fa" else "fa"
     
     if msg.reply_to_message:
         target_text = msg.reply_to_message.text or msg.reply_to_message.caption or ""
