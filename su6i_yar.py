@@ -2405,10 +2405,10 @@ async def download_instagram_cobalt(url: str, filename: Path) -> bool:
                         continue 
 
         logger.error("❌ All Cobalt instances failed.")
-        return False
+        raise Exception("All Cobalt instances failed.")
     except Exception as e:
         logger.error(f"Cobalt Fallback Logic Failed: {e}")
-        return False
+        raise e
 
 async def get_video_metadata(file_path: Path) -> dict:
     """Extract width, height, duration from video file using ffprobe."""
@@ -2789,12 +2789,12 @@ async def download_instagram(url, chat_id, bot, reply_to_message_id=None, custom
             except Exception as send_e:
                 logger.error(f"Error sending video/overflow: {send_e}")
                 # Try fallback without video or without caption
-                return False
-        return False
+                raise Exception(f"Telegram API Video Send Error: {send_e}")
+        raise Exception("File extraction/processing completed but delivery failed.")
         
     except Exception as e:
         logger.error(f"DL Exception: {e}")
-        return False
+        raise e
 
 # ==============================================================================
 # HANDLERS
@@ -3338,14 +3338,6 @@ async def cmd_download_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                     try: await ctx.bot.delete_message(chat_id=msg.chat_id, message_id=msg.message_id)
                     except: pass
                 context.job_queue.run_once(del_cmd, 1)
-        else:
-            if not IS_DEV: await safe_delete(status_msg)
-            # Silent error to admin, generic fade-out to user
-            await report_error_to_admin(context, user_id, "/dl", f"Download failed for {target_link}")
-            err_msg_text = get_msg("err_dl", user_id)
-            if msg.chat.type == "private":
-                err_msg_text += "\n\n`All download methods (yt-dlp & Cobalt) exhausted or failed.`"
-            await reply_and_delete(update, context, err_msg_text, delay=10, parse_mode="Markdown")
             
     except Exception as e:
         if not IS_DEV: await safe_delete(status_msg)
