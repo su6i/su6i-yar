@@ -3533,7 +3533,12 @@ async def global_message_handler(update: Update, context: ContextTypes.DEFAULT_T
             reply_to_message_id=msg.message_id
         )
         try:
-            success = await download_instagram(text, msg.chat_id, context.bot, msg.message_id,
+            # Extract just the URL from the text to prevent yt-dlp argument errors
+            import re
+            url_match = re.search(r'(https?://\S+)', text)
+            target_url = url_match.group(1) if url_match else text
+            
+            success = await download_instagram(target_url, msg.chat_id, context.bot, msg.message_id,
                                                custom_caption_header=f"📥 {platform}",
                                                max_height=480)
             if success == "TOO_LARGE":
