@@ -192,9 +192,14 @@ async def global_message_handler(update: Update, context: ContextTypes.DEFAULT_T
             await msg.reply_text("⚠️ " + get_msg("dl_off", user_id))
             return
 
+        # Extract the pure URL (ignoring surrounding text)
+        extracted_url = extract_link_from_text(msg.entities or msg.caption_entities, text)
+        if not extracted_url:
+            extracted_url = text
+
         try:
             from src.features.downloader.handlers import handle_video_link
-            await handle_video_link(update, context, text, msg.message_id)
+            await handle_video_link(update, context, extracted_url, msg.message_id)
         except Exception as e:
             logger.error(f"Global Handler Error: {e}")
         return

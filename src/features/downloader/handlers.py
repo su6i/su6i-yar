@@ -68,7 +68,13 @@ async def cmd_download_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             
         except Exception as e:
             logger.error(f"DL File Error: {e}")
-            await status_msg.edit_text(get_msg("err_dl", user_id))
+            import traceback
+            traceback.print_exc()
+
+            err_text = get_msg("err_dl", user_id)
+            if msg.chat.type == "private":
+                err_text += f"\n\n`Error:\n{str(e)}`"
+            await status_msg.edit_text(err_text, parse_mode="Markdown")
         finally:
             if filename.exists(): filename.unlink()
         return
@@ -254,7 +260,10 @@ async def handle_video_link(update: Update, context: ContextTypes.DEFAULT_TYPE, 
         video_path = await download_video(url)
 
         if not video_path or not video_path.exists():
-            await status_msg.edit_text(get_msg("err_dl", user_id))
+            err_text = get_msg("err_dl", user_id)
+            if msg.chat.type == "private":
+                err_text += "\n\n`Error: All yt-dlp/Cobalt extraction methods failed or returned None.`"
+            await status_msg.edit_text(err_text, parse_mode="Markdown")
             return
 
         await compress_video(video_path)
@@ -292,7 +301,13 @@ async def handle_video_link(update: Update, context: ContextTypes.DEFAULT_TYPE, 
         )
     except Exception as e:
         logger.error(f"{platform_label} DL Error: {e}")
-        await status_msg.edit_text(get_msg("err_dl", user_id))
+        import traceback
+        traceback.print_exc()
+
+        err_text = get_msg("err_dl", user_id)
+        if msg.chat.type == "private":
+            err_text += f"\n\n`Error:\n{str(e)}`"
+        await status_msg.edit_text(err_text, parse_mode="Markdown")
     finally:
         if video_path and video_path.exists():
             video_path.unlink()
