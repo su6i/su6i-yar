@@ -73,8 +73,12 @@ async def cmd_download_handler(update: Update, context: ContextTypes.DEFAULT_TYP
 
             err_text = get_msg("err_dl", user_id)
             if msg.chat.type == "private":
-                err_text += f"\n\n`Error:\n{str(e)}`"
-            await status_msg.edit_text(err_text, parse_mode="Markdown")
+                safe_err = str(e).replace('`', "'")
+                err_text += f"\n\n`Error:\n{safe_err}`"
+            try:
+                await status_msg.edit_text(err_text, parse_mode="Markdown")
+            except Exception:
+                await status_msg.edit_text(err_text)
         finally:
             if filename.exists(): filename.unlink()
         return
@@ -262,8 +266,11 @@ async def handle_video_link(update: Update, context: ContextTypes.DEFAULT_TYPE, 
         if not video_path or not video_path.exists():
             err_text = get_msg("err_dl", user_id)
             if msg.chat.type == "private":
-                err_text += "\n\n`Error: All yt-dlp/Cobalt extraction methods failed or returned None.`"
-            await status_msg.edit_text(err_text, parse_mode="Markdown")
+                err_text += "\n\n`Error: All extraction methods failed or returned None.`"
+            try:
+                await status_msg.edit_text(err_text, parse_mode="Markdown")
+            except Exception:
+                await status_msg.edit_text(err_text)
             return
 
         await compress_video(video_path)
@@ -306,8 +313,12 @@ async def handle_video_link(update: Update, context: ContextTypes.DEFAULT_TYPE, 
 
         err_text = get_msg("err_dl", user_id)
         if msg.chat.type == "private":
-            err_text += f"\n\n`Error:\n{str(e)}`"
-        await status_msg.edit_text(err_text, parse_mode="Markdown")
+            safe_err = str(e).replace('`', "'").replace('_', '-')
+            err_text += f"\n\n`Error:\n{safe_err}`"
+        try:
+            await status_msg.edit_text(err_text, parse_mode="Markdown")
+        except Exception:
+            await status_msg.edit_text(err_text)
     finally:
         if video_path and video_path.exists():
             video_path.unlink()
