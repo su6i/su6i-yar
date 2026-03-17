@@ -1220,6 +1220,12 @@ wheels = [
 ]
 
 [[package]]
+name = "pyaes"
+version = "1.6.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/44/66/2c17bae31c906613795711fc78045c285048168919ace2220daa372c7d72/pyaes-1.6.1.tar.gz", hash = "sha256:02c1b1405c38d3c370b085fb952dd8bea3fadcee6411ad99f312cc129c536d8f", size = 28536, upload-time = "2017-09-20T21:17:54.23Z" }
+
+[[package]]
 name = "pyasn1"
 version = "0.6.2"
 source = { registry = "https://pypi.org/simple" }
@@ -1345,6 +1351,28 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/8b/04/e7c1fe4dc78a6fdbfd6c337b1c3732ff543b8a397683ab38378447baa331/pyee-13.0.1.tar.gz", hash = "sha256:0b931f7c14535667ed4c7e0d531716368715e860b988770fc7eb8578d1f67fc8", size = 31655, upload-time = "2026-02-14T21:12:28.044Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a0/c4/b4d4827c93ef43c01f599ef31453ccc1c132b353284fc6c87d535c233129/pyee-13.0.1-py3-none-any.whl", hash = "sha256:af2f8fede4171ef667dfded53f96e2ed0d6e6bd7ee3bb46437f77e3b57689228", size = 15659, upload-time = "2026-02-14T21:12:26.263Z" },
+]
+
+[[package]]
+name = "pyrogram"
+version = "2.0.106"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pyaes" },
+    { name = "pysocks" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/c8/8e/5d09eca17271320bb9a95e50b7e053770aee85b3fd338e8267e7b6b280ae/Pyrogram-2.0.106.tar.gz", hash = "sha256:30202995758fcb6e0f91224704ab7fedefea454297724bd70a6a71a23748c16f", size = 345997, upload-time = "2023-04-30T18:24:45.506Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/37/88/502ec24914d208e06baa6f27ff812f46815bb4f302018ad848ebf518abdf/Pyrogram-2.0.106-py3-none-any.whl", hash = "sha256:32b62b3d93030b1080cbe45b88c0e8790cf4e2179cf3321ede810d48edf97bc7", size = 3573685, upload-time = "2023-04-30T18:24:41.986Z" },
+]
+
+[[package]]
+name = "pysocks"
+version = "1.7.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/bd/11/293dd436aea955d45fc4e8a35b6ae7270f5b8e00b53cf6c024c83b657a11/PySocks-1.7.1.tar.gz", hash = "sha256:3f8804571ebe159c380ac6de37643bb4685970655d3bba243530d6558b799aa0", size = 284429, upload-time = "2019-09-20T02:07:35.714Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/8d/59/b4572118e098ac8e46e399a1dd0f2d85403ce8bbaad9ec79373ed6badaf9/PySocks-1.7.1-py3-none-any.whl", hash = "sha256:2725bd0a9925919b9b51739eea5f9e2bae91e83288108a9ad338b2e3a4435ee5", size = 16725, upload-time = "2019-09-20T02:06:22.938Z" },
 ]
 
 [[package]]
@@ -1580,8 +1608,10 @@ dependencies = [
     { name = "langchain-google-genai" },
     { name = "langchain-openai" },
     { name = "playwright" },
+    { name = "pyrogram" },
     { name = "python-dotenv" },
     { name = "python-telegram-bot", extra = ["job-queue"] },
+    { name = "tgcrypto" },
     { name = "watchdog" },
     { name = "yt-dlp" },
 ]
@@ -1599,8 +1629,10 @@ requires-dist = [
     { name = "langchain-google-genai", specifier = ">=1.0.0" },
     { name = "langchain-openai", specifier = ">=0.1.0" },
     { name = "playwright", specifier = ">=1.41.0" },
+    { name = "pyrogram", extras = ["fast"], specifier = ">=2.0.106" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
     { name = "python-telegram-bot", extras = ["job-queue"], specifier = ">=21.0" },
+    { name = "tgcrypto", specifier = ">=1.2.5" },
     { name = "watchdog", specifier = ">=4.0.0" },
     { name = "yt-dlp", specifier = ">=2025.0.0" },
 ]
@@ -1622,6 +1654,12 @@ sdist = { url = "https://files.pythonhosted.org/packages/47/c6/ee486fd809e357697
 wheels = [
     { url = "https://files.pythonhosted.org/packages/d7/c1/eb8f9debc45d3b7918a32ab756658a0904732f75e555402972246b0b8e71/tenacity-9.1.4-py3-none-any.whl", hash = "sha256:6095a360c919085f28c6527de529e76a06ad89b23659fa881ae0649b867a9d55", size = 28926, upload-time = "2026-02-07T10:45:32.24Z" },
 ]
+
+[[package]]
+name = "tgcrypto"
+version = "1.2.5"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/33/59/7cf5ced989e3139a791d5452d58cb8994de589576b80f9267ba76d794f6c/TgCrypto-1.2.5.tar.gz", hash = "sha256:9bc2cac6fb9a12ef5b08f3dd500174fe374d89b660cce981f57e3138559cb682", size = 37280, upload-time = "2022-11-11T19:55:11.436Z" }
 
 [[package]]
 name = "tiktoken"

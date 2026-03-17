@@ -28,3 +28,8 @@ watchdog>=4.0.0
 jdatetime
 playwright>=1.40.0
 instaloader>=4.11.0
+jdatetime>=5.0.0
+
+# Telegram (Large File Support)
+pyrogram[fast]>=2.0.106
+tgcrypto>=1.2.5

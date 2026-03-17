@@ -5,6 +5,7 @@ import traceback
 import html
 import json
 from telegram import Update, ReplyKeyboardRemove
+from telegram.error import Conflict
 from telegram.ext import ContextTypes
 from telegram.constants import ParseMode
 
@@ -64,7 +65,7 @@ async def global_message_handler(update: Update, context: ContextTypes.DEFAULT_T
                     cookies = json.loads(json_candidate)
                     
                     if isinstance(cookies, list) and len(cookies) > 0 and "domain" in cookies[0] and "value" in cookies[0]:
-                        status_msg = await msg.reply_text("📥 در حال پردازش کوکی‌های متنی (EditThisCookie)...")
+                        status_msg = await msg.reply_text("📥 Processing text cookies (EditThisCookie)...")
                         json_path = Path(STORAGE_DIR) / "cookies.json"
                         txt_path = Path(STORAGE_DIR) / "cookies.txt"
                         
@@ -77,17 +78,17 @@ async def global_message_handler(update: Update, context: ContextTypes.DEFAULT_T
                         # Auto-resume download if a URL was pending
                         pending_url = PENDING_AUTH_URLS.pop(user_id, None)
                         if pending_url:
-                            await status_msg.edit_text("✅ کوکی‌های متنی شما با موفقیت نصب شد!\n\n🚀 در حال تلاش مجدد برای دانلود ویدیوی قبلی...")
+                            await status_msg.edit_text("✅ Your text cookies were successfully installed!\n\n🚀 Retrying the previous video download...")
                             context.user_data["override_text"] = pending_url
                             await global_message_handler(update, context)
                         else:
-                            await status_msg.edit_text("✅ کوکی‌های متنی شما (EditThisCookie) با موفقیت شناسایی، تبدیل و روی موتور نصب شد!\n\n🚀 حالا می‌توانید لینک ویدیوی قبلی را دوباره بفرستید.")
+                            await status_msg.edit_text("✅ Your text cookies (EditThisCookie) were successfully identified, converted, and installed on the engine!\n\n🚀 You can now resend the previous video link.")
                         return
                 except Exception as e:
                     logger.debug(f"Matches JSON but failed to process cookies: {e}")
             
             # If we reach here, it looks exactly like a cookie text but failed to parse (e.g. truncated)
-            await msg.reply_text("⚠️ این متن شبیه فایل کوکی است اما ساختار JSON آن نامعتبر یا ناقص است (احتمالاً به دلیل محدودیت طول پیام در تلگرام کات شده).\n\nدر این شرایط لطفاً کوکی‌ها را مستقیماً به عنوان فایل `.txt` یا `.json` (Document) بفرستید.")
+            await msg.reply_text("⚠️ This text looks like a cookie file but its JSON structure is invalid or incomplete (likely truncated due to Telegram's message length limit).\n\nPlease send the cookies directly as a `.txt` or `.json` file (Document) instead.")
             return
 
     # --- 1. MENU COMMANDS (Check by Emoji/Start) --- 
@@ -113,7 +114,7 @@ async def global_message_handler(update: Update, context: ContextTypes.DEFAULT_T
     if "فارسی" in text:
         USER_LANG[user_id] = "fa"
         save_persistence()
-        await reply_and_delete(update, context, "✅ زبان فارسی انتخاب شد.", reply_markup=get_main_keyboard(user_id))
+        await reply_and_delete(update, context, "✅ Persian language selected.", reply_markup=get_main_keyboard(user_id))
         return
     if "English" in text:
         USER_LANG[user_id] = "en"
@@ -244,6 +245,11 @@ async def global_message_handler(update: Update, context: ContextTypes.DEFAULT_T
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Log the error and send a telegram message to notify the developer."""
     logger.error(msg="Exception while handling an update:", exc_info=context.error)
+
+    # Polling conflicts are expected when more than one instance uses the same token.
+    # Keep logs, but skip admin Telegram notifications to avoid flooding.
+    if isinstance(context.error, Conflict):
+        return
 
     # traceback.format_exception returns the usual python message about an exception, but as a list of strings
     tb_list = traceback.format_exception(None, context.error, context.error.__traceback__)

@@ -18,6 +18,7 @@ import argparse
 import io
 import json
 import uuid
+import hashlib
 import urllib.parse
 import urllib.request
 import edge_tts
@@ -131,8 +132,20 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
 PEXELS_API_KEY = os.getenv("PEXELS_API_KEY", "").strip()
 ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY", "").strip()
+RAPIDAPI_KEY = os.getenv("RAPIDAPI_KEY", "").strip()
 
-from src.core.config import SETTINGS, STORAGE_DIR, LOGS_DIR, TEMP_DIR
+# Pyrogram personal account credentials (for downloading files > 20MB via User API).
+# Set TG_API_ID and TG_API_HASH in .env (get from https://my.telegram.org/apps).
+# TG_SESSION_STRING is the Pyrogram session string (generate once with make_session helper).
+TG_API_ID   = int(os.getenv("TG_API_ID",   "0"))
+TG_API_HASH = os.getenv("TG_API_HASH", "")
+TG_SESSION  = os.getenv("TG_SESSION_STRING", "")
+
+from src.core.config import SETTINGS, STORAGE_DIR, LOGS_DIR, TEMP_DIR, AMIR_PATH
+
+# Downloads directory — files kept for 1 month (auto-cleanup via job)
+DOWNLOAD_DIR = Path(os.path.expanduser("~/.su6i-yar/downloads"))
+DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 def get_storage_path(filename: str) -> str:
     """Resolve storage path relative to ~/.su6i-yar/storage/"""
@@ -1328,7 +1341,26 @@ MESSAGES = {
             "`{theoretical_tm}` تومان"
         ),
         "dl_usage_error": "⛔ لطفاً لینک اینستاگرام را بفرستید یا روی آن ریپلای کنید.",
-        "irrelevant_msg": "⚠️ این محتوا به نظر می‌رسد سیاسی، عقیدتی یا اجتماعی باشد. من فقط ادعاهای دقیق علمی، پزشکی و آماری را بررسی می‌کنم."
+        "irrelevant_msg": "⚠️ این محتوا به نظر می‌رسد سیاسی، عقیدتی یا اجتماعی باشد. من فقط ادعاهای دقیق علمی، پزشکی و آماری را بررسی می‌کنم.",
+        "sub_usage": (
+            "📝 *استفاده:*\n"
+            "`/sub [زبان_مبدا] زبان_مقصد` ← ویدیو با زیرنویس پخته‌شده\n"
+            "`/sub [زبان_مبدا] زبان_مقصد --sub-only` ← فقط فایل‌های زیرنویس\n"
+            "مثال: `/sub en fa`  یا  `/sub fa`\n"
+            "⚠️ حداکثر ۲ زبان پشتیبانی می‌شود"
+        ),
+        "sub_same_lang": "⚠️ زبان مبدا و مقصد نمی‌توانند یکسان باشند",
+        "sub_need_reply": "↩️ این دستور را در *پاسخ* (reply) به یک پیام حاوی لینک یا ویدیو ارسال کنید",
+        "sub_no_amir": "❌ `amir` CLI یافت نشد. لطفاً نصب را با `install.sh` بررسی کنید",
+        "sub_processing": "⏳ در حال تهیه زیرنویس ({src} → {tgt})...\nبسته به طول ویدیو چند دقیقه طول می‌کشد",
+        "sub_no_source": "⚠️ پیام ریپلای شده حاوی لینک یا ویدیو نیست",
+        "sub_no_output": "⚠️ فایل خروجی تولید نشد",
+        "sub_error": "❌ خطا در تهیه زیرنویس:\n{details}",
+        "sub_file_too_big": "⚠️ فایل ویدیو برای دانلود مستقیم از ربات بسیار بزرگ است.\nلطفاً به جای فایل، لینک ویدیو را ارسال کنید",
+        "sub_large_file_pyrogram": "📦 فایل بزرگ ({size} MB) — در حال دانلود با حساب شخصی...",
+        "sub_large_file_ask_url": "📦 فایل ویدیو بزرگ ({size}) بود و دانلود مستقیم ممکن نیست.\nیکی از لینک‌های زیر را برای ترجمه انتخاب کنید:",
+        "sub_url_cancelled": "❌ عملیات لغو شد",
+        "sub_too_many_langs": "⚠️ حداکثر ۲ زبان پشتیبانی می‌شود"
     },
     "en": {
         "welcome": (
@@ -1488,7 +1520,26 @@ MESSAGES = {
         ),
 
         "dl_usage_error": "⛔ Please provide an Instagram link or reply to one.",
-        "irrelevant_msg": "⚠️ This content appears to be political or opinion-based. I only verify specific scientific, medical, or statistical claims."
+        "irrelevant_msg": "⚠️ This content appears to be political or opinion-based. I only verify specific scientific, medical, or statistical claims.",
+        "sub_usage": (
+            "📝 *Usage:*\n"
+            "`/sub [src_lang] tgt_lang` ← video with burned subtitles\n"
+            "`/sub [src_lang] tgt_lang --sub-only` ← subtitle files only\n"
+            "Example: `/sub en fa`  or  `/sub fa`\n"
+            "⚠️ Max 2 languages"
+        ),
+        "sub_same_lang": "⚠️ Source and target language cannot be the same",
+        "sub_need_reply": "↩️ Reply to a message containing a link or video with this command",
+        "sub_no_amir": "❌ `amir` CLI not found. Please check installation with `install.sh`",
+        "sub_processing": "⏳ Generating subtitles ({src} → {tgt})...\nMay take a few minutes depending on video length",
+        "sub_no_source": "⚠️ The replied message has no link or video",
+        "sub_no_output": "⚠️ No output file was produced",
+        "sub_error": "❌ Subtitle generation failed:\n{details}",
+        "sub_file_too_big": "⚠️ The video file is too large to download via the bot API (limit: 20 MB).\nPlease send the video URL instead of the file",
+        "sub_large_file_pyrogram": "📦 Large file ({size} MB) — downloading via personal account...",
+        "sub_large_file_ask_url": "📦 The video file ({size}) is too large for direct download.\nChoose a URL from the caption to translate instead:",
+        "sub_url_cancelled": "❌ Cancelled",
+        "sub_too_many_langs": "⚠️ Maximum 2 languages supported"
     },
     "fr": {
         "welcome": (
@@ -1647,7 +1698,26 @@ MESSAGES = {
             "Écart du Marché: `{diff}` Rial"
         ),
         "dl_usage_error": "⛔ Veuillez fournir un lien Instagram ou y répondre.",
-        "irrelevant_msg": "⚠️ Ce contenu semble être politique ou basé sur une opinion. Je ne vérifie que les affirmations scientifiques, médicales ou statistiques."
+        "irrelevant_msg": "⚠️ Ce contenu semble être politique ou basé sur une opinion. Je ne vérifie que les affirmations scientifiques, médicales ou statistiques.",
+        "sub_usage": (
+            "📝 *Utilisation:*\n"
+            "`/sub [lang_src] lang_cible` ← vidéo avec sous-titres incrustés\n"
+            "`/sub [lang_src] lang_cible --sub-only` ← fichiers uniquement\n"
+            "Exemple: `/sub en fr`  ou  `/sub fr`\n"
+            "⚠️ Maximum 2 langues"
+        ),
+        "sub_same_lang": "⚠️ La langue source et cible ne peuvent pas être identiques",
+        "sub_need_reply": "↩️ Répondez à un message contenant un lien ou une vidéo avec cette commande",
+        "sub_no_amir": "❌ CLI `amir` introuvable. Vérifiez l'installation avec `install.sh`",
+        "sub_processing": "⏳ Génération des sous-titres ({src} → {tgt})...\nQuelques minutes selon la durée de la vidéo",
+        "sub_no_source": "⚠️ Le message auquel vous répondez n'a pas de lien ni de vidéo",
+        "sub_no_output": "⚠️ Aucun fichier de sortie produit",
+        "sub_error": "❌ Échec de la génération des sous-titres:\n{details}",
+        "sub_file_too_big": "⚠️ Le fichier vidéo est trop volumineux pour être téléchargé via l'API bot (limite: 20 Mo).\nVeuillez envoyer l'URL de la vidéo à la place",
+        "sub_large_file_pyrogram": "📦 Fichier volumineux ({size} Mo) — téléchargement via compte personnel...",
+        "sub_large_file_ask_url": "📦 Le fichier vidéo ({size}) est trop volumineux.\nChoisissez une URL dans la légende pour traduire:",
+        "sub_url_cancelled": "❌ Annulé",
+        "sub_too_many_langs": "⚠️ Maximum 2 langues supportées"
     },
     "ko": {
         "welcome": (
@@ -1804,7 +1874,26 @@ MESSAGES = {
             "시장 차이: `{diff}` 리알"
         ),
         "dl_usage_error": "⛔ 인스타그램 링크를 보내거나 답장하세요.",
-        "irrelevant_msg": "⚠️ 이 콘텐츠는 정치적/의견 기반인 것 같습니다. 구체적인 과학적 검증만 수행합니다."
+        "irrelevant_msg": "⚠️ 이 콘텐츠는 정치적/의견 기반인 것 같습니다. 구체적인 과학적 검증만 수행합니다.",
+        "sub_usage": (
+            "📝 *사용법:*\n"
+            "`/sub [출발어] 도착어` ← 자막 포함 비디오\n"
+            "`/sub [출발어] 도착어 --sub-only` ← 자막 파일만\n"
+            "예시: `/sub en ko`  또는  `/sub ko`\n"
+            "⚠️ 최대 2개 언어"
+        ),
+        "sub_same_lang": "⚠️ 출발어와 도착어가 같을 수 없습니다",
+        "sub_need_reply": "↩️ 링크나 비디오가 있는 메시지에 답장하여 이 명령을 사용하세요",
+        "sub_no_amir": "❌ `amir` CLI를 찾을 수 없습니다. `install.sh`로 설치를 확인하세요",
+        "sub_processing": "⏳ 자막 생성 중 ({src} → {tgt})...\n영상 길이에 따라 몇 분이 걸릴 수 있습니다",
+        "sub_no_source": "⚠️ 답장한 메시지에 링크나 비디오가 없습니다",
+        "sub_no_output": "⚠️ 출력 파일이 생성되지 않았습니다",
+        "sub_error": "❌ 자막 생성 실패:\n{details}",
+        "sub_file_too_big": "⚠️ 동영상 파일이 너무 커서 봇 API로 다운로드할 수 없습니다 (한도: 20 MB).\n파일 대신 동영상 URL을 보내주세요",
+        "sub_large_file_pyrogram": "📦 대용량 파일 ({size} MB) — 개인 계정으로 다운로드 중...",
+        "sub_large_file_ask_url": "📦 동영상 파일 ({size})이 너무 큽니다.\n캡션에서 번역할 URL을 선택하세요:",
+        "sub_url_cancelled": "❌ 취소됨",
+        "sub_too_many_langs": "⚠️ 최대 2개 언어만 지원됩니다"
     }
 }
 
@@ -2299,59 +2388,40 @@ async def download_instagram_cobalt(url: str, filename: Path) -> bool:
     """Download video using Cobalt API as fallback"""
     logger.info("🛡️ Falling back to Cobalt API...")
     try:
-        # List of public instances (Official + Community)
-        # Strategy: Prioritize known-good community instances
-        # Source: https://instances.cobalt.best & https://cobalt.directory
+        # Expanded list of public Cobalt instances
         instances = [
-            "https://api.cobalt.tools",               # Official (may need API key)
-            "https://cobalt.api.timelessnesses.me",   # Community - v10
-            "https://cobalt.privacyredirect.com",     # Privacy-friendly mirror
-            "https://cobalt.tnix.dev",                # Community
-            "https://co.wuk.sh",                      # Original legacy
-            "https://cobalt.synzr.space",             # Community
+            "https://api.cobalt.tools",
+            "https://cobalt-api.kwiatekm.moe",
+            "https://co.wuk.sh",
+            "https://cobalt.api.timelessnesses.me",
+            "https://cobalt.synzr.space"
         ]
-        
-        # Enhanced headers to mimic browser
+
         headers = {
             "Accept": "application/json",
             "Content-Type": "application/json",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Origin": "https://cobalt.tools",
-            "Referer": "https://cobalt.tools/"
-        }
-        
-        payload = {
-            "url": url,
-            "filenamePattern": "basic"
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
         }
 
-
-        async with httpx.AsyncClient(timeout=20, follow_redirects=True) as client:
-            # Strategy: Try each instance
-            for base_url in instances:
-                # Handle endpoint differences
-                # v7 uses /api/json, v10 uses /
-                # We try both implicitly by constructing full URLs or base
-                
-                # Clean base URL
-                base = base_url.rstrip("/")
-                if base.endswith("/api/json"):
+        async with httpx.AsyncClient(timeout=30, verify=False, follow_redirects=True) as client:
+            for base in instances:
+                if "api.cobalt.tools" in base:
                     api_url = base # v7 style
                 else:
                     api_url = base # v10 style (often root)
-
+                
+                instance_headers = headers.copy()
+                instance_headers["Origin"] = base.replace("api.", "").replace("cobalt-api.", "")
+                
                 logger.info(f"🛡️ Trying Cobalt Instance: {api_url}")
 
-                # Define Payloads (v10 vs v7)
                 payloads_to_try = [
-                    # v10 Syntax
                     {
                         "url": url,
                         "videoQuality": "max",
                         "audioFormat": "mp3",
                         "filenameStyle": "basic"
                     },
-                    # v7 Syntax (Legacy)
                     {
                         "url": url,
                         "vCodec": "h264",
@@ -2365,7 +2435,7 @@ async def download_instagram_cobalt(url: str, filename: Path) -> bool:
                 for i, payload in enumerate(payloads_to_try):
                     try:
                         logger.info(f"🛰️ [Cobalt] Payload {i+1} trial for {api_url}...")
-                        resp = await client.post(api_url, json=payload, headers=headers)
+                        resp = await client.post(api_url, json=payload, headers=instance_headers)
                         if resp.status_code not in [200, 201]:
                              logger.warning(f"  > [Cobalt] Payload {i+1} HTTP {resp.status_code} Failure: {resp.text}")
                              continue
@@ -2374,11 +2444,10 @@ async def download_instagram_cobalt(url: str, filename: Path) -> bool:
                         if data.get("status") in ["error", "redirect"]:
                              logger.warning(f"  > [Cobalt] API level error: {data.get('text')}")
                              continue
-
+                             
                         dl_url = data.get("url")
                         if not dl_url and data.get("picker"):
                             dl_url = data["picker"][0]["url"]
-                        
                         if dl_url:
                             logger.info(f"🔗 [Cobalt] Successfully extracted stream URL: {dl_url[:50]}...")
                             break 
@@ -2387,10 +2456,7 @@ async def download_instagram_cobalt(url: str, filename: Path) -> bool:
                         continue 
 
                 if dl_url:
-                    # Found a working URL from this instance!
                     logger.info(f"✅ Found working Cobalt instance: {api_url}")
-                    
-                    # Download File Stream
                     try:
                         logger.info("⬇️ Downloading stream from Cobalt...")
                         async with client.stream("GET", dl_url) as dl_resp:
@@ -2401,14 +2467,250 @@ async def download_instagram_cobalt(url: str, filename: Path) -> bool:
                         return True
                     except Exception as dl_e:
                         logger.error(f"Stream Download Failed: {dl_e}")
-                        # Try next instance if download fails
                         continue 
 
         logger.error("❌ All Cobalt instances failed.")
-        raise Exception("All Cobalt instances failed.")
+        return False
     except Exception as e:
         logger.error(f"Cobalt Fallback Logic Failed: {e}")
-        raise e
+        return False
+
+# ==============================================================================
+# LOGIC: RAPIDAPI CASCADING INSTAGRAM DOWNLOAD (DYNAMIC QUOTA TRACKING)
+# ==============================================================================
+
+_RAPIDAPI_USAGE_FILE = os.path.join(STORAGE_DIR, "rapidapi_usage.json")
+
+def _load_rapidapi_usage() -> dict:
+    try:
+        if os.path.exists(_RAPIDAPI_USAGE_FILE):
+            with open(_RAPIDAPI_USAGE_FILE, "r") as f:
+                return json.load(f)
+    except Exception:
+        pass
+    return {}
+
+def _save_rapidapi_usage(data: dict):
+    try:
+        os.makedirs(os.path.dirname(_RAPIDAPI_USAGE_FILE), exist_ok=True)
+        with open(_RAPIDAPI_USAGE_FILE, "w") as f:
+            json.dump(data, f, indent=2)
+    except Exception as e:
+        logger.warning(f"Failed to save RapidAPI usage: {e}")
+
+def _is_api_quota_exhausted(api_name: str) -> bool:
+    """Checks local store to see if this API reported 0 remaining requests recently."""
+    usage = _load_rapidapi_usage()
+    data = usage.get(api_name)
+    if not data:
+        return False  # No data yet, assume we can use it
+        
+    remaining = data.get("remaining", -1)
+    reset_at = data.get("reset_at", 0)
+    
+    # If we have positive remaining requests, it's fine
+    if remaining > 0:
+        return False
+        
+    # If remaining is 0 or less, check if the reset time has passed
+    import time
+    if remaining == 0 and time.time() < reset_at:
+        logger.info(f"⛔ [{api_name}] Quota exhausted locally. Resets in {int(reset_at - time.time())}s.")
+        return True
+        
+    return False
+
+def _update_api_quota_from_headers(api_name: str, headers: httpx.Headers, status_code: int):
+    """Parses exact remaining requests from RapidAPI response headers and stores it."""
+    remaining_strs = [
+        headers.get("x-ratelimit-requests-remaining"),
+        headers.get("x-rate-limit-rapid-free-plans-hard-limit-remaining"),
+        headers.get("X-RateLimit-Remaining")
+    ]
+    reset_strs = [
+        headers.get("x-ratelimit-requests-reset"),
+        headers.get("x-rate-limit-rapid-free-plans-hard-limit-reset"),
+        headers.get("X-RateLimit-Reset")
+    ]
+    
+    remaining = None
+    reset_seconds = None
+    
+    for r in remaining_strs:
+        if r is not None and str(r).isdigit():
+            remaining = int(r)
+            break
+            
+    for reset in reset_strs:
+        if reset is not None and str(reset).isdigit():
+            reset_seconds = int(reset)
+            break
+            
+    # If API explicitly told us we have 0 remaining via 429
+    if status_code == 429 and remaining is None:
+        remaining = 0
+        reset_seconds = reset_seconds or 86400  # Default block for 24h if unknown
+        
+    if remaining is not None:
+        import time
+        usage = _load_rapidapi_usage()
+        # Fallback to 24h reset if header not provided but we hit 0
+        if reset_seconds is None and remaining == 0:
+            reset_seconds = 86400 
+            
+        usage[api_name] = {
+            "remaining": remaining,
+            "reset_at": time.time() + int(reset_seconds) if reset_seconds else 0,
+            "last_check": int(time.time())
+        }
+        _save_rapidapi_usage(usage)
+        logger.debug(f"📊 [{api_name}] API Quota Updated: {remaining} requests left.")
+
+# RapidAPI providers WITHOUT hardcoded limits
+RAPIDAPI_PROVIDERS = [
+    {
+        "name": "AIO Instagram Downloader",
+        "host": "aio-instagram-downloader.p.rapidapi.com",
+        "method": "POST",
+        "url": "https://aio-instagram-downloader.p.rapidapi.com/api/v1/instagram",
+        "body_key": "url",
+    },
+    {
+        "name": "SnapInsta API",
+        "host": "snapinsta-api.p.rapidapi.com",
+        "method": "GET",
+        "url": "https://snapinsta-api.p.rapidapi.com/api/instagram/download",
+        "query_key": "url",
+    },
+    {
+        "name": "Instagram Scraper",
+        "host": "instagram-scraper-api2.p.rapidapi.com",
+        "method": "GET",
+        "url": "https://instagram-scraper-api2.p.rapidapi.com/v1/post_info",
+        "query_key": "url_or_shortcode",
+    },
+]
+
+async def download_via_rapidapi(url: str, filename: Path) -> bool:
+    """Cascading RapidAPI fallback parsing exact headers for safety."""
+    if not RAPIDAPI_KEY:
+        logger.warning("⚠️ RAPIDAPI_KEY not set in .env — skipping RapidAPI fallback.")
+        return False
+    
+    headers_base = {
+        "X-RapidAPI-Key": RAPIDAPI_KEY,
+        "Content-Type": "application/json",
+    }
+    
+    async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
+        for provider in RAPIDAPI_PROVIDERS:
+            name = provider["name"]
+            
+            # 1. Dynamic Quota check (based on previous header reads)
+            if _is_api_quota_exhausted(name):
+                continue
+            
+            logger.info(f"🌐 [RapidAPI] Trying {name}...")
+            headers = {**headers_base, "X-RapidAPI-Host": provider["host"]}
+            
+            try:
+                # 2. Make the request
+                if provider["method"] == "POST":
+                    resp = await client.post(
+                        provider["url"],
+                        json={provider.get("body_key", "url"): url},
+                        headers=headers
+                    )
+                else:  # GET
+                    resp = await client.get(
+                        provider["url"],
+                        params={provider.get("query_key", "url"): url},
+                        headers=headers
+                    )
+                
+                # 3. Read exact headers to update our safety tracker
+                _update_api_quota_from_headers(name, resp.headers, resp.status_code)
+                
+                # 4. Check status
+                if resp.status_code == 429:
+                    logger.warning(f"⛔ [{name}] HTTP 429 — API reports quota exceeded.")
+                    continue
+                if resp.status_code not in [200, 201]:
+                    logger.warning(f"⚠️ [{name}] HTTP {resp.status_code}: {resp.text[:200]}")
+                    continue
+                
+                # 5. Extract Media URL
+                data = resp.json()
+                media_url = None
+                
+                if isinstance(data, list) and len(data) > 0:
+                    media_url = data[0].get("url") or data[0].get("video") or data[0].get("download_url")
+                elif isinstance(data, dict):
+                    # Direct keys
+                    media_url = (data.get("url") or data.get("video") or data.get("download_url") or
+                                 data.get("media") or (data.get("result", {}).get("url") if isinstance(data.get("result"), dict) else None))
+                    
+                    # Nested lists (medias, items, data, result, Media)
+                    if not media_url:
+                        medias = data.get("medias") or data.get("items") or data.get("data") or data.get("result") or data.get("Media")
+                        if isinstance(medias, list) and len(medias) > 0:
+                            # Prioritize Video type if it's a list of objects like {'Type': 'Video', 'Url': '...'}
+                            video_item = next((m for m in medias if isinstance(m, dict) and str(m.get("Type")).lower() == "video"), None)
+                            if video_item:
+                                media_url = video_item.get("Url") or video_item.get("url")
+                            else:
+                                first = medias[0]
+                                if isinstance(first, dict):
+                                    media_url = first.get("url") or first.get("video") or first.get("download_url") or first.get("Url")
+                                elif isinstance(first, str):
+                                    media_url = first
+                
+                if not media_url:
+                    logger.warning(f"⚠️ [{name}] No media URL found in response.")
+                    continue
+                
+                # 6. Final Download
+                logger.info(f"⬇️ [{name}] Downloading media via httpx: {media_url[:60]}...")
+                
+                dl_headers = {
+                    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+                    "Accept-Language": "en-US,en;q=0.9",
+                    "Sec-Fetch-Dest": "document",
+                    "Sec-Fetch-Mode": "navigate",
+                    "Sec-Fetch-Site": "none",
+                    "Sec-Fetch-User": "?1",
+                    "Upgrade-Insecure-Requests": "1"
+                }
+
+                # If the URL is from fbcdn, sending a referer might actually cause a 403 if it differs from what FB expects.
+                # However, many CDNs require it, so we add it implicitly unless it fails.
+                
+                try:
+                    async with httpx.AsyncClient(verify=False) as dl_client:
+                        dl_resp = await dl_client.get(media_url, headers=dl_headers, follow_redirects=True, timeout=60)
+                        dl_resp.raise_for_status()
+                        
+                        if len(dl_resp.content) < 5000:
+                            logger.warning(f"⚠️ [{name}] Downloaded bytes too small. Skipping.")
+                            continue
+                        
+                        with open(filename, "wb") as f:
+                            f.write(dl_resp.content)
+                        
+                        logger.info(f"✅ [{name}] Successfully downloaded {len(dl_resp.content)} bytes!")
+                        return True
+                except Exception as e:
+                    logger.warning(f"⚠️ [{name}] httpx download failed: {e}")
+                    continue
+                
+            except Exception as e:
+                logger.error(f"💥 [{name}] Exception: {e}")
+                continue
+    
+    logger.error("❌ All RapidAPI providers failed or quotas exhausted.")
+    return False
+
 
 async def get_video_metadata(file_path: Path) -> dict:
     """Extract width, height, duration from video file using ffprobe."""
@@ -2445,19 +2747,86 @@ async def get_video_metadata(file_path: Path) -> dict:
         logger.error(f"💥 Metadata Extraction Failed: {e}")
         return None
 
+
+async def download_large_video_pyrogram(
+    chat_id: int,
+    message_id: int,
+    dest: Path,
+    progress_callback=None,
+) -> Path | None:
+    """
+    Download a Telegram video > 20 MB using the personal user account via Pyrogram.
+    Re-fetches the message via MTProto to obtain a fresh file_reference (avoids
+    FILE_REFERENCE_EXPIRED that occurs when using bot-API file_id tokens directly).
+
+    Requirements in .env:
+        TG_API_ID          — from https://my.telegram.org/apps
+        TG_API_HASH        — same page
+        TG_SESSION_STRING  — run setup_pyrogram.py once to generate
+    """
+    if not TG_API_ID or not TG_API_HASH or not TG_SESSION:
+        logger.warning("⚠️ Pyrogram credentials not configured. Large-file download skipped.")
+        return None
+
+    try:
+        from pyrogram import Client
+
+        async with Client(
+            name="su6i_yar_user",
+            api_id=TG_API_ID,
+            api_hash=TG_API_HASH,
+            session_string=TG_SESSION,
+            no_updates=True,
+        ) as user_client:
+            # Re-fetch the message to get a fresh file_reference
+            pyro_msg = await user_client.get_messages(chat_id, message_id)
+            if not pyro_msg or not pyro_msg.video:
+                logger.error("❌ Pyrogram: message not found or has no video")
+                return None
+
+            local_path = await user_client.download_media(
+                pyro_msg.video,
+                file_name=str(dest),
+                progress=progress_callback,
+            )
+
+            if not local_path:
+                return None
+            result = Path(local_path)
+            # Reject obviously-empty downloads (failed silently)
+            if not result.exists() or result.stat().st_size < 1024:
+                logger.error(f"❌ Pyrogram download produced empty/tiny file: {result.stat().st_size if result.exists() else 'missing'} bytes")
+                result.unlink(missing_ok=True)
+                return None
+            return result
+    except Exception as e:
+        logger.error(f"❌ Pyrogram download failed: {e}")
+    return None
+
+
 async def compress_video(input_path: Path) -> bool:
     """
     Smart Compression Logic:
     1. If Size > 10MB AND Resolution > 720p: Compress (Scale to 720p + Re-encode).
-    2. Else: Remux only (Copy Codec) to fix Mac compatibility without reducing quality/size.
+    2. Else: Remux only (Copy Codec) to fix compatibility without reducing quality/size.
+
+    Rules:
+    - Only replace original if output is strictly smaller (no bloating allowed).
+    - h264 and h265/hevc are both compatible — do NOT re-encode just because it's not h264.
+    - Only re-encode for truly incompatible legacy codecs (mpeg4, vp8, wmv, etc.).
     """
     output_path = input_path.with_name(f"compressed_{input_path.name}")
-    
+
     # 1. Check File Size
     input_size_mb = input_path.stat().st_size / (1024 * 1024)
-    
-    # 2. Check Resolution
+
+    # 2. Check Resolution and Codec
     meta = await get_video_metadata(input_path)
+    high_res_huge = False
+    min_dim = 0
+    codec = ""
+    pix_fmt = ""
+
     if not meta:
         logger.warning(f"⚠️ Could not read metadata for {input_path.name}, defaulting to Remux.")
         should_compress = False
@@ -2467,37 +2836,34 @@ async def compress_video(input_path: Path) -> bool:
         pix_fmt = meta.get("pix_fmt", "")
         codec = meta.get("codec_name", "")
         min_dim = min(width, height)
-        
+
         # Condition 1: High Res/Size -> Compress
         high_res_huge = (input_size_mb > 10) and (min_dim > 720)
-        
+
         # Condition 2: Incompatible Format/Codec
-        # Apple/Telegram needs h264 + yuv420p for 100% guarantee.
-        is_bad_pix = pix_fmt not in ["yuv420p"] # Strict: Only yuv420p
-        is_bad_codec = codec != "h264" # Strict: Only h264
-        
+        # h264 AND h265/hevc are natively supported on iOS, Android, Mac, Windows 10+, Telegram.
+        # Only re-encode genuinely legacy/incompatible codecs.
+        COMPATIBLE_CODECS = {"h264", "hevc", "h265"}
+        is_bad_pix = pix_fmt not in ["yuv420p", "yuv420p10le"]
+        is_bad_codec = codec not in COMPATIBLE_CODECS
+
         should_compress = high_res_huge or is_bad_pix or is_bad_codec
 
     if should_compress:
         current_reason = "High Res/Size" if high_res_huge else f"Format Fix ({codec}/{pix_fmt})"
         logger.info(f"📉 Compressing {input_path.name} Reason: {current_reason}...")
 
-        # Logic: Scale shortest edge to 720p ONLY if high res. Else keep orig res but fix format.
-        
         vf_filters = []
         if min_dim > 720 and (input_size_mb > 10):
-             vf_filters.append("scale='if(gt(iw,ih),-2,720)':'if(gt(iw,ih),720,-2)'")
-        
-        # Ensure yuv420p is enforced
+            vf_filters.append("scale='if(gt(iw,ih),-2,720)':'if(gt(iw,ih),720,-2)'")
         vf_filters.append("format=yuv420p")
-        
         vf_string = ",".join(vf_filters)
+
         cmd = [
             "ffmpeg", "-y",
             "-i", str(input_path),
             "-c:v", "libx264",
             "-crf", "26",
-            "-preset", "faster",
             "-preset", "faster",
             "-vf", vf_string,
             "-c:a", "aac",
@@ -2508,7 +2874,6 @@ async def compress_video(input_path: Path) -> bool:
         ]
     else:
         logger.info(f"⚡️ Remuxing {input_path.name} (Size: {input_size_mb:.1f}MB - No Compression Needed)...")
-        # Logic: Copy Video/Audio strings (No Re-encoding), just fix container
         cmd = [
             "ffmpeg", "-y",
             "-i", str(input_path),
@@ -2516,20 +2881,24 @@ async def compress_video(input_path: Path) -> bool:
             "-movflags", "+faststart",
             str(output_path)
         ]
-    
+
     try:
         process = await asyncio.create_subprocess_exec(
             *cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE
         )
         stdout, stderr = await process.communicate()
-        
+
         if process.returncode == 0 and output_path.exists():
-            final_size = output_path.stat().st_size / (1024*1024)
+            final_size = output_path.stat().st_size / (1024 * 1024)
             logger.info(f"✅ Process successful: {input_size_mb:.1f}MB -> {final_size:.1f}MB")
-            
-            # Replace original
-            input_path.unlink()
-            output_path.rename(input_path)
+
+            # Rule: only replace original if output is actually smaller
+            if final_size < input_size_mb:
+                input_path.unlink()
+                output_path.rename(input_path)
+            else:
+                logger.info(f"⚠️ Output is not smaller ({final_size:.1f}MB >= {input_size_mb:.1f}MB), keeping original.")
+                output_path.unlink()
             return True
         else:
             logger.error(f"❌ ffmpeg failed: {stderr.decode()[:200]}")
@@ -2537,9 +2906,6 @@ async def compress_video(input_path: Path) -> bool:
             return False
     except Exception as e:
         logger.error(f"💥 ffmpeg Exception: {e}")
-        if output_path.exists(): output_path.unlink()
-        return False
-
         if output_path.exists(): output_path.unlink()
         return False
 
@@ -2580,8 +2946,10 @@ async def download_instagram(url, chat_id, bot, reply_to_message_id=None, custom
     try:
         # 1. Filename setup
         timestamp = int(asyncio.get_event_loop().time())
-        filename = Path(f"insta_{timestamp}.mp4")
-        info_file = Path(f"insta_{timestamp}.info.json")
+        video_dir = DOWNLOAD_DIR / f"insta_{timestamp}"
+        video_dir.mkdir(parents=True, exist_ok=True)
+        filename = video_dir / f"insta_{timestamp}.mp4"
+        info_file = video_dir / f"insta_{timestamp}.info.json"
         logger.debug(f"📂 Temp files initialized: {filename}, {info_file}")
         
         # 2. Command - use absolute path if in venv
@@ -2609,22 +2977,32 @@ async def download_instagram(url, chat_id, bot, reply_to_message_id=None, custom
 
         # Build format chain from max_height
         h = max_height
-        fmt = (
-            f"best[height<={h}][ext=mp4]/"
-            f"bestvideo[height<={h}][ext=mp4]+bestaudio[ext=m4a]/"
-            f"bestvideo[height<={h}][ext=webm]+bestaudio[ext=webm]/"
-            f"bestvideo[height<={h}]+bestaudio/"
-            f"best[height<={h}]/best"
-        )
+        is_tiktok = "tiktok.com" in url
+        if is_tiktok:
+            # TikTok: exclude watermarked format (format_id=download, preference=-2)
+            # Prefer non-watermarked h264 or hevc streams
+            fmt = (
+                f"bestvideo[height<={h}][vcodec^=h264]+bestaudio/"
+                f"bestvideo[height<={h}]+bestaudio/"
+                f"best[height<={h}][format_id!=download]/"
+                f"best[height<={h}]/best"
+            )
+        else:
+            fmt = (
+                f"best[height<={h}][ext=mp4]/"
+                f"bestvideo[height<={h}][ext=mp4]+bestaudio[ext=m4a]/"
+                f"bestvideo[height<={h}][ext=webm]+bestaudio[ext=webm]/"
+                f"bestvideo[height<={h}]+bestaudio/"
+                f"best[height<={h}]/best"
+            )
         cmd = [
             executable,
             "-f", fmt,
             "--merge-output-format", "mp4",
             *js_runtime_args,
             *ffmpeg_args,
-            "-o", str(filename),
+            "-o", str(filename.parent / f"{filename.stem}.%(ext)s"),
             "--write-info-json",
-            "--no-playlist",
             url
         ]
 
@@ -2650,24 +3028,60 @@ async def download_instagram(url, chat_id, bot, reply_to_message_id=None, custom
             logger.error(f"yt-dlp stderr: {err_msg[:500]}")
             if out_msg: logger.debug(f"yt-dlp stdout: {out_msg[:300]}")
 
-            # 4.5 Attempt 2: With Browser Cookies (Safari)
-            logger.info("📥 Attempt 2: Retrying with Safari cookies...")
-            cmd_with_cookies = cmd[:-1] + ["--cookies-from-browser", "safari", url]
-            process = await asyncio.create_subprocess_exec(
-                *cmd_with_cookies, stdout=subprocess.PIPE, stderr=subprocess.PIPE
-            )
-            stdout, stderr = await process.communicate()
+            # 4.5 Attempt 2: With Browser Cookies (Multi-browser Strategy)
+            logger.info("📥 Attempt 2: Retrying with browser cookies...")
             
-            if process.returncode != 0 or not filename.exists():
-                logger.warning(f"❌ Attempt 2 (Cookies) failed (Code {process.returncode}, File: {filename.exists()})")
-                logger.error(f"Full stderr from Attempt 2: {stderr.decode()}")
-                logger.warning("🧱 Both local yt-dlp attempts failed. Triggering Cobalt API fallback sequence...")
+            # Rebuild command without the old --cookies argument
+            cmd_base = cmd.copy()
+            if "--cookies" in cmd_base:
+                idx = cmd_base.index("--cookies")
+                del cmd_base[idx:idx+2]
+            
+            actual_file = filename
+            browser_success = False
+            
+            # Try browsers in order of least-restrictive to most-restrictive (macOS sandbox)
+            for browser in ["chrome", "edge", "firefox", "safari", "opera", "brave"]:
+                logger.info(f"🔍 Testing {browser.capitalize()} cookies...")
+                cmd_with_cookies = cmd_base + ["--cookies-from-browser", browser]
                 
+                process2 = await asyncio.create_subprocess_exec(
+                    *cmd_with_cookies, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+                )
+                stdout2, stderr2 = await process2.communicate()
+                
+                # Check for output file
+                actual_files = list(filename.parent.glob(f"{filename.stem}.*"))
+                actual_file = actual_files[0] if actual_files else filename
+                
+                if process2.returncode == 0 and actual_file.exists():
+                    logger.info(f"✅ Success! Used {browser} cookies to bypass login.")
+                    browser_success = True
+                    break
+                else:
+                    err2 = stderr2.decode()
+                    if "could not find" in err2.lower() or "operation not permitted" in err2.lower():
+                        logger.debug(f"ℹ️ {browser.capitalize()} unavailable or permission denied.")
+                    else:
+                        logger.warning(f"❌ {browser.capitalize()} cookies failed: {err2[:150]}")
+                        
+            if not browser_success:
+                logger.warning("🧱 All browser cookie attempts failed. Triggering fallback API sequence...")
+                
+                # Try Cobalt first
                 success = await download_instagram_cobalt(url, filename)
+                if not success:
+                    # If Cobalt fails, try RapidAPI cascade
+                    success = await download_via_rapidapi(url, filename)
+                    
                 if not success:
                     logger.error(f"🛑 [Chat {chat_id}] All download methods exhausted for {url}")
                     raise Exception(f"All download methods exhausted.\nyt-dlp stderr:\n{err_msg[:400]}")
-                logger.info(f"✨ [Chat {chat_id}] Recovery successful via Cobalt!")
+                logger.info(f"✨ [Chat {chat_id}] Recovery successful via API fallback!")
+                actual_file = filename  # APIs download exactly to 'filename'
+            
+            # Reassign filename to actual_file so the rest of the pipeline works seamlessly
+            filename = actual_file
 
         # 6. Check File Size (Final Safety Check)
         if filename.exists():
@@ -2783,8 +3197,20 @@ async def download_instagram(url, chat_id, bot, reply_to_message_id=None, custom
                             reply_to_message_id=video_msg.message_id
                         )
                 
-                # Cleanup
-                filename.unlink()
+                # File is kept in DOWNLOAD_DIR for 1 month (auto-cleaned by cleanup_downloads_job)
+                # Save file_unique_id → local path mapping so /sub can reuse it
+                _video_cache_file = DOWNLOAD_DIR / "video_cache.json"
+                try:
+                    fuid = video_msg.video.file_unique_id if video_msg and video_msg.video else None
+                    if fuid and filename.exists():
+                        _cache = {}
+                        if _video_cache_file.exists():
+                            _cache = json.loads(_video_cache_file.read_text())
+                        _cache[fuid] = str(filename.resolve())
+                        _video_cache_file.write_text(json.dumps(_cache, indent=2))
+                        logger.info(f"💾 Video cache updated: {fuid} → {filename}")
+                except Exception as _ce:
+                    logger.warning(f"Video cache write failed: {_ce}")
                 return True
             except Exception as send_e:
                 logger.error(f"Error sending video/overflow: {send_e}")
@@ -3348,6 +3774,752 @@ async def cmd_download_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         await reply_and_delete(update, context, err_msg_text, delay=20, parse_mode="Markdown")
 
 
+async def cmd_subtitle_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    /sub [src_lang] tgt_lang [--sub-only]
+    Reply to a URL message or a downloaded video.
+    Default: renders video with burned subtitles (calls: amir subtitle ... -t src tgt).
+    --sub-only: sends .srt/.ass files only (calls: amir subtitle ... -t src tgt --sub-only).
+    All subtitle standards/formats are handled by amir-cli — no logic duplicated here.
+    Works on both macOS (dev) and Ubuntu 24 (production server).
+    """
+    msg = update.message
+    user_id = update.effective_user.id
+    logger.info(f"📝 /sub triggered by {user_id} | args: {context.args}")
+
+    # ── Video cache: maps Telegram file_unique_id → local absolute path ─────
+    # Written by download handlers when a video is saved to DOWNLOAD_DIR.
+    # Read here to avoid re-downloading from Telegram when the user replies
+    # to a previously downloaded video with /sub.
+    _VIDEO_CACHE_FILE = DOWNLOAD_DIR / "video_cache.json"
+
+    def _cache_load() -> dict:
+        try:
+            if _VIDEO_CACHE_FILE.exists():
+                return json.loads(_VIDEO_CACHE_FILE.read_text())
+        except Exception:
+            pass
+        return {}
+
+    def _cache_lookup(file_unique_id: str) -> Path | None:
+        cache = _cache_load()
+        p = cache.get(file_unique_id)
+        if p:
+            path = Path(p)
+            if path.exists():
+                return path
+            # stale entry — remove it silently
+            try:
+                cache.pop(file_unique_id)
+                _VIDEO_CACHE_FILE.write_text(json.dumps(cache, indent=2))
+            except Exception:
+                pass
+        return None
+
+    # 1. Parse args: /sub [src] tgt [--sub-only]
+    raw_args = context.args or []
+    sub_only = "--sub-only" in raw_args
+    lang_args = [a for a in raw_args if a != "--sub-only"]
+
+    if not lang_args or len(lang_args) > 2:
+        await reply_and_delete(update, context, get_msg("sub_usage", user_id), delay=20, parse_mode="Markdown")
+        return
+
+    src_lang = lang_args[0].lower() if len(lang_args) == 2 else "en"
+    tgt_lang = lang_args[-1].lower()
+
+    if src_lang == tgt_lang:
+        await reply_and_delete(update, context, get_msg("sub_same_lang", user_id), delay=15)
+        return
+
+    # 2. Must be a reply
+    if not msg.reply_to_message:
+        await reply_and_delete(update, context, get_msg("sub_need_reply", user_id), delay=15, parse_mode="Markdown")
+        return
+
+    reply = msg.reply_to_message
+
+    # 3. Find amir binary — use AMIR_PATH from config (set by install.sh on both macOS and Ubuntu)
+    amir_bin = AMIR_PATH if AMIR_PATH and os.path.isfile(AMIR_PATH) and os.access(AMIR_PATH, os.X_OK) else shutil.which("amir")
+    if not amir_bin:
+        for candidate in [
+            os.path.expanduser("~/bin/amir"),
+            os.path.expanduser("~/.local/bin/amir"),
+            "/usr/local/bin/amir",
+            "/usr/bin/amir",
+        ]:
+            if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+                amir_bin = candidate
+                break
+    if not amir_bin:
+        await reply_and_delete(update, context, get_msg("sub_no_amir", user_id), delay=20, parse_mode="Markdown")
+        return
+
+    # 4. Extract source: VIDEO from replied message takes priority over any URLs in caption.
+    # When user replies to a video that also has links in its caption, they mean the VIDEO,
+    # not the other URLs. Only fall back to URL extraction when no video is attached.
+    video_obj = None
+    if reply.video:
+        video_obj = reply.video
+    elif reply.document and reply.document.mime_type and reply.document.mime_type.startswith("video/"):
+        video_obj = reply.document
+
+    url = None
+    if not video_obj:
+        text_content = reply.text or reply.caption or ""
+        url = extract_link_from_text(reply.caption_entities or reply.entities, text_content)
+
+    if not url and not video_obj:
+        await reply_and_delete(update, context, get_msg("sub_no_source", user_id), delay=15)
+        return
+
+    # 5. Status message
+    status_msg = await msg.reply_text(
+        get_msg("sub_processing", user_id).format(src=src_lang, tgt=tgt_lang),
+        reply_to_message_id=reply.message_id
+    )
+
+    # 6. Stable, persistent work directory keyed on content identity.
+    # Survives across runs so `amir subtitle` finds existing SRTs and skips
+    # re-transcription and re-translation (no wasted API cost on retries).
+    _work_root = DOWNLOAD_DIR / "sub_work"
+    if video_obj:
+        _content_id = getattr(video_obj, "file_unique_id", uuid.uuid4().hex[:12])
+    else:
+        _content_id = hashlib.sha256(url.encode()).hexdigest()[:16]
+    work_dir = _work_root / f"{src_lang}_{tgt_lang}_{_content_id}"
+    work_dir.mkdir(parents=True, exist_ok=True)
+
+    try:
+        input_arg: str | None = None  # will be set below
+
+        if video_obj:
+            # ── Check local cache (previously downloaded from Telegram) ──────
+            fuid = getattr(video_obj, "file_unique_id", None)
+            cached_path = _cache_lookup(fuid) if fuid else None
+            if cached_path:
+                input_arg = str(cached_path)
+                logger.info(f"♻️ Reusing cached video: {cached_path.name}")
+            else:
+                _file_size_mb = (getattr(video_obj, "file_size", 0) or 0) // 1024 // 1024
+                _too_big = False
+
+                # ── Strategy 1: direct bot-API download (works up to 20 MB) ──
+                try:
+                    tg_file = await video_obj.get_file()
+                    ext = ".mp4"
+                    if hasattr(video_obj, "file_name") and video_obj.file_name:
+                        ext = Path(video_obj.file_name).suffix or ".mp4"
+                    local_video = work_dir / f"input{ext}"
+                    await tg_file.download_to_drive(custom_path=local_video)
+                    input_arg = str(local_video)
+                    in_size_mb = local_video.stat().st_size / 1024**2
+                    in_meta = await get_video_metadata(local_video)
+                    if in_meta:
+                        logger.info(
+                            f"📥 Input video: {in_meta['width']}×{in_meta['height']} "
+                            f"{in_meta['duration']:.1f}s  {in_size_mb:.1f} MB  "
+                            f"codec={in_meta['codec_name']}"
+                        )
+                    else:
+                        logger.info(f"📥 Input video: {in_size_mb:.1f} MB")
+                except Exception as _dl_err:
+                    if "file is too big" in str(_dl_err).lower():
+                        _too_big = True
+                    else:
+                        raise
+
+                # ── Strategy 2 (if >20 MB): personal account via Pyrogram ────
+                if _too_big:
+                    logger.info(f"📦 Video too large for bot API ({_file_size_mb} MB) — trying Pyrogram...")
+                    fuid2 = getattr(video_obj, "file_unique_id", None)
+                    fid2  = getattr(video_obj, "file_id", None)
+                    ext   = ".mp4"
+                    if hasattr(video_obj, "file_name") and getattr(video_obj, "file_name", None):
+                        ext = Path(video_obj.file_name).suffix or ".mp4"
+                    local_video = work_dir / f"input{ext}"
+
+                    if TG_API_ID and TG_API_HASH and TG_SESSION:
+                        await status_msg.edit_text(
+                            f"📦 {get_msg('sub_large_file_pyrogram', user_id).format(size=_file_size_mb)}"
+                        )
+                        # In private chats PTB uses user_id as chat_id, but Pyrogram
+                        # (personal account) needs the BOT's user_id to refer to the
+                        # same conversation.
+                        _pyro_chat_id = (
+                            context.bot.id
+                            if getattr(msg.chat, "type", None) == "private"
+                            else msg.chat_id
+                        )
+                        pyro_path = await download_large_video_pyrogram(
+                            chat_id=_pyro_chat_id,
+                            message_id=reply.message_id,
+                            dest=local_video,
+                        )
+                        if pyro_path and pyro_path.exists():
+                            input_arg = str(pyro_path)
+                            logger.info(f"✅ Pyrogram download OK: {pyro_path.name}  {pyro_path.stat().st_size/1024**2:.1f} MB")
+                            _too_big = False
+                        else:
+                            logger.warning("⚠️ Pyrogram download returned nothing. Falling back to caption URLs.")
+
+                # ── Strategy 3: offer caption URLs to user via inline keyboard ─
+                if _too_big:
+                    _fb_urls = []
+                    # Use PTB's parse_*_entities() which handles UTF-16 offsets correctly.
+                    # Plain string slicing with entity.offset is WRONG when non-ASCII text
+                    # (Persian, Arabic, emoji…) precedes the URL — offsets are in UTF-16
+                    # code units, not Python code points.
+                    _parsed_ents = (
+                        reply.parse_caption_entities(types=["url", "text_link"])
+                        or reply.parse_entities(types=["url", "text_link"])
+                        or {}
+                    )
+                    for ent, text in _parsed_ents.items():
+                        ent_type = getattr(ent, "type", None)
+                        # text_link stores the actual URL in ent.url; url type uses the text itself
+                        _u = (getattr(ent, "url", None) if ent_type == "text_link" else text) or ""
+                        _u = _u.strip()
+                        if _u:
+                            _fb_urls.append(_u)
+
+                    if _fb_urls:
+                        # Show inline keyboard: one button per URL
+                        from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+                        # Store pending context in bot_data so callback can resume
+                        _pending_key = f"sub_url_{user_id}_{msg.message_id}"
+                        context.bot_data[_pending_key] = {
+                            "amir_bin": amir_bin,
+                            "src_lang": src_lang,
+                            "tgt_lang": tgt_lang,
+                            "sub_only": sub_only,
+                            "work_root": str(_work_root),
+                            "reply_msg_id": reply.message_id,
+                            "chat_id": msg.chat_id,
+                            "orig_caption": (reply.caption or reply.text or "").strip(),
+                        }
+                        buttons = []
+                        for _i, _u in enumerate(_fb_urls[:5]):  # max 5 buttons
+                            _label = _u[:40] + ("…" if len(_u) > 40 else "")
+                            buttons.append([InlineKeyboardButton(
+                                _label,
+                                callback_data=f"suburl:{_pending_key}:{_i}"
+                            )])
+                        buttons.append([InlineKeyboardButton("❌ لغو", callback_data=f"suburl_cancel:{_pending_key}")])
+                        size_info = f"{_file_size_mb} MB" if _file_size_mb else "?"
+                        await status_msg.edit_text(
+                            get_msg("sub_large_file_ask_url", user_id).format(size=size_info),
+                            reply_markup=InlineKeyboardMarkup(buttons),
+                        )
+                        # Store URL list alongside context
+                        context.bot_data[_pending_key]["urls"] = _fb_urls[:5]
+                        return  # Wait for user callback
+                    else:
+                        await status_msg.edit_text(get_msg("sub_file_too_big", user_id))
+                        return
+        else:
+            input_arg = url  # amir subtitle downloads via yt-dlp internally
+            logger.info(f"🔗 Input URL: {url}")
+
+        # Build command — delegate everything to amir-cli
+        # -s = audio/source language for Whisper, -t = target display language
+        cmd = [amir_bin, "subtitle", input_arg, "-s", src_lang, "-t", tgt_lang, "--max-lines", "1"]
+        if sub_only:
+            cmd.append("--sub-only")
+
+        logger.info(f"🎬 Running: {' '.join(cmd)} (cwd={work_dir})")
+
+        # Estimate processing time from video duration (if known from Telegram metadata)
+        tg_duration = getattr(video_obj, "duration", 0) or 0 if video_obj else 0
+        if tg_duration:
+            # ~0.5× real-time for Whisper + translation API + ffmpeg render
+            est_total = int(tg_duration * 0.5 + 40)
+            est_str = f"{est_total // 60}:{est_total % 60:02d}"
+            logger.info(f"⏱️ Video duration: {tg_duration}s  estimated processing: ~{est_str}")
+
+        process = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdin=asyncio.subprocess.DEVNULL,   # prevent blocking input() in processor.py
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            limit=4 * 1024 * 1024,              # 4 MB — prevents LimitOverrunError from FFmpeg \r lines
+            cwd=str(work_dir)
+        )
+
+        # ── Real-time progress tracking ──────────────────────────────────────
+        # Always stream subprocess output so we can parse PROGRESS: lines emitted
+        # by processor.py at each major stage (transcription, translation, render).
+        # In DEV mode every output line is also logged verbosely.
+        _start_ts = asyncio.get_event_loop().time()
+        out_lines: list[str] = []
+        err_lines: list[str] = []
+        _last_progress_time: list[float] = [_start_ts]
+        _last_stage_text: list[str] = [f"🎙️ رونویسی...  (en → {tgt_lang})"]
+
+        async def _handle_line(line: str, is_err: bool):
+            now = asyncio.get_event_loop().time()
+            # Suppress high-frequency tqdm/FFmpeg progress lines in the terminal log
+            # (they still drive the 5s-throttled Telegram update via the mf regex below)
+            _is_noise = bool(re.search(r'Transcribing|tqdm|\d+%\||Run\s*\|\s*[\d.]+%', line))
+            if IS_DEV and not _is_noise:
+                logger.debug(f"{'▷' if is_err else '▶'} {line}")
+
+            # ── PROGRESS: lines from processor.py (all stages) ──────────────
+            m = re.search(r'PROGRESS:(\d+):(.+)', line)
+            if m:
+                pct = min(100, max(0, int(m.group(1))))
+                stage_clean = re.sub(r'\s*\(\d+%\)\s*$', '', m.group(2)).strip()
+                elapsed = int(now - _start_ts)
+                elapsed_str = f"{elapsed // 60}:{elapsed % 60:02d}"
+                bar = "█" * (pct // 10) + "░" * (10 - pct // 10)
+                text = f"{stage_clean}\n{bar} {pct}%\n⏱ گذشته: {elapsed_str}"
+                _last_progress_time[0] = now
+                _last_stage_text[0] = text
+                logger.info(f"⏳ [{elapsed_str}] {pct}%: {stage_clean}")
+                try:
+                    await status_msg.edit_text(text[:4000])
+                except Exception:
+                    pass
+                return
+
+            # ── FFmpeg render progress from 'amir video' engine ─────────────
+            # e.g. "⏳ Run  |  46.2% | Speed: 7.29x  | ETA: 07:12 | Time: 10:59"
+            mf = re.search(r'Run\s*\|\s*([\d.]+)%\s*\|.*?ETA:\s*(\S+)', line)
+            if mf and (now - _last_progress_time[0]) >= 5.0:
+                render_pct = min(100, int(float(mf.group(1))))
+                eta = mf.group(2)
+                # Map 0-100% of FFmpeg render onto overall 88-98% range
+                overall_pct = 88 + render_pct * 10 // 100
+                elapsed = int(now - _start_ts)
+                elapsed_str = f"{elapsed // 60}:{elapsed % 60:02d}"
+                bar = "█" * (overall_pct // 10) + "░" * (10 - overall_pct // 10)
+                text = f"🎞️ رندر ویدیو نهایی\n{bar} {overall_pct}% (FFmpeg: {render_pct}%)\n⏱ گذشته: {elapsed_str}  |  ETA: {eta}"
+                _last_progress_time[0] = now
+                _last_stage_text[0] = text
+                try:
+                    await status_msg.edit_text(text[:4000])
+                except Exception:
+                    pass
+
+        async def _drain_stdout():
+            _buf = b""
+            while True:
+                chunk = await process.stdout.read(65536)
+                if not chunk:
+                    break
+                _buf += chunk
+                parts = re.split(rb'[\r\n]+', _buf)
+                _buf = parts.pop()
+                for part in parts:
+                    line = part.decode(errors="replace").strip()
+                    if line:
+                        out_lines.append(line)
+                        await _handle_line(line, False)
+            if _buf:
+                line = _buf.decode(errors="replace").strip()
+                if line:
+                    out_lines.append(line); await _handle_line(line, False)
+
+        async def _drain_stderr():
+            _buf = b""
+            while True:
+                chunk = await process.stderr.read(65536)
+                if not chunk:
+                    break
+                _buf += chunk
+                parts = re.split(rb'[\r\n]+', _buf)
+                _buf = parts.pop()
+                for part in parts:
+                    line = part.decode(errors="replace").strip()
+                    if line:
+                        err_lines.append(line)
+                        await _handle_line(line, True)
+            if _buf:
+                line = _buf.decode(errors="replace").strip()
+                if line:
+                    err_lines.append(line); await _handle_line(line, True)
+
+        async def _heartbeat():
+            """Update status every 60s when no PROGRESS line has arrived (e.g. long Whisper)."""
+            try:
+                while True:
+                    await asyncio.sleep(60)
+                    since_last = asyncio.get_event_loop().time() - _last_progress_time[0]
+                    if since_last >= 55:
+                        elapsed = int(asyncio.get_event_loop().time() - _start_ts)
+                        elapsed_str = f"{elapsed // 60}:{elapsed % 60:02d}"
+                        text = f"{_last_stage_text[0]}\n⌛ {elapsed_str} در حال پردازش..."
+                        logger.info(f"💓 heartbeat [{elapsed_str}]: still running")
+                        try:
+                            await status_msg.edit_text(text[:4000])
+                        except Exception:
+                            pass
+            except asyncio.CancelledError:
+                pass
+
+        _heartbeat_task = asyncio.create_task(_heartbeat())
+        try:
+            await asyncio.gather(_drain_stdout(), _drain_stderr())
+            await process.wait()
+        finally:
+            _heartbeat_task.cancel()
+
+        elapsed_total = int(asyncio.get_event_loop().time() - _start_ts)
+        stdout_bytes = "\n".join(out_lines).encode()
+        stderr_bytes = "\n".join(err_lines).encode()
+        logger.info(f"✅ amir subtitle finished in {elapsed_total}s (exit={process.returncode})")
+
+        if process.returncode != 0:
+            err_out = (stdout_bytes.decode(errors="replace") + stderr_bytes.decode(errors="replace"))[-800:]
+            logger.error(f"❌ amir subtitle failed (exit {process.returncode}): {err_out[-300:]}")
+            _err_text = get_msg("sub_error", user_id).format(
+                details=f"exit {process.returncode}\n{err_out[-500:]}"
+            )
+            await status_msg.edit_text(_err_text[:4000])
+            return
+
+        # Locate output files — search work_dir AND parent of input_arg
+        # (amir writes output next to its input, which may live outside work_dir
+        # when the video comes from the download cache)
+        _search_dirs: list[Path] = [work_dir]
+        if input_arg and Path(input_arg).parent != work_dir:
+            _search_dirs.append(Path(input_arg).parent)
+        if sub_only:
+            sub_files: list[Path] = []
+            for _d in _search_dirs:
+                sub_files += (
+                    sorted(_d.glob(f"*_{tgt_lang}.srt"))
+                    + sorted(_d.glob(f"*_{src_lang}_{tgt_lang}.ass"))
+                    + sorted(_d.glob(f"*_{tgt_lang}_{src_lang}.ass"))
+                    + sorted(_d.glob("*.ass"))
+                )
+            seen, sub_files = set(), [f for f in sub_files if not (f in seen or seen.add(f))]
+            if not sub_files:
+                await status_msg.edit_text(get_msg("sub_no_output", user_id))
+                return
+            for sub_file in sub_files:
+                with open(sub_file, "rb") as f:
+                    await context.bot.send_document(
+                        chat_id=msg.chat_id,
+                        document=f,
+                        filename=sub_file.name,
+                        reply_to_message_id=reply.message_id
+                    )
+        else:
+            video_files: list[Path] = []
+            for _d in _search_dirs:
+                video_files += sorted(_d.glob("*_subbed.mp4"))
+            if not video_files:
+                logger.error(f"❌ No *_subbed.mp4 found in: {_search_dirs}")
+                await status_msg.edit_text(get_msg("sub_no_output", user_id))
+                return
+            out_video = video_files[0]
+            out_size_mb = out_video.stat().st_size / 1024**2
+            meta = await get_video_metadata(out_video)
+            duration = meta.get("duration", 0) if meta else 0
+            width = meta.get("width", 0) if meta else 0
+            height = meta.get("height", 0) if meta else 0
+            logger.info(
+                f"📤 Output video: {out_video.name}  {width}×{height}  "
+                f"{duration:.1f}s  {out_size_mb:.1f} MB"
+            )
+            thumb_path = await generate_thumbnail(out_video)
+            thumb_file = open(thumb_path, "rb") if thumb_path else None
+            _orig_cap = (reply.caption or reply.text or "").strip()
+            _tg_caption = f"📝 {src_lang} → {tgt_lang}"
+            if _orig_cap:
+                _tg_caption = f"📝 {src_lang} → {tgt_lang}\n\n{_orig_cap}"
+            _tg_caption = _tg_caption[:1000]
+            try:
+                with open(out_video, "rb") as f:
+                    await context.bot.send_video(
+                        chat_id=msg.chat_id,
+                        video=f,
+                        caption=_tg_caption,
+                        reply_to_message_id=reply.message_id,
+                        duration=int(duration),
+                        width=width,
+                        height=height,
+                        thumbnail=thumb_file,
+                        supports_streaming=True
+                    )
+            finally:
+                if thumb_file:
+                    thumb_file.close()
+
+        await safe_delete(status_msg)
+
+    except Exception as e:
+        logger.error(f"💥 cmd_subtitle_handler error: {e}")
+        try:
+            _err_text = get_msg("sub_error", user_id).format(details=str(e)[:500])
+            await status_msg.edit_text(_err_text[:4000])
+        except Exception:
+            pass
+    finally:
+        # Keep .srt/.ass files in work_dir — they act as resume cache for the next /sub call.
+        # Delete only large video files (raw input + rendered output) to reclaim disk space.
+        for _big in list(work_dir.glob("*.mp4")) + list(work_dir.glob("*.mkv")) + list(work_dir.glob("*.webm")):
+            try:
+                _big.unlink(missing_ok=True)
+            except Exception:
+                pass
+
+
+async def cmd_suburl_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Inline keyboard callback: user selected a caption URL to subtitle
+    after the original video file was too large for bot API download.
+    """
+    query = update.callback_query
+    await query.answer()
+    user_id = update.effective_user.id
+    data = query.data  # "suburl:<key>:<idx>" or "suburl_cancel:<key>"
+
+    if data.startswith("suburl_cancel:"):
+        _key = data[len("suburl_cancel:"):]
+        context.bot_data.pop(_key, None)
+        await query.edit_message_text(get_msg("sub_url_cancelled", user_id))
+        return
+
+    # Parse "suburl:<pending_key>:<url_index>"
+    parts = data.split(":", 2)
+    if len(parts) != 3:
+        await query.edit_message_text("❌ Invalid callback data")
+        return
+
+    _, _key, _idx_str = parts
+    pending = context.bot_data.pop(_key, None)
+    if not pending:
+        await query.edit_message_text(get_msg("sub_url_cancelled", user_id))
+        return
+
+    try:
+        _idx = int(_idx_str)
+        chosen_url = pending["urls"][_idx]
+    except (ValueError, IndexError):
+        await query.edit_message_text("❌ URL index out of range")
+        return
+
+    amir_bin  = pending["amir_bin"]
+    src_lang  = pending["src_lang"]
+    tgt_lang  = pending["tgt_lang"]
+    sub_only  = pending["sub_only"]
+    chat_id   = pending["chat_id"]
+    reply_mid = pending["reply_msg_id"]
+    _work_root = Path(pending["work_root"])
+
+    _content_id = hashlib.sha256(chosen_url.encode()).hexdigest()[:16]
+    work_dir = _work_root / f"{src_lang}_{tgt_lang}_{_content_id}"
+    work_dir.mkdir(parents=True, exist_ok=True)
+
+    await query.edit_message_text(
+        get_msg("sub_processing", user_id).format(src=src_lang, tgt=tgt_lang)
+    )
+    status_msg = query.message
+
+    cmd = [amir_bin, "subtitle", chosen_url, "-s", src_lang, "-t", tgt_lang, "--max-lines", "1"]
+    if sub_only:
+        cmd.append("--sub-only")
+
+    logger.info(f"🎬 [suburl_callback] Running: {' '.join(cmd)}")
+
+    process = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdin=asyncio.subprocess.DEVNULL,   # prevent blocking input() in processor.py
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        limit=4 * 1024 * 1024,              # 4 MB — prevents LimitOverrunError from FFmpeg \r lines
+        cwd=str(work_dir),
+    )
+
+    _start_ts = asyncio.get_event_loop().time()
+    out_lines: list[str] = []
+    err_lines: list[str] = []
+    _last_progress_time: list[float] = [_start_ts]
+    _last_stage_text: list[str] = [f"🎙️ رونویسی...  (en → {tgt_lang})"]
+
+    async def _handle_line_cb(line: str, is_err: bool):
+        now = asyncio.get_event_loop().time()
+        _is_noise = bool(re.search(r'Transcribing|tqdm|\d+%\||Run\s*\|\s*[\d.]+%', line))
+        if IS_DEV and not _is_noise:
+            logger.debug(f"{'▷' if is_err else '▶'} {line}")
+
+        # ── PROGRESS: lines from processor.py ──────────────────────────────
+        m = re.search(r'PROGRESS:(\d+):(.+)', line)
+        if m:
+            pct = min(100, max(0, int(m.group(1))))
+            stage_clean = re.sub(r'\s*\(\d+%\)\s*$', '', m.group(2)).strip()
+            elapsed = int(now - _start_ts)
+            elapsed_str = f"{elapsed // 60}:{elapsed % 60:02d}"
+            bar = "█" * (pct // 10) + "░" * (10 - pct // 10)
+            text = f"{stage_clean}\n{bar} {pct}%\n⏱ گذشته: {elapsed_str}"
+            _last_progress_time[0] = now
+            _last_stage_text[0] = text
+            logger.info(f"⏳ [cb] [{elapsed_str}] {pct}%: {stage_clean}")
+            try:
+                await status_msg.edit_text(text[:4000])
+            except Exception:
+                pass
+            return
+
+        # ── FFmpeg render progress from 'amir video' engine ─────────────────
+        mf = re.search(r'Run\s*\|\s*([\d.]+)%\s*\|.*?ETA:\s*(\S+)', line)
+        if mf and (now - _last_progress_time[0]) >= 5.0:
+            render_pct = min(100, int(float(mf.group(1))))
+            eta = mf.group(2)
+            overall_pct = 88 + render_pct * 10 // 100
+            elapsed = int(now - _start_ts)
+            elapsed_str = f"{elapsed // 60}:{elapsed % 60:02d}"
+            bar = "█" * (overall_pct // 10) + "░" * (10 - overall_pct // 10)
+            text = f"🎞️ رندر ویدیو نهایی\n{bar} {overall_pct}% (FFmpeg: {render_pct}%)\n⏱ گذشته: {elapsed_str}  |  ETA: {eta}"
+            _last_progress_time[0] = now
+            _last_stage_text[0] = text
+            try:
+                await status_msg.edit_text(text[:4000])
+            except Exception:
+                pass
+
+    async def _drain_out():
+        _buf = b""
+        while True:
+            chunk = await process.stdout.read(65536)
+            if not chunk:
+                break
+            _buf += chunk
+            parts = re.split(rb'[\r\n]+', _buf)
+            _buf = parts.pop()
+            for part in parts:
+                line = part.decode(errors="replace").strip()
+                if line:
+                    out_lines.append(line)
+                    await _handle_line_cb(line, False)
+        if _buf:
+            line = _buf.decode(errors="replace").strip()
+            if line:
+                out_lines.append(line); await _handle_line_cb(line, False)
+
+    async def _drain_err():
+        _buf = b""
+        while True:
+            chunk = await process.stderr.read(65536)
+            if not chunk:
+                break
+            _buf += chunk
+            parts = re.split(rb'[\r\n]+', _buf)
+            _buf = parts.pop()
+            for part in parts:
+                line = part.decode(errors="replace").strip()
+                if line:
+                    err_lines.append(line)
+                    await _handle_line_cb(line, True)
+        if _buf:
+            line = _buf.decode(errors="replace").strip()
+            if line:
+                err_lines.append(line); await _handle_line_cb(line, True)
+
+    async def _heartbeat_cb():
+        try:
+            while True:
+                await asyncio.sleep(60)
+                since_last = asyncio.get_event_loop().time() - _last_progress_time[0]
+                if since_last >= 55:
+                    elapsed = int(asyncio.get_event_loop().time() - _start_ts)
+                    elapsed_str = f"{elapsed // 60}:{elapsed % 60:02d}"
+                    try:
+                        await status_msg.edit_text(f"{_last_stage_text[0]}\n⌛ {elapsed_str} در حال پردازش...")
+                    except Exception:
+                        pass
+        except asyncio.CancelledError:
+            pass
+
+    _hb = asyncio.create_task(_heartbeat_cb())
+    try:
+        await asyncio.gather(_drain_out(), _drain_err())
+        await process.wait()
+    finally:
+        _hb.cancel()
+
+    stdout_bytes = "\n".join(out_lines).encode()
+    stderr_bytes = "\n".join(err_lines).encode()
+    elapsed_total = int(asyncio.get_event_loop().time() - _start_ts)
+    logger.info(f"✅ [suburl_callback] done in {elapsed_total}s (exit={process.returncode})")
+
+    if process.returncode != 0:
+        err_out = (stdout_bytes.decode(errors="replace") + stderr_bytes.decode(errors="replace"))[-600:]
+        _err_text = get_msg("sub_error", user_id).format(details=f"exit {process.returncode}\n{err_out[-500:]}")
+        await status_msg.edit_text(_err_text[:4000])
+        return
+
+    if sub_only:
+        sub_files = (
+            sorted(work_dir.glob(f"*_{tgt_lang}.srt"))
+            + sorted(work_dir.glob(f"*_{src_lang}_{tgt_lang}.ass"))
+            + sorted(work_dir.glob("*.ass"))
+        )
+        seen: set = set()
+        sub_files = [f for f in sub_files if not (f in seen or seen.add(f))]  # type: ignore[func-returns-value]
+        if not sub_files:
+            await status_msg.edit_text(get_msg("sub_no_output", user_id))
+            return
+        for sf in sub_files:
+            with open(sf, "rb") as f:
+                await context.bot.send_document(chat_id=chat_id, document=f, filename=sf.name, reply_to_message_id=reply_mid)
+    else:
+        video_files = sorted(work_dir.glob("*_subbed.mp4"))
+        if not video_files:
+            await status_msg.edit_text(get_msg("sub_no_output", user_id))
+            return
+        out_video = video_files[0]
+        meta = await get_video_metadata(out_video)
+        duration = meta.get("duration", 0) if meta else 0
+        width    = meta.get("width",    0) if meta else 0
+        height   = meta.get("height",   0) if meta else 0
+        thumb_path = await generate_thumbnail(out_video)
+        thumb_file = open(thumb_path, "rb") if thumb_path else None
+        _orig_cap = pending.get("orig_caption", "").strip()
+        _tg_caption = f"📝 {src_lang} → {tgt_lang}"
+        if _orig_cap:
+            _tg_caption = f"📝 {src_lang} → {tgt_lang}\n\n{_orig_cap}"
+        _tg_caption = _tg_caption[:1000]
+        try:
+            with open(out_video, "rb") as f:
+                await context.bot.send_video(
+                    chat_id=chat_id,
+                    video=f,
+                    caption=_tg_caption,
+                    reply_to_message_id=reply_mid,
+                    duration=int(duration),
+                    width=width,
+                    height=height,
+                    thumbnail=thumb_file,
+                    supports_streaming=True,
+                )
+        except Exception as _send_err:
+            _err_str = str(_send_err).lower()
+            if "too large" in _err_str or "request entity" in _err_str:
+                size_mb = out_video.stat().st_size / 1024 / 1024
+                logger.error(f"❌ Output video too large to send via bot API: {size_mb:.0f} MB")
+                await status_msg.edit_text(
+                    f"⚠️ ویدیو رندر شد ولی حجمش ({size_mb:.0f} MB) از حد ربات بیشتره.\n"
+                    f"فایل روی سرور ذخیره‌ست:\n`{out_video}`"
+                )
+                return
+            raise
+        finally:
+            if thumb_file:
+                thumb_file.close()
+
+    await safe_delete(status_msg)
+
+    # Clean up large video files from work_dir; keep SRTs for resume
+    for _big in list(work_dir.glob("*.mp4")) + list(work_dir.glob("*.mkv")):
+        try:
+            _big.unlink(missing_ok=True)
+        except Exception:
+            pass
+
+
 async def cmd_stop_bot_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if user_id != SETTINGS["admin_id"]:
@@ -3505,10 +4677,12 @@ async def global_message_handler(update: Update, context: ContextTypes.DEFAULT_T
         os.kill(os.getpid(), signal.SIGKILL)
         return
 
-    # --- 2. SUPPORTED VIDEO LINK CHECK (Instagram / YouTube / Aparat) ---
+    # --- 2. SUPPORTED VIDEO LINK CHECK (Instagram / YouTube / Aparat / TikTok) ---
     def _detect_platform(u: str) -> str:
         for domain, name in [("instagram.com", "Instagram"), ("youtu.be", "YouTube"),
-                              ("youtube.com", "YouTube"), ("aparat.com", "Aparat")]:
+                              ("youtube.com", "YouTube"), ("aparat.com", "Aparat"),
+                              ("tiktok.com", "TikTok"), ("vt.tiktok.com", "TikTok"),
+                              ("vm.tiktok.com", "TikTok")]:
             if domain in u: return name
         return ""
     platform = _detect_platform(text)
@@ -4102,6 +5276,66 @@ async def check_birthdays_job(context: ContextTypes.DEFAULT_TYPE):
                 logger.error(f"Birthday Job Error for {uid}: {e}")
 
 
+async def cleanup_downloads_job(context: ContextTypes.DEFAULT_TYPE):
+    """Daily job: delete old downloads from DOWNLOAD_DIR.
+    - Default: keep last 30 days.
+    - If free disk < 10 GB: keep only last 7 days.
+    Only touches files inside DOWNLOAD_DIR — never the rest of the project.
+    """
+    import shutil as _shutil
+    from datetime import datetime, timedelta
+
+    dl_dir = DOWNLOAD_DIR
+    if not dl_dir.exists():
+        return
+
+    stat = _shutil.disk_usage(str(dl_dir))
+    free_gb = stat.free / (1024 ** 3)
+    max_age_days = 7 if free_gb < 10.0 else 30
+    cutoff = datetime.now() - timedelta(days=max_age_days)
+
+    deleted = 0
+    kept = 0
+    video_exts = {".mp4", ".mkv", ".webm", ".avi", ".mov"}
+    # Subtitle extensions are tiny — never delete them
+    sub_exts = {".srt", ".ass", ".vtt"}
+
+    def _process_file(f: Path):
+        nonlocal deleted, kept
+        if f.suffix.lower() in sub_exts:
+            kept += 1
+            return
+        if f.suffix.lower() in video_exts:
+            mtime = datetime.fromtimestamp(f.stat().st_mtime)
+            if mtime < cutoff:
+                try:
+                    f.unlink()
+                    deleted += 1
+                except Exception as e:
+                    logger.warning(f"cleanup_downloads: couldn't delete {f.name}: {e}")
+                return
+        kept += 1
+
+    for entry in dl_dir.iterdir():
+        if entry.is_dir():
+            for f in entry.iterdir():
+                if f.is_file():
+                    _process_file(f)
+            # Remove directory if completely empty after cleanup
+            try:
+                if not any(entry.iterdir()):
+                    entry.rmdir()
+            except Exception:
+                pass
+        elif entry.is_file():
+            _process_file(entry)  # top-level legacy files
+
+    logger.info(
+        f"🧹 cleanup_downloads: deleted={deleted} kept={kept} "
+        f"free_disk={free_gb:.1f}GB max_age={max_age_days}d"
+    )
+
+
 def main():
     # Quiet httpx noise
     logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -4128,9 +5362,23 @@ def main():
             print(f"\n❌❌❌ CONNECTION ERROR ❌❌❌\nCould not connect to Telegram: {e}\n⚠️ Please check your VPN/Proxy settings or TELEGRAM_BOT_TOKEN.\n")
 
     from telegram.ext import JobQueue
-    app = (
+    builder = (
         ApplicationBuilder()
         .token(TELEGRAM_TOKEN)
+    )
+    # --- Local Bot API Server Setup ---
+    # Only use local server in production (where Docker container runs).
+    # In dev mode, connect directly to api.telegram.org.
+    if not IS_DEV:
+        builder = (
+            builder
+            .base_url("http://127.0.0.1:8081/bot")
+            .base_file_url("http://127.0.0.1:8081/file/bot")
+            .local_mode(True)
+        )
+    # ----------------------------------
+    app = (
+        builder
         .concurrent_updates(True)
         .job_queue(JobQueue())  # Enable JobQueue for countdown timers
         .post_init(post_init)   # Register diagnostic hook
@@ -4147,6 +5395,9 @@ def main():
     # Note: timezone unaware usually uses server time.
     app.job_queue.run_daily(check_birthdays_job, time(hour=9, minute=0))
 
+    # Schedule daily download cleanup (runs at 03:00 AM)
+    app.job_queue.run_daily(cleanup_downloads_job, time(hour=3, minute=0))
+
     # DEBUG: Catch-all command logger to verify if /birthday is even seen as a command
     async def debug_any_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         print(f"🔹 COMMAND RECEIVED: {update.message.text} from {update.effective_user.id}")
@@ -4155,6 +5406,8 @@ def main():
     # Commands
     app.add_handler(CommandHandler("dl", cmd_download_handler))
     app.add_handler(CommandHandler("download", cmd_download_handler))
+    app.add_handler(CommandHandler("sub", cmd_subtitle_handler))
+    app.add_handler(CommandHandler("subtitle", cmd_subtitle_handler))
     app.add_handler(CommandHandler("start", cmd_start_handler))
     app.add_handler(CommandHandler("help", cmd_help_handler))
     app.add_handler(CommandHandler("status", cmd_status_handler))
@@ -4175,7 +5428,10 @@ def main():
     
     # Fun Command (Admin Only)
     app.add_handler(CommandHandler("fun", cmd_fun_handler))
-    
+
+    # Inline keyboard: subtitle URL selection (from large-file fallback)
+    app.add_handler(CallbackQueryHandler(cmd_suburl_callback, pattern=r"^suburl"))
+
     app.add_handler(CommandHandler("stop", cmd_stop_bot_handler))
         
     # Channel Post Handler (For Auto-Fun in @just_for_fun_persian)

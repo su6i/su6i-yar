@@ -31,3 +31,8 @@ This document defines the coding standards and best practices for the Su6i Yar p
 ## 6. LLM Data & Environment Robustness
 - **LLM JSON Parsing**: ALWAYS use robust Regex (e.g., `re.search(r'\{.*\}', text, re.DOTALL)`) to extract JSON from raw LLM responses, as models may inject conversational text or markdown before/after the JSON struct.
 - **Systemd Executable Paths**: Do not rely purely on `shutil.which()` for external tools like `node` or `deno` when the bot runs as a systemd service (as it lacks a full `$PATH`). Always fallback to absolute explicit paths (e.g., `/usr/local/bin/node`, `~/.deno/bin/deno`).
+
+## 7. Anti-Loop Protection
+- **Bot Signature**: To prevent infinite loops (especially when a bot account acts as a user in a channel), ALWAYS append an invisible Zero-Width Space (`\u200b`) to the end of all outbound captions/messages.
+- **Guard Validation**: All channel handlers MUST check for this signature (`text.endswith("\u200b")`) at the entry point to ignore bot-generated content. Do NOT rely on content-based checks (like matching specific words) as they are fragile.
+- **Reference**: See `src/features/utility/handlers.py` for the implementation of `BOT_SIGNATURE` and the loop guard.

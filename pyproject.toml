@@ -23,4 +23,6 @@ dependencies = [
     "aiofiles>=23.0.0",
     "fal-client>=0.10.0",
     "jdatetime>=5.0.0",
+    "pyrogram[fast]>=2.0.106",
+    "tgcrypto>=1.2.5",
 ]

@@ -27,11 +27,18 @@ STORAGE_DIR = os.path.join(DATA_DIR, "storage")
 LOGS_DIR = os.path.join(DATA_DIR, "logs")
 TEMP_DIR = os.path.join(DATA_DIR, "temp")
 
-# Amir CLI path — override with AMIR_PATH in .env
-AMIR_PATH = os.getenv(
-    "AMIR_PATH",
-    str(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "amir-cli", "amir")))
-)
+# Amir CLI path — lookup order: 
+# 1. Environment variable (if it exists on disk)
+# 2. Calculated relative path (fallback)
+_env_amir = os.getenv("AMIR_PATH")
+_calculated_amir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "amir-cli", "amir"))
+
+if _env_amir and os.path.exists(_env_amir):
+    AMIR_PATH = _env_amir
+else:
+    AMIR_PATH = _calculated_amir
+    if _env_amir:
+        logger.warning(f"⚠️ Configured AMIR_PATH ({_env_amir}) not found. Falling back to dynamic path: {AMIR_PATH}")
 
 # Ensure all directories exist
 for d in [DATA_DIR, STORAGE_DIR, LOGS_DIR, TEMP_DIR]:

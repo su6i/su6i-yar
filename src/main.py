@@ -1,8 +1,21 @@
 import os
 import sys
+from dotenv import load_dotenv
 
 # Ensure the root directory is in sys.path so 'src' can be imported reliably
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# Load .env early so --dev token override can read TELEGRAM_BOT_TOKEN_DEV.
+load_dotenv()
+
+# --dev flag: override TELEGRAM_BOT_TOKEN with DEV token before config is imported
+if "--dev" in sys.argv:
+    _dev_token = os.getenv("TELEGRAM_BOT_TOKEN_DEV")
+    if _dev_token:
+        os.environ["TELEGRAM_BOT_TOKEN"] = _dev_token
+        print("🛠️  DEV MODE: using TELEGRAM_BOT_TOKEN_DEV")
+    else:
+        print("⚠️  --dev passed but TELEGRAM_BOT_TOKEN_DEV is not set — falling back to TELEGRAM_BOT_TOKEN")
 
 from telegram import Update
 from telegram.ext import (
@@ -49,6 +62,7 @@ from src.features.utility import (
     cmd_toggle_fc_handler,
     cmd_detail_handler,
     cmd_fun_handler,
+    cmd_subtitle_handler,
     cmd_stop_bot_handler,
     channel_post_handler
 )
@@ -132,6 +146,7 @@ def main():
     
     # Fun (Admin)
     app.add_handler(CommandHandler("fun", cmd_fun_handler))
+    app.add_handler(CommandHandler(["sub", "subtitle"], cmd_subtitle_handler))
     app.add_handler(CommandHandler("stop", cmd_stop_bot_handler))
     
     # ── amir CLI tools ──────────────────────────────────────────────────────

@@ -167,7 +167,7 @@ async def generate_thumbnail(video_path: Path) -> Optional[Path]:
     try:
         cmd = [
             "ffmpeg", "-y", "-i", str(video_path),
-            "-ss", "00:00:01", "-vframes", "1", "-q:v", "5",
+            "-ss", "00:00:00.000", "-vframes", "1", "-q:v", "5",
             str(thumb_path)
         ]
         process = await asyncio.create_subprocess_exec(
@@ -256,7 +256,7 @@ def get_video_caption_and_split(video_path: Path, title_filter: str = None, fall
     
     base_footer = "\n\n📥 @Su6i_Yar_Bot"
     if fallback_index is not None:
-        base_footer = f"\n\n#ویدیو_{fallback_index}" + base_footer
+        base_footer = f"\n\n#Video_{fallback_index}" + base_footer
         
     limit = 1024 - len(base_footer) - 10 # Buffer
     
@@ -265,9 +265,9 @@ def get_video_caption_and_split(video_path: Path, title_filter: str = None, fall
     
     if not full_caption:
         if title_filter or fallback_index:
-             final_caption = f"🎬 {title_filter or 'قسمت'} {fallback_index or ''}{base_footer}".strip()
+             final_caption = f"🎬 {title_filter or 'Episode'} {fallback_index or ''}{base_footer}".strip()
         else:
-             final_caption = f"🎬 ویدیو دریافت شد{base_footer}"
+             final_caption = f"🎬 Video received{base_footer}"
     else:
         # Split by paragraphs
         paragraphs = full_caption.split('\n')
@@ -435,17 +435,22 @@ async def download_video(url: str) -> Optional[Path]:
         logger.warning(f"⚠️ Attempt 1 failed. stderr: {stderr1.decode()[-800:]}")
 
     # Attempt 2: Extract Cookies from Browsers (Fallback for YouTube Sign-in)
-    for browser in ["brave", "chrome", "safari"]:
-        cmd_browser = list(cmd_base)
-        cmd_browser.insert(1, browser)
-        cmd_browser.insert(1, "--cookies-from-browser")
-        logger.info(f"📥 Attempt 2 ({browser}): yt-dlp extracting cookies from {browser}...")
-        proc = await asyncio.create_subprocess_exec(*cmd_browser, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        stdout2, stderr2 = await proc.communicate()
-        if filename.exists(): return filename
-        err_out = stderr2.decode()
-        if "Could not find Chrome" not in err_out and "Keychain" not in err_out:
-             logger.warning(f"⚠️ Attempt 2 ({browser}) failed. stderr: {err_out[-400:]}")
+    # Skip on headless Linux servers unless explicitly enabled
+    default_browser = os.environ.get("AMIR_DEFAULT_BROWSER", "chrome").lower()
+    is_linux = HAS_PLATFORM and platform_module.system() == "Linux"
+    
+    if default_browser != "none" and not is_linux:
+        for browser in ["brave", "chrome", "safari"]:
+            cmd_browser = list(cmd_base)
+            cmd_browser.insert(1, browser)
+            cmd_browser.insert(1, "--cookies-from-browser")
+            logger.info(f"📥 Attempt 2 ({browser}): yt-dlp extracting cookies from {browser}...")
+            proc = await asyncio.create_subprocess_exec(*cmd_browser, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            stdout2, stderr2 = await proc.communicate()
+            if filename.exists(): return filename
+            err_out = stderr2.decode()
+            if "Could not find Chrome" not in err_out and "Keychain" not in err_out:
+                 logger.warning(f"⚠️ Attempt 2 ({browser}) failed. stderr: {err_out[-400:]}")
 
     # Attempt 3: Anonymous
     logger.info(f"📥 Attempt 3: yt-dlp anonymous...")

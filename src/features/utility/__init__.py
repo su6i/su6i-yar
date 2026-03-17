@@ -7,6 +7,7 @@ from .handlers import (
     cmd_toggle_fc_handler,
     cmd_detail_handler,
     cmd_fun_handler,
+    cmd_subtitle_handler,
     cmd_stop_bot_handler,
     channel_post_handler
 )
@@ -20,6 +21,7 @@ __all__ = [
     "cmd_toggle_fc_handler",
     "cmd_detail_handler",
     "cmd_fun_handler",
+    "cmd_subtitle_handler",
     "cmd_stop_bot_handler",
     "channel_post_handler"
 ]
