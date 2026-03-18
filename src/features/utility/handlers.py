@@ -741,21 +741,34 @@ async def _run_armageddon_subtitle_job(
 
     async def _handle_line(line: str):
         now = asyncio.get_event_loop().time()
+        
+        # 🟢 Support both internal "PROGRESS:N:stage" and direct "Processing: N%"
         m = re.search(r'PROGRESS:(\d+):(.+)', line)
-        if m:
-            pct = min(100, max(0, int(m.group(1))))
-            stage_clean = re.sub(r'\s*\(\d+%\)\s*$', '', m.group(2)).strip()
+        mw = re.search(r'Processing:\s*(\d+)%', line)
+        
+        if m or mw:
+            if m:
+                pct = min(100, max(0, int(m.group(1))))
+                stage_clean = re.sub(r'\s*\(\d+%\)\s*$', '', m.group(2)).strip()
+            else:
+                pct = min(100, max(0, int(mw.group(1))))
+                stage_clean = "Transcription with Whisper..."
+
             elapsed = int(now - start_ts)
             elapsed_str = f"{elapsed // 60}:{elapsed % 60:02d}"
             bar = "█" * (pct // 10) + "░" * (10 - pct // 10)
             text = f"Version {quality_mode}p\n{stage_clean}\n{bar} {pct}%\n⏱ Elapsed: {elapsed_str}"
-            last_progress_time[0] = now
-            last_stage_text[0] = text
-            if status_msg is not None:
-                try:
-                    await status_msg.edit_text(text[:4000])
-                except Exception:
-                    pass
+            
+            # Update only if percentage changed OR 5 seconds passed to avoid rate limits
+            if pct != getattr(status_msg, "_last_pct", -1) or (now - last_progress_time[0]) >= 5.0:
+                last_progress_time[0] = now
+                last_stage_text[0] = text
+                status_msg._last_pct = pct
+                if status_msg is not None:
+                    try:
+                        await status_msg.edit_text(text[:4000])
+                    except Exception:
+                        pass
         
         # Detailed logging for transparency in bot.log
         if not m:
