@@ -128,3 +128,8 @@ provided_cookies.json
 models/*.onnx
 models/*.json
 models/tokens.txt
+TODO.md
+
+# Runtime artifacts — process IDs and browser cookie extraction
+bot_pid.txt
+--cookies-from-browser
